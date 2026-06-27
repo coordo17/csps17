@@ -1,21 +1,22 @@
-'use strict';
+use strict';
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
-
+ 
 const app = express();
 const PORT = process.env.PORT || 3017;
 const DATA_FILE = path.join(__dirname, 'data', 'affaires.json');
 const API_KEY = process.env.ANTHROPIC_API_KEY || '';
-
+ 
 // Créer le dossier data s'il n'existe pas
 const dataDir = path.join(__dirname, 'data');
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 if (!fs.existsSync(DATA_FILE)) fs.writeFileSync(DATA_FILE, '[]', 'utf8');
-
+ 
 app.use(express.json({ limit: '20mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
-
+app.use(express.static(path.join(__dirname)));
+ 
 // ── PROXY API Anthropic ───────────────────────────────────────────
 app.post('/api/claude', async (req, res) => {
   if (!API_KEY) {
@@ -38,7 +39,7 @@ app.post('/api/claude', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
+ 
 // ── AFFAIRES — lecture ────────────────────────────────────────────
 app.get('/api/affaires', (req, res) => {
   try {
@@ -48,7 +49,7 @@ app.get('/api/affaires', (req, res) => {
     res.json([]);
   }
 });
-
+ 
 // ── AFFAIRES — sauvegarde ─────────────────────────────────────────
 app.post('/api/affaires', (req, res) => {
   try {
@@ -58,7 +59,7 @@ app.post('/api/affaires', (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
+ 
 // ── MANIFEST PWA ──────────────────────────────────────────────────
 app.get('/manifest.json', (req, res) => {
   res.json({
@@ -78,26 +79,26 @@ app.get('/manifest.json', (req, res) => {
     lang: 'fr'
   });
 });
-
+ 
 // ── SERVICE WORKER (offline) ──────────────────────────────────────
 app.get('/sw.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript');
   res.send(`
 const CACHE = 'csps17-v1';
 const ASSETS = ['/', '/manifest.json'];
-
+ 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
   self.skipWaiting();
 });
-
+ 
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(keys =>
     Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
   ));
   self.clients.claim();
 });
-
+ 
 self.addEventListener('fetch', e => {
   if (e.request.url.includes('/api/')) return; // pas de cache pour les API
   e.respondWith(
@@ -106,12 +107,15 @@ self.addEventListener('fetch', e => {
 });
   `);
 });
-
+ 
 // ── FALLBACK ──────────────────────────────────────────────────────
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  const indexPub = path.join(__dirname, 'public', 'index.html');
+  const indexRoot = path.join(__dirname, 'index.html');
+  if (require('fs').existsSync(indexPub)) res.sendFile(indexPub);
+  else res.sendFile(indexRoot);
 });
-
+ 
 app.listen(PORT, () => {
   console.log(`✅ CSPS17 lancé sur http://localhost:${PORT}`);
 });
