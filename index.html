@@ -1101,13 +1101,13 @@ var DOC_FILES = {
   'VIS':         'CR_Visite_Chantier_CSPS17_v2.docx',
   'OBS':         'CSPS17_Observation_Notification_RJC_v2.docx',
   'DGI':         'CSPS17_Mise_en_Demeure_DGI_v3_1.docx',
-  'RCO':         'CSPS17_CR_Reunion_Coordination_v2.docx',
+  'RCO':         'CSPS17_CR_Coordination_Réunion_v2.docx',
   'DIUO':        'CSPS17_DIUO_Trame_v3.docx',
   'PV-DIUO':     'CSPS17_PV_Transmission_DIUO_v3.docx',
   'PV-PC':       'CSPS17_PV_Passation_Consignes_v3.docx',
   'CISSCT-RI':   'CSPS17_CISSCT_Reglement_Interieur_v3.docx',
   'CISSCT-CONV': 'CSPS17_CISSCT_Convocation_v2.docx',
-  'CISSCT-CR':   'CSPS17_CISSCT_CR_Reunion_v2.docx',
+  'CISSCT-CR':   'CSPS17_CISSCT_CR_Réunion_v2.docx',
   'RFM':         'CSPS17_Rapport_Fin_Mission_v2.docx',
 };
 
@@ -1160,7 +1160,7 @@ async function generateDoc(ref) {
   if (!fname) { showToast('Document inconnu : ' + ref, 'error'); return; }
   showToast('Generation ' + ref + ' en cours...');
   try {
-    var url = 'https://raw.githubusercontent.com/coordo17/csps17/principal/' + fname;
+    var url = 'https://raw.githubusercontent.com/coordo17/csps17/main/' + fname;
     var response = await fetch(url);
     if (!response.ok) throw new Error('Template introuvable : ' + fname);
     var arrayBuffer = await response.arrayBuffer();
