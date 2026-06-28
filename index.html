@@ -1277,6 +1277,62 @@ function renderDocsGrid() {
   }).join('');
 }
 
+// ── INJECTION SIGNATURES DANS DOCX ─────────────────────────────
+function injecterSignatures(zip, sigCsps, sigEnt) {
+  var docFile = zip.file('word/document.xml');
+  if (!docFile) return zip;
+  var xmlStr = docFile.asText();
+  var relsFile = zip.file('word/_rels/document.xml.rels');
+  var relsStr = relsFile ? relsFile.asText() : '';
+  var ctFile = zip.file('[Content_Types].xml');
+  var ctStr = ctFile ? ctFile.asText() : '';
+  var nextRid = 100;
+
+  function addImg(sigDataUrl, markeur, rid) {
+    if (!sigDataUrl || xmlStr.indexOf(markeur) === -1) return;
+    var base64 = sigDataUrl.split(',')[1];
+    var imgBytes = atob(base64);
+    var arr = new Uint8Array(imgBytes.length);
+    for (var i = 0; i < imgBytes.length; i++) arr[i] = imgBytes.charCodeAt(i);
+    zip.file('word/media/sig' + rid + '.png', arr);
+    var relXml = '<Relationship Id="rId' + rid + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/sig' + rid + '.png"/>';
+    relsStr = relsStr.replace('</Relationships>', relXml + '</Relationships>');
+    if (ctStr.indexOf('image/png') === -1) {
+      ctStr = ctStr.replace('</Types>', '<Default Extension="png" ContentType="image/png"/></Types>');
+    }
+    var imgXml = '</w:t></w:r><w:r><w:drawing>'
+      + '<wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" distT="0" distB="0" distL="0" distR="0">'
+      + '<wp:extent cx="1800000" cy="500000"/><wp:effectExtent l="0" t="0" r="0" b="0"/>'
+      + '<wp:docPr id="' + rid + '" name="sig' + rid + '"/>'
+      + '<wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr>'
+      + '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+      + '<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+      + '<pic:nvPicPr><pic:cNvPr id="' + rid + '" name="sig' + rid + '"/><pic:cNvPicPr/></pic:nvPicPr>'
+      + '<pic:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rId' + rid + '"/>'
+      + '<a:stretch><a:fillRect/></a:stretch></pic:blipFill>'
+      + '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1800000" cy="500000"/></a:xfrm>'
+      + '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>'
+      + '</pic:pic></a:graphicData></a:graphic></wp:inline>'
+      + '</w:drawing></w:r><w:r><w:t>';
+    xmlStr = xmlStr.replace(markeur, imgXml);
+  }
+
+  if (sigCsps) addImg(sigCsps, '{{sig_csps}}', nextRid++);
+  if (sigEnt) addImg(sigEnt, '{{sig_ent}}', nextRid++);
+  xmlStr = xmlStr.split('{{sig_csps}}').join('').split('{{sig_ent}}').join('');
+  zip.file('word/document.xml', xmlStr);
+  zip.file('word/_rels/document.xml.rels', relsStr);
+  zip.file('[Content_Types].xml', ctStr);
+  return zip;
+}
+
+function cocherCategorie(xmlStr, cat) {
+  if (!cat) return xmlStr;
+  var old = '☐ Cat. 1 ☐ Cat. 2 ☐ Cat. 3';
+  var nw = (cat===1?'☑':'☐') + ' Cat. 1 ' + (cat===2?'☑':'☐') + ' Cat. 2 ' + (cat===3?'☑':'☐') + ' Cat. 3';
+  return xmlStr.split(old).join(nw);
+}
+
 var DOC_FILES = {
   'DP':          'CSPS17_Suivi_Declaration_Prealable_v3.docx',
   'RJC':         'CSPS17_Registre_Journal_Bordereau_v3_1.docx',
@@ -1358,7 +1414,18 @@ async function generateDoc(ref) {
       delimiters: { start: '{{', end: '}}' },
     });
     doc.render(buildTagData(data));
-    var out = doc.getZip().generate({
+    var finalZip = doc.getZip();
+    if (typeof sigData !== 'undefined' && (sigData.csps || sigData.ent)) {
+      finalZip = injecterSignatures(finalZip, sigData.csps, sigData.ent);
+    }
+    if (data.cat) {
+      var docXmlFile = finalZip.file('word/document.xml');
+      if (docXmlFile) {
+        var xmlStr2 = cocherCategorie(docXmlFile.asText(), data.cat);
+        finalZip.file('word/document.xml', xmlStr2);
+      }
+    }
+    var out = finalZip.generate({
       type: 'blob',
       mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     });
