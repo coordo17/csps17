@@ -1389,6 +1389,27 @@ function injecterSignatures(zip, sigCsps, sigEnt, sigEU) {
   return zip;
 }
 
+function cocherRisques(xmlStr, risques) {
+  if (!risques) return xmlStr;
+  // Amiante/plomb
+  if (risques.amiante || risques.plomb) {
+    xmlStr = xmlStr.split('Amiante').join('☑ Amiante');
+  }
+  // Demolition
+  if (risques.demolition) {
+    xmlStr = xmlStr.split('Démolition').join('☑ Démolition');
+  }
+  // Reseaux
+  if (risques.reseaux) {
+    xmlStr = xmlStr.split('Réseaux').join('☑ Réseaux');
+  }
+  // Hauteur
+  if (risques.hauteur) {
+    xmlStr = xmlStr.split('hauteur').join('☑ hauteur');
+  }
+  return xmlStr;
+}
+
 function cocherCategorie(xmlStr, cat) {
   if (!cat) return xmlStr;
   var old = '☐ Cat. 1 ☐ Cat. 2 ☐ Cat. 3';
@@ -1452,12 +1473,26 @@ function buildTagData(data) {
     oppbtp_adresse:   (org.oppbtp && org.oppbtp.adresse) || '',
     date_today:       today,
     ref_pgc:          data.num || '',
-
+    no_visite:        (data._visite && data._visite.noVisite) ? data._visite.noVisite : '1',
+    heure_visite:     (data._visite && data._visite.heure) ? data._visite.heure : '',
+    no_reunion:       (data._visite && data._visite.noVisite) ? data._visite.noVisite : '1',
+    lieu_reunion:     (data._visite && data._visite.lieu) ? data._visite.lieu : '',
+    ent_nom:          (data._entreprise && data._entreprise.nom) ? data._entreprise.nom : '',
+    ent_contact:      (data._entreprise && data._entreprise.contact) ? data._entreprise.contact : '',
+    ent_tel:          (data._entreprise && data._entreprise.tel) ? data._entreprise.tel : '',
+    ent_lot:          (data._entreprise && data._entreprise.lot) ? data._entreprise.lot : '',
   };
 }
 
 async function generateDoc(ref) {
   var data = collectFormData();
+  // Fusionner avec les donnees terrain si disponibles
+  if (typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire._visite) {
+    data._visite = terrainAffaire._visite;
+  }
+  if (typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire._entreprise) {
+    data._entreprise = terrainAffaire._entreprise;
+  }
   if (!data.chantier || !data.chantier.nom) {
     showToast('Renseignez le chantier avant de generer', 'error');
     return;
@@ -1482,10 +1517,12 @@ async function generateDoc(ref) {
     if (typeof sigData !== 'undefined' && (sigData.csps || sigData.ent)) {
       finalZip = injecterSignatures(finalZip, sigData.csps, sigData.ent, sigData.eu);
     }
-    if (data.cat) {
+    if (data.cat || (data.risques)) {
       var docXmlFile = finalZip.file('word/document.xml');
       if (docXmlFile) {
-        var xmlStr2 = cocherCategorie(docXmlFile.asText(), data.cat);
+        var xmlStr2 = docXmlFile.asText();
+        if (data.cat) xmlStr2 = cocherCategorie(xmlStr2, data.cat);
+        if (data.risques) xmlStr2 = cocherRisques(xmlStr2, data.risques);
         finalZip.file('word/document.xml', xmlStr2);
       }
     }
@@ -1931,14 +1968,34 @@ function clearSig(canvasId, dataKey, statusId) {
 async function genererDocTerrain() {
   if (!terrainAffaire || !currentTerrainDoc) return;
   var ref = currentTerrainDoc;
-
-  // Construire les donnees
   var c = terrainAffaire.chantier || {};
   var moa = terrainAffaire.moa || {};
   var moe = terrainAffaire.moe || {};
-  var org = terrainAffaire.organismes || {};
 
-  // Charger dans le formulaire principal pour generateDoc
+  // Recuperer les champs specifiques remplis
+  var champs = DOC_CHAMPS[ref] || [];
+  var champsValues = {};
+  champs.forEach(function(ch) {
+    var el = document.getElementById(ch.id);
+    if (el) champsValues[ch.id] = el.value;
+  });
+
+  // Recuperer entreprise selectionnee
+  var entData = {
+    nom: document.getElementById('t-ent-nom') ? document.getElementById('t-ent-nom').value : '',
+    contact: document.getElementById('t-ent-contact') ? document.getElementById('t-ent-contact').value : '',
+    tel: document.getElementById('t-ent-tel') ? document.getElementById('t-ent-tel').value : '',
+    lot: document.getElementById('t-ent-lot') ? document.getElementById('t-ent-lot').value : '',
+  };
+
+  // Construire _visite avec les champs du formulaire
+  var visiteData = {
+    noVisite: champsValues['tv-no'] || champsValues['tr-no'] || '1',
+    heure: champsValues['tv-heure'] || champsValues['td-heure'] || champsValues['tf-heure'] || '',
+    lieu: champsValues['tr-lieu'] || '',
+  };
+
+  // Charger dans le formulaire principal
   currentAffaireId = terrainAffaire.id;
   currentCat = terrainAffaire.cat;
   document.getElementById('num-affaire').value = terrainAffaire.num || '';
@@ -1952,6 +2009,10 @@ async function genererDocTerrain() {
   document.getElementById('moa-tel').value = moa.tel || '';
   document.getElementById('moa-mail').value = moa.mail || '';
   document.getElementById('moe-nom').value = moe.nom || '';
+
+  // Stocker les donnees terrain pour buildTagData
+  terrainAffaire._visite = visiteData;
+  terrainAffaire._entreprise = entData;
 
   showToast('Generation ' + (DOC_TITRES[ref] || ref) + ' en cours...');
   await generateDoc(ref);
