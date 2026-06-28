@@ -1160,7 +1160,7 @@ async function generateDoc(ref) {
   if (!fname) { showToast('Document inconnu : ' + ref, 'error'); return; }
   showToast('Generation ' + ref + ' en cours...');
   try {
-    var url = 'https://raw.githubusercontent.com/coordo17/csps17/main/' + fname;
+    var url = 'https://raw.githubusercontent.com/coordo17/csps17/principal/' + fname;
     var response = await fetch(url);
     if (!response.ok) throw new Error('Template introuvable : ' + fname);
     var arrayBuffer = await response.arrayBuffer();
