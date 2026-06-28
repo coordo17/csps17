@@ -1336,40 +1336,36 @@ function injecterSignatures(zip, sigCsps, sigEnt, sigEU) {
     return true;
   }
 
-  var ancreCSPS = 'Entreprise Intervenante';
-  var ancreEnt = 'SUZANNE – CSPS17';
+  // Ordre dans le XML: 1=CSPS, 2=Entreprise, 3=EU
   var sigTarget = 'Signature :</w:t></w:r>';
-  var sigImgEnt = null, sigImgCSPS = null;
+  var sigImgCSPS = null, sigImgEnt = null;
 
-  // Entreprise d'abord (premiere occurrence apres "Entreprise Intervenante")
-  if (sigEnt && addImg(sigEnt, nextRid)) {
-    sigImgEnt = makeImgXml(nextRid); nextRid++;
-  }
-  // CSPS ensuite (occurrence apres "SUZANNE")
-  if (sigCsps && addImg(sigCsps, nextRid)) {
-    sigImgCSPS = makeImgXml(nextRid); nextRid++;
-  }
+  if (sigCsps && addImg(sigCsps, nextRid)) { sigImgCSPS = makeImgXml(nextRid); nextRid++; }
+  if (sigEnt && addImg(sigEnt, nextRid)) { sigImgEnt = makeImgXml(nextRid); nextRid++; }
 
-  // Entreprise : premiere Signature apres "Entreprise Intervenante"
-  if (sigImgEnt) {
-    var idxEnt = xmlStr.indexOf(ancreEnt);
-    if (idxEnt !== -1) {
-      var idxSigEnt = xmlStr.indexOf(sigTarget, idxEnt);
-      if (idxSigEnt !== -1) {
-        xmlStr = xmlStr.slice(0, idxSigEnt + sigTarget.length) + sigImgEnt + xmlStr.slice(idxSigEnt + sigTarget.length);
-      }
-    }
+  // CSPS = 1ere occurrence de "Signature :"
+  // On doit inserer de la derniere vers la premiere pour ne pas decaler les positions
+  // D'abord ENT (2eme), puis CSPS (1ere)
+
+  var allSigPos = [];
+  var searchFrom = 0;
+  while (true) {
+    var p = xmlStr.indexOf(sigTarget, searchFrom);
+    if (p === -1) break;
+    allSigPos.push(p);
+    searchFrom = p + 1;
   }
 
-  // CSPS : Signature apres "SUZANNE"
-  if (sigImgCSPS) {
-    var idxCSPS = xmlStr.indexOf(ancreCSPS);
-    if (idxCSPS !== -1) {
-      var idxSigCSPS = xmlStr.indexOf(sigTarget, idxCSPS);
-      if (idxSigCSPS !== -1) {
-        xmlStr = xmlStr.slice(0, idxSigCSPS + sigTarget.length) + sigImgCSPS + xmlStr.slice(idxSigCSPS + sigTarget.length);
-      }
-    }
+  // allSigPos[0] = CSPS, allSigPos[1] = ENTREPRISE
+  // Inserer de la fin vers le debut pour ne pas decaler les positions
+
+  if (sigImgEnt && allSigPos.length >= 2) {
+    var p2 = allSigPos[1];
+    xmlStr = xmlStr.slice(0, p2 + sigTarget.length) + sigImgEnt + xmlStr.slice(p2 + sigTarget.length);
+  }
+  if (sigImgCSPS && allSigPos.length >= 1) {
+    var p1 = allSigPos[0];
+    xmlStr = xmlStr.slice(0, p1 + sigTarget.length) + sigImgCSPS + xmlStr.slice(p1 + sigTarget.length);
   }
 
   // EU : inserer apres "Representant EU"
