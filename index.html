@@ -922,10 +922,26 @@
           </div>
         </div>
 
+        <!-- DOCS TERRAIN -->
+        <div class="terrain-section">
+          <div class="terrain-section-header">&#128196; Documents terrain</div>
+          <div class="terrain-section-body">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <button class="btn btn-primary" style="padding:14px;font-size:13px;" onclick="genTerrainDoc('VIS')">&#128065; CR Visite</button>
+              <button class="btn btn-primary" style="padding:14px;font-size:13px;" onclick="genTerrainDoc('IC')">&#9993; Courrier IC</button>
+              <button class="btn btn-primary" style="padding:14px;font-size:13px;" onclick="genTerrainDoc('RCO')">&#129309; CR Reunion</button>
+              <button class="btn btn-primary" style="padding:14px;font-size:13px;" onclick="genTerrainDoc('OBS')">&#9888; Observation</button>
+              <button class="btn btn-danger" style="padding:14px;font-size:13px;" onclick="genTerrainDoc('DGI')">&#128680; Danger grave</button>
+              <button class="btn btn-outline" style="padding:14px;font-size:13px;" onclick="genTerrainDoc('FIC')">&#128269; Fiche IC</button>
+              <button class="btn btn-outline" style="padding:14px;font-size:13px;" onclick="genTerrainDoc('RJC')">&#128212; RJC</button>
+              <button class="btn btn-outline" style="padding:14px;font-size:13px;" onclick="genTerrainDoc('PPP')">&#128202; Grille PPSPS</button>
+            </div>
+          </div>
+        </div>
+
         <!-- ACTIONS -->
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px;">
-          <button class="btn btn-success" onclick="genererCRVisite()">&#128196; Generer CR Visite</button>
-          <button class="btn btn-primary" onclick="sauvegarderVisite()">&#128190; Sauvegarder</button>
+          <button class="btn btn-success" onclick="sauvegarderVisite()">&#128190; Sauvegarder visite</button>
         </div>
 
       </div>
@@ -1690,6 +1706,23 @@ function sauvegarderVisite() {
     fetch('/api/affaires', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(affaires)}).catch(function(){});
     showToast('Visite sauvegardee !', 'success');
   }
+}
+
+async function genTerrainDoc(ref) {
+  if (!terrainAffaire) { showToast('Selectionnez une affaire', 'error'); return; }
+  sauvegarderVisite();
+  // Charger les donnees de l affaire dans le formulaire
+  var c = terrainAffaire.chantier || {};
+  currentAffaireId = terrainAffaire.id;
+  currentCat = terrainAffaire.cat;
+  document.getElementById('chantier-nom').value = c.nom || '';
+  document.getElementById('chantier-adresse').value = c.adresse || '';
+  document.getElementById('chantier-nature').value = c.nature || '';
+  document.getElementById('chantier-dp').value = c.dp || '';
+  document.getElementById('num-affaire').value = terrainAffaire.num || '';
+  if (terrainAffaire.moa) document.getElementById('moa-nom').value = terrainAffaire.moa.nom || '';
+  if (terrainAffaire.moe) document.getElementById('moe-nom').value = terrainAffaire.moe.nom || '';
+  await generateDoc(ref);
 }
 
 async function genererCRVisite() {
