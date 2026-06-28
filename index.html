@@ -1177,13 +1177,9 @@ async function generateDoc(ref) {
       mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     });
     var blobUrl = URL.createObjectURL(out);
-    var a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = 'CSPS17_' + ref + '_' + (data.num || 'doc') + '.docx';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(blobUrl); }, 1000);
+    window.location.href = blobUrl;
     showToast('OK ' + ref + ' telecharge !', 'success');
+    setTimeout(function(){ URL.revokeObjectURL(blobUrl); }, 3000);
   } catch(err) {
     showToast('Erreur ' + ref + ' : ' + err.message, 'error');
     console.error(err);
