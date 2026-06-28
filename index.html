@@ -12,6 +12,10 @@
 <title>CSPS17 — Gestion de dossiers</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+<script src="https://cdn.jsdelivr.net/npm/pizzip@3.1.4/dist/pizzip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docxtemplater@3.44.0/build/docxtemplater.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pizzip@3.1.4/dist/pizzip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docxtemplater@3.44.0/build/docxtemplater.js"></script>
 <style>
   :root {
     --blue-dark: #1F4E79;
@@ -1087,12 +1091,101 @@ function renderDocsGrid() {
   }).join('');
 }
 
+var DOC_FILES = {
+  'DP':          'CSPS17_Suivi_Declaration_Prealable_v3.docx',
+  'RJC':         'CSPS17_Registre_Journal_Bordereau_v3_1.docx',
+  'DIF':         'CSPS17_Fiche_Diffusion_PGC_v3.docx',
+  'FIC':         'Fiche_IC_Vierge_CSPS17_v15.docx',
+  'IC':          'CSPS17_Courrier_Transmission_IC_v2_1.docx',
+  'PPP':         'CSPS17_Grille_Analyse_PPSPS_v3.docx',
+  'VIS':         'CR_Visite_Chantier_CSPS17_v2.docx',
+  'OBS':         'CSPS17_Observation_Notification_RJC_v2.docx',
+  'DGI':         'CSPS17_Mise_en_Demeure_DGI_v3_1.docx',
+  'RCO':         'CSPS17_CR_Reunion_Coordination_v2.docx',
+  'DIUO':        'CSPS17_DIUO_Trame_v3.docx',
+  'PV-DIUO':     'CSPS17_PV_Transmission_DIUO_v3.docx',
+  'PV-PC':       'CSPS17_PV_Passation_Consignes_v3.docx',
+  'CISSCT-RI':   'CSPS17_CISSCT_Reglement_Interieur_v3.docx',
+  'CISSCT-CONV': 'CSPS17_CISSCT_Convocation_v2.docx',
+  'CISSCT-CR':   'CSPS17_CISSCT_CR_Reunion_v2.docx',
+  'RFM':         'CSPS17_Rapport_Fin_Mission_v2.docx',
+};
+
+function buildTagData(data) {
+  var c = data.chantier || {};
+  var moa = data.moa || {};
+  var moe = data.moe || {};
+  var org = data.organismes || {};
+  var today = new Date().toLocaleDateString('fr-FR');
+  return {
+    num_affaire:      data.num || '',
+    chantier_nom:     c.nom || '',
+    chantier_adresse: c.adresse || '',
+    chantier_nature:  c.nature || '',
+    chantier_debut:   c.debut || '',
+    chantier_duree:   c.duree || '',
+    chantier_montant: c.montant || '',
+    chantier_dp:      c.dp || '',
+    chantier_pc:      c.pc || '',
+    chantier_hj:      c.hj || '',
+    categorie:        data.cat ? 'Categorie ' + data.cat : '',
+    moa_nom:          moa.nom || '',
+    moa_contact:      moa.contact || '',
+    moa_adresse:      moa.adresse || '',
+    moa_tel:          moa.tel || '',
+    moa_mail:         moa.mail || '',
+    moe_nom:          moe.nom || '',
+    moe_contact:      moe.contact || '',
+    moe_adresse:      moe.adresse || '',
+    moe_tel:          moe.tel || '',
+    moe_mail:         moe.mail || '',
+    dreets_nom:       (org.dreets && org.dreets.nom) || '',
+    dreets_adresse:   (org.dreets && org.dreets.adresse) || '',
+    carsat_nom:       (org.carsat && org.carsat.nom) || '',
+    carsat_adresse:   (org.carsat && org.carsat.adresse) || '',
+    oppbtp_nom:       (org.oppbtp && org.oppbtp.nom) || '',
+    oppbtp_adresse:   (org.oppbtp && org.oppbtp.adresse) || '',
+    date_today:       today,
+    ref_pgc:          data.num || '',
+  };
+}
+
 async function generateDoc(ref) {
   var data = collectFormData();
-  if (!data.chantier.nom) { showToast('Renseignez le chantier d\'abord', 'error'); return; }
+  if (!data.chantier || !data.chantier.nom) {
+    showToast('Renseignez le chantier avant de generer', 'error');
+    return;
+  }
+  var fname = DOC_FILES[ref];
+  if (!fname) { showToast('Document inconnu : ' + ref, 'error'); return; }
   showToast('Generation ' + ref + ' en cours...');
-  await delay(1200);
-  showToast(ref + ' genere', 'success');
+  try {
+    var url = 'https://raw.githubusercontent.com/coordo17/csps17/main/' + fname;
+    var response = await fetch(url);
+    if (!response.ok) throw new Error('Template introuvable : ' + fname);
+    var arrayBuffer = await response.arrayBuffer();
+    var zip = new PizZip(arrayBuffer);
+    var DocxTemplater = window.docxtemplater || window.Docxtemplater || docxtemplater;
+    var doc = new DocxTemplater(zip, {
+      paragraphLoop: true,
+      linebreaks: true,
+      delimiters: { start: '{{', end: '}}' },
+    });
+    doc.render(buildTagData(data));
+    var out = doc.getZip().generate({
+      type: 'blob',
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(out);
+    a.download = 'CSPS17_' + ref + '_' + (data.num || 'doc') + '.docx';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    showToast('OK ' + ref + ' telecharge !', 'success');
+  } catch(err) {
+    showToast('Erreur ' + ref + ' : ' + err.message, 'error');
+    console.error(err);
+  }
 }
 
 async function generateDocs() {
@@ -1107,13 +1200,19 @@ async function generateDocs() {
   prog.classList.add('show');
   var docs = DOCS.filter(function(d){ return d.cats.includes(data.cat); });
   list.innerHTML = docs.map(function(d){
-    return '<div class="progress-item" id="prog-' + d.ref + '"><span class="progress-icon">...</span><span>' + d.title + '</span></div>';
+    return '<div class="progress-item" id="prog-' + d.ref + '"><span class="progress-icon">⏳</span><span>' + d.title + '</span></div>';
   }).join('');
   for (var i=0; i<docs.length; i++) {
-    await delay(600);
     var item = document.getElementById('prog-' + docs[i].ref);
-    item.querySelector('.progress-icon').textContent = 'OK';
-    item.style.color = 'var(--success)';
+    try {
+      await generateDoc(docs[i].ref);
+      item.querySelector('.progress-icon').textContent = '✅';
+      item.style.color = 'var(--success)';
+    } catch(e) {
+      item.querySelector('.progress-icon').textContent = '❌';
+      item.style.color = 'var(--danger)';
+    }
+    await delay(500);
   }
   showToast(docs.length + ' documents generes !', 'success');
 }
