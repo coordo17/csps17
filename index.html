@@ -597,7 +597,7 @@
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('import')">&#128229; Importer PGC</button>
-    <button class="btn btn-outline btn-sm" onclick="showPage('terrain')" style="background:#e8f5e9;color:#2e7d52;border-color:#2e7d52;">&#128241; Terrain</button>
+    <button class="btn btn-outline btn-sm" onclick="showPage('terrain');populateTerrainSelect();" style="background:#e8f5e9;color:#2e7d52;border-color:#2e7d52;">&#128241; Terrain</button>
   </div>
 </header>
 
@@ -853,14 +853,10 @@
 
       <!-- RECHERCHE -->
       <div class="terrain-search">
-        <label style="font-size:12px;font-weight:700;color:var(--blue-dark);text-transform:uppercase;letter-spacing:0.5px;">Rechercher une affaire</label>
-        <input type="text" id="terrain-search-input" placeholder="N° affaire ou nom chantier..." oninput="terrainSearch(this.value)">
-      </div>
-
-      <div class="terrain-affaire-found" id="terrain-affaire-found">
-        <div style="font-weight:700;color:var(--success);margin-bottom:8px;">&#10003; Affaire trouvee</div>
-        <div id="terrain-affaire-info" style="font-size:14px;"></div>
-        <button class="btn btn-primary btn-sm" style="margin-top:10px;" onclick="loadTerrainAffaire()">Ouvrir cette affaire</button>
+        <label style="font-size:12px;font-weight:700;color:var(--blue-dark);text-transform:uppercase;letter-spacing:0.5px;">Selectionner une affaire</label>
+        <select id="terrain-select" onchange="terrainSelectAffaire(this.value)" style="width:100%;padding:14px 16px;font-size:16px;border:2px solid var(--border);border-radius:var(--radius);font-family:inherit;margin-top:6px;">
+          <option value="">-- Choisir une affaire --</option>
+        </select>
       </div>
 
       <!-- FORMULAIRE TERRAIN -->
@@ -1536,24 +1532,22 @@ var terrainAffaire = null;
 var obsCount = 0;
 var signatureData = null;
 
-function terrainSearch(val) {
-  val = val.trim().toLowerCase();
-  var found = document.getElementById('terrain-affaire-found');
-  var info = document.getElementById('terrain-affaire-info');
-  if (!val) { found.classList.remove('show'); return; }
-  var match = affaires.find(function(a) {
-    return (a.num && a.num.toLowerCase().includes(val)) ||
-           (a.chantier && a.chantier.nom && a.chantier.nom.toLowerCase().includes(val));
+function populateTerrainSelect() {
+  var sel = document.getElementById('terrain-select');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">-- Choisir une affaire --</option>';
+  affaires.slice().reverse().forEach(function(a) {
+    var opt = document.createElement('option');
+    opt.value = a.id;
+    opt.textContent = (a.num || '') + ' — ' + ((a.chantier && a.chantier.nom) ? a.chantier.nom : 'Sans nom');
+    sel.appendChild(opt);
   });
-  if (match) {
-    found.classList.add('show');
-    terrainAffaire = match;
-    info.innerHTML = '<strong>' + match.num + '</strong> — ' + (match.chantier && match.chantier.nom ? match.chantier.nom : '') +
-      '<br><span style="color:var(--text-light)">' + (match.chantier && match.chantier.adresse ? match.chantier.adresse : '') + '</span>';
-  } else {
-    found.classList.remove('show');
-    terrainAffaire = null;
-  }
+}
+
+function terrainSelectAffaire(id) {
+  if (!id) { terrainAffaire = null; document.getElementById('terrain-form').style.display = 'none'; return; }
+  terrainAffaire = affaires.find(function(a){ return a.id === id; });
+  if (terrainAffaire) loadTerrainAffaire();
 }
 
 function loadTerrainAffaire() {
