@@ -1336,41 +1336,38 @@ function injecterSignatures(zip, sigCsps, sigEnt, sigEU) {
     return true;
   }
 
-  // Injection signature CSPS apres "Alain SUZANNE"
-  var ancreCSPS = 'Alain SUZANNE';
-  var ancreEnt = 'Qualité : Entreprise :';
-  var sigImg1 = '', sigImg2 = '';
+  var ancreEnt = 'Entreprise Intervenante';
+  var ancreCSPS = 'SUZANNE';
+  var sigTarget = 'Signature :</w:t></w:r>';
+  var sigImgEnt = null, sigImgCSPS = null;
 
-  if (sigCsps && addImg(sigCsps, nextRid)) {
-    sigImg1 = makeImgXml(nextRid);
-    nextRid++;
-  }
+  // Entreprise d'abord (premiere occurrence apres "Entreprise Intervenante")
   if (sigEnt && addImg(sigEnt, nextRid)) {
-    sigImg2 = makeImgXml(nextRid);
-    nextRid++;
+    sigImgEnt = makeImgXml(nextRid); nextRid++;
+  }
+  // CSPS ensuite (occurrence apres "SUZANNE")
+  if (sigCsps && addImg(sigCsps, nextRid)) {
+    sigImgCSPS = makeImgXml(nextRid); nextRid++;
   }
 
-  // CSPS : inserer apres la cellule contenant Alain SUZANNE
-  if (sigImg1) {
-    var cspsTarget = 'Signature :</w:t></w:r>';
-    // Trouver la position apres Alain SUZANNE
-    var idxCSPS = xmlStr.indexOf(ancreCSPS);
-    if (idxCSPS !== -1) {
-      var idxSigCSPS = xmlStr.indexOf(cspsTarget, idxCSPS);
-      if (idxSigCSPS !== -1) {
-        xmlStr = xmlStr.slice(0, idxSigCSPS + cspsTarget.length) + sigImg1 + xmlStr.slice(idxSigCSPS + cspsTarget.length);
+  // Entreprise : premiere Signature apres "Entreprise Intervenante"
+  if (sigImgEnt) {
+    var idxEnt = xmlStr.indexOf(ancreEnt);
+    if (idxEnt !== -1) {
+      var idxSigEnt = xmlStr.indexOf(sigTarget, idxEnt);
+      if (idxSigEnt !== -1) {
+        xmlStr = xmlStr.slice(0, idxSigEnt + sigTarget.length) + sigImgEnt + xmlStr.slice(idxSigEnt + sigTarget.length);
       }
     }
   }
 
-  // Entreprise : inserer apres "Qualite : Entreprise :"
-  if (sigImg2) {
-    var entTarget = 'Signature :</w:t></w:r>';
-    var idxEnt = xmlStr.indexOf(ancreEnt);
-    if (idxEnt !== -1) {
-      var idxSigEnt = xmlStr.indexOf(entTarget, idxEnt);
-      if (idxSigEnt !== -1) {
-        xmlStr = xmlStr.slice(0, idxSigEnt + entTarget.length) + sigImg2 + xmlStr.slice(idxSigEnt + entTarget.length);
+  // CSPS : Signature apres "SUZANNE"
+  if (sigImgCSPS) {
+    var idxCSPS = xmlStr.indexOf(ancreCSPS);
+    if (idxCSPS !== -1) {
+      var idxSigCSPS = xmlStr.indexOf(sigTarget, idxCSPS);
+      if (idxSigCSPS !== -1) {
+        xmlStr = xmlStr.slice(0, idxSigCSPS + sigTarget.length) + sigImgCSPS + xmlStr.slice(idxSigCSPS + sigTarget.length);
       }
     }
   }
