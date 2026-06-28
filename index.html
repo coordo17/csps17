@@ -500,6 +500,91 @@
     padding-bottom: 8px;
     border-bottom: 2px solid var(--blue-xl);
   }
+
+/* ── MODULE TERRAIN ── */
+.terrain-search {
+  background: white;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+.terrain-search input {
+  width: 100%;
+  padding: 14px 16px;
+  font-size: 18px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  font-family: inherit;
+}
+.terrain-search input:focus {
+  outline: none;
+  border-color: var(--blue-mid);
+}
+.terrain-affaire-found {
+  background: #f0fdf4;
+  border: 2px solid #22c55e;
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 16px;
+  display: none;
+}
+.terrain-affaire-found.show { display: block; }
+.terrain-section {
+  background: white;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.terrain-section-header {
+  background: var(--blue-dark);
+  color: white;
+  padding: 12px 16px;
+  font-weight: 700;
+  font-size: 14px;
+}
+.terrain-section-body { padding: 16px; }
+.obs-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 10px;
+  background: #fafafa;
+}
+.obs-item select, .obs-item textarea, .obs-item input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  margin-top: 6px;
+}
+.obs-item textarea { min-height: 60px; resize: vertical; }
+.obs-type-btns { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.obs-type-btn {
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 2px solid var(--border);
+  background: white;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+.obs-type-btn.obs { border-color: #2563eb; color: #2563eb; background: #eff6ff; }
+.obs-type-btn.notif { border-color: #d97706; color: #d97706; background: #fffbeb; }
+.obs-type-btn.dgi { border-color: #dc2626; color: #dc2626; background: #fef2f2; }
+/* Canvas signature */
+#signature-canvas {
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  width: 100%;
+  touch-action: none;
+  cursor: crosshair;
+  background: white;
+}
+.sig-actions { display: flex; gap: 8px; margin-top: 8px; }
 </style>
 </head>
 <body>
@@ -512,6 +597,7 @@
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('import')">&#128229; Importer PGC</button>
+    <button class="btn btn-outline btn-sm" onclick="showPage('terrain')" style="background:#e8f5e9;color:#2e7d52;border-color:#2e7d52;">&#128241; Terrain</button>
   </div>
 </header>
 
@@ -758,6 +844,97 @@
         </div>
       </div>
     </div>
+
+  <!-- PAGE TERRAIN -->
+  <div class="page" id="page-terrain">
+    <div style="max-width:680px;">
+      <h2 style="color:var(--blue-dark);margin-bottom:6px;">&#128241; Module Terrain</h2>
+      <p style="color:var(--text-light);margin-bottom:16px;">Recherchez une affaire, saisissez vos observations et faites signer sur site.</p>
+
+      <!-- RECHERCHE -->
+      <div class="terrain-search">
+        <label style="font-size:12px;font-weight:700;color:var(--blue-dark);text-transform:uppercase;letter-spacing:0.5px;">Rechercher une affaire</label>
+        <input type="text" id="terrain-search-input" placeholder="N° affaire ou nom chantier..." oninput="terrainSearch(this.value)">
+      </div>
+
+      <div class="terrain-affaire-found" id="terrain-affaire-found">
+        <div style="font-weight:700;color:var(--success);margin-bottom:8px;">&#10003; Affaire trouvee</div>
+        <div id="terrain-affaire-info" style="font-size:14px;"></div>
+        <button class="btn btn-primary btn-sm" style="margin-top:10px;" onclick="loadTerrainAffaire()">Ouvrir cette affaire</button>
+      </div>
+
+      <!-- FORMULAIRE TERRAIN -->
+      <div id="terrain-form" style="display:none;">
+
+        <!-- INFOS CHANTIER -->
+        <div class="terrain-section">
+          <div class="terrain-section-header">&#127959; Chantier</div>
+          <div class="terrain-section-body">
+            <div id="terrain-chantier-info" style="font-size:14px;color:var(--text-light);"></div>
+            <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;">
+              <div class="field" style="flex:1;min-width:140px;">
+                <label>Date de visite</label>
+                <input type="date" id="terrain-date">
+              </div>
+              <div class="field" style="flex:1;min-width:100px;">
+                <label>N° de visite</label>
+                <input type="number" id="terrain-no-visite" min="1" value="1">
+              </div>
+              <div class="field" style="flex:1;min-width:120px;">
+                <label>Heure</label>
+                <input type="time" id="terrain-heure">
+              </div>
+            </div>
+            <div class="field" style="margin-top:10px;">
+              <label>Avancement global</label>
+              <input type="text" id="terrain-avancement" placeholder="Ex : 30% - Gros oeuvre en cours">
+            </div>
+            <div class="field" style="margin-top:10px;">
+              <label>Conditions meteo</label>
+              <input type="text" id="terrain-meteo" placeholder="Ex : Ensoleille, 22 degres">
+            </div>
+          </div>
+        </div>
+
+        <!-- OBSERVATIONS -->
+        <div class="terrain-section">
+          <div class="terrain-section-header">&#9888; Observations</div>
+          <div class="terrain-section-body">
+            <div id="obs-list"></div>
+            <button class="btn btn-outline btn-sm" onclick="addObs()">+ Ajouter une observation</button>
+          </div>
+        </div>
+
+        <!-- SIGNATURE -->
+        <div class="terrain-section">
+          <div class="terrain-section-header">&#9997; Signature sur site</div>
+          <div class="terrain-section-body">
+            <div class="field" style="margin-bottom:10px;">
+              <label>Nom du signataire</label>
+              <input type="text" id="sig-nom" placeholder="Nom Prenom">
+            </div>
+            <div class="field" style="margin-bottom:10px;">
+              <label>Qualite / Entreprise</label>
+              <input type="text" id="sig-qualite" placeholder="Ex : Chef de chantier - SAS Maconnerie">
+            </div>
+            <label style="font-size:12px;font-weight:700;color:var(--blue-dark);text-transform:uppercase;letter-spacing:0.5px;">Signature</label>
+            <canvas id="signature-canvas" height="160"></canvas>
+            <div class="sig-actions">
+              <button class="btn btn-outline btn-sm" onclick="clearSignature()">&#10005; Effacer</button>
+              <span id="sig-status" style="font-size:12px;color:var(--text-light);align-self:center;margin-left:8px;"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ACTIONS -->
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px;">
+          <button class="btn btn-success" onclick="genererCRVisite()">&#128196; Generer CR Visite</button>
+          <button class="btn btn-primary" onclick="sauvegarderVisite()">&#128190; Sauvegarder</button>
+        </div>
+
+      </div>
+    </div>
+  </div>
 
   </div>
 </div>
@@ -1353,6 +1530,195 @@ function showToast(msg, type) {
 function delay(ms) { return new Promise(function(r){ setTimeout(r, ms); }); }
 
 renderAffaireList();
+
+// ── MODULE TERRAIN ──────────────────────────────────────────────
+var terrainAffaire = null;
+var obsCount = 0;
+var signatureData = null;
+
+function terrainSearch(val) {
+  val = val.trim().toLowerCase();
+  var found = document.getElementById('terrain-affaire-found');
+  var info = document.getElementById('terrain-affaire-info');
+  if (!val) { found.classList.remove('show'); return; }
+  var match = affaires.find(function(a) {
+    return (a.num && a.num.toLowerCase().includes(val)) ||
+           (a.chantier && a.chantier.nom && a.chantier.nom.toLowerCase().includes(val));
+  });
+  if (match) {
+    found.classList.add('show');
+    terrainAffaire = match;
+    info.innerHTML = '<strong>' + match.num + '</strong> — ' + (match.chantier && match.chantier.nom ? match.chantier.nom : '') +
+      '<br><span style="color:var(--text-light)">' + (match.chantier && match.chantier.adresse ? match.chantier.adresse : '') + '</span>';
+  } else {
+    found.classList.remove('show');
+    terrainAffaire = null;
+  }
+}
+
+function loadTerrainAffaire() {
+  if (!terrainAffaire) return;
+  var c = terrainAffaire.chantier || {};
+  document.getElementById('terrain-chantier-info').innerHTML =
+    '<strong>' + terrainAffaire.num + '</strong> — ' + (c.nom || '') +
+    '<br>' + (c.adresse || '') +
+    '<br><em>' + (c.nature || '') + '</em>';
+  var today = new Date();
+  document.getElementById('terrain-date').value = today.toISOString().split('T')[0];
+  document.getElementById('terrain-heure').value = today.getHours().toString().padStart(2,'0') + ':' + today.getMinutes().toString().padStart(2,'0');
+  document.getElementById('obs-list').innerHTML = '';
+  obsCount = 0;
+  document.getElementById('terrain-form').style.display = 'block';
+  initSignatureCanvas();
+  window.scrollTo(0, 0);
+}
+
+function addObs() {
+  obsCount++;
+  var id = 'obs-' + obsCount;
+  var div = document.createElement('div');
+  div.className = 'obs-item';
+  div.id = id;
+  div.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;">'
+    + '<strong>Observation ' + obsCount + '</strong>'
+    + '<button onclick="document.getElementById('' + id + '').remove()" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:16px;">&#10005;</button>'
+    + '</div>'
+    + '<div class="obs-type-btns">'
+    + '<button class="obs-type-btn obs" onclick="setObsType('' + id + '','obs',this)">&#128308; Observation</button>'
+    + '<button class="obs-type-btn notif" onclick="setObsType('' + id + '','notif',this)">&#9888; Notification</button>'
+    + '<button class="obs-type-btn dgi" onclick="setObsType('' + id + '','dgi',this)">&#128680; Danger grave</button>'
+    + '</div>'
+    + '<input type="hidden" class="obs-type-val" value="obs">'
+    + '<textarea class="obs-desc" placeholder="Description de l'observation..." rows="3"></textarea>'
+    + '<input type="text" class="obs-delai" placeholder="Delai de correction (ex: 48h, avant reprise)">'
+    + '<input type="text" class="obs-responsable" placeholder="Entreprise responsable">';
+  document.getElementById('obs-list').appendChild(div);
+}
+
+function setObsType(id, type, btn) {
+  var item = document.getElementById(id);
+  item.querySelectorAll('.obs-type-btn').forEach(function(b){ b.style.fontWeight = '600'; b.style.opacity = '0.6'; });
+  btn.style.opacity = '1';
+  btn.style.fontWeight = '800';
+  item.querySelector('.obs-type-val').value = type;
+}
+
+// ── SIGNATURE CANVAS ────────────────────────────────────────────
+function initSignatureCanvas() {
+  var canvas = document.getElementById('signature-canvas');
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
+  canvas.width = canvas.offsetWidth;
+  var drawing = false;
+  var lastX = 0, lastY = 0;
+
+  function getPos(e) {
+    var rect = canvas.getBoundingClientRect();
+    var clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    var clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  }
+
+  function startDraw(e) {
+    e.preventDefault();
+    drawing = true;
+    var pos = getPos(e);
+    lastX = pos.x; lastY = pos.y;
+    ctx.beginPath();
+    ctx.moveTo(lastX, lastY);
+  }
+
+  function draw(e) {
+    if (!drawing) return;
+    e.preventDefault();
+    var pos = getPos(e);
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#1a1a2e';
+    ctx.lineTo(pos.x, pos.y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(pos.x, pos.y);
+    lastX = pos.x; lastY = pos.y;
+  }
+
+  function stopDraw(e) {
+    drawing = false;
+    signatureData = canvas.toDataURL();
+    document.getElementById('sig-status').textContent = 'Signature enregistree';
+  }
+
+  canvas.addEventListener('mousedown', startDraw);
+  canvas.addEventListener('mousemove', draw);
+  canvas.addEventListener('mouseup', stopDraw);
+  canvas.addEventListener('touchstart', startDraw, { passive: false });
+  canvas.addEventListener('touchmove', draw, { passive: false });
+  canvas.addEventListener('touchend', stopDraw);
+}
+
+function clearSignature() {
+  var canvas = document.getElementById('signature-canvas');
+  var ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  signatureData = null;
+  document.getElementById('sig-status').textContent = '';
+}
+
+function sauvegarderVisite() {
+  if (!terrainAffaire) return;
+  var visite = {
+    date: document.getElementById('terrain-date').value,
+    noVisite: document.getElementById('terrain-no-visite').value,
+    heure: document.getElementById('terrain-heure').value,
+    avancement: document.getElementById('terrain-avancement').value,
+    meteo: document.getElementById('terrain-meteo').value,
+    sigNom: document.getElementById('sig-nom').value,
+    sigQualite: document.getElementById('sig-qualite').value,
+    signature: signatureData,
+    observations: [],
+  };
+  document.querySelectorAll('#obs-list .obs-item').forEach(function(item) {
+    visite.observations.push({
+      type: item.querySelector('.obs-type-val').value,
+      description: item.querySelector('.obs-desc').value,
+      delai: item.querySelector('.obs-delai').value,
+      responsable: item.querySelector('.obs-responsable').value,
+    });
+  });
+  var idx = affaires.findIndex(function(a){ return a.id === terrainAffaire.id; });
+  if (idx >= 0) {
+    if (!affaires[idx].visites) affaires[idx].visites = [];
+    affaires[idx].visites.push(visite);
+    localStorage.setItem('csps17_affaires', JSON.stringify(affaires));
+    fetch('/api/affaires', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(affaires)}).catch(function(){});
+    showToast('Visite sauvegardee !', 'success');
+  }
+}
+
+async function genererCRVisite() {
+  if (!terrainAffaire) return;
+  sauvegarderVisite();
+  var data = terrainAffaire;
+  data._visite = {
+    date: document.getElementById('terrain-date').value,
+    noVisite: document.getElementById('terrain-no-visite').value,
+    heure: document.getElementById('terrain-heure').value,
+    avancement: document.getElementById('terrain-avancement').value,
+    meteo: document.getElementById('terrain-meteo').value,
+    sigNom: document.getElementById('sig-nom').value,
+    sigQualite: document.getElementById('sig-qualite').value,
+  };
+  currentAffaireId = terrainAffaire.id;
+  currentCat = terrainAffaire.cat;
+  // Charger les donnees dans le formulaire
+  var c = terrainAffaire.chantier || {};
+  document.getElementById('chantier-nom').value = c.nom || '';
+  document.getElementById('chantier-adresse').value = c.adresse || '';
+  document.getElementById('chantier-nature').value = c.nature || '';
+  document.getElementById('num-affaire').value = terrainAffaire.num || '';
+  if (terrainAffaire.moa) document.getElementById('moa-nom').value = terrainAffaire.moa.nom || '';
+  await generateDoc('VIS');
+}
 </script>
 <script>
 if ("serviceWorker" in navigator) {
