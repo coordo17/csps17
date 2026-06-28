@@ -1198,6 +1198,9 @@ async function generateDocs() {
   saveAffaire();
   switchTabDirect('documents');
   renderDocsGrid();
+  // Ne pas generer automatiquement - laisser l'utilisateur choisir
+  showToast('Choisissez un document a generer', '');
+  return;
   var prog = document.getElementById('gen-progress');
   var list = document.getElementById('progress-list');
   prog.classList.add('show');
