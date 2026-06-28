@@ -1288,19 +1288,8 @@ function injecterSignatures(zip, sigCsps, sigEnt) {
   var ctStr = ctFile ? ctFile.asText() : '';
   var nextRid = 100;
 
-  function addImg(sigDataUrl, markeur, rid) {
-    if (!sigDataUrl || xmlStr.indexOf(markeur) === -1) return;
-    var base64 = sigDataUrl.split(',')[1];
-    var imgBytes = atob(base64);
-    var arr = new Uint8Array(imgBytes.length);
-    for (var i = 0; i < imgBytes.length; i++) arr[i] = imgBytes.charCodeAt(i);
-    zip.file('word/media/sig' + rid + '.png', arr);
-    var relXml = '<Relationship Id="rId' + rid + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/sig' + rid + '.png"/>';
-    relsStr = relsStr.replace('</Relationships>', relXml + '</Relationships>');
-    if (ctStr.indexOf('image/png') === -1) {
-      ctStr = ctStr.replace('</Types>', '<Default Extension="png" ContentType="image/png"/></Types>');
-    }
-    var imgXml = '</w:t></w:r><w:r><w:drawing>'
+  function makeImgXml(rid) {
+    return '<w:r><w:drawing>'
       + '<wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" distT="0" distB="0" distL="0" distR="0">'
       + '<wp:extent cx="1800000" cy="500000"/><wp:effectExtent l="0" t="0" r="0" b="0"/>'
       + '<wp:docPr id="' + rid + '" name="sig' + rid + '"/>'
@@ -1313,13 +1302,50 @@ function injecterSignatures(zip, sigCsps, sigEnt) {
       + '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1800000" cy="500000"/></a:xfrm>'
       + '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>'
       + '</pic:pic></a:graphicData></a:graphic></wp:inline>'
-      + '</w:drawing></w:r><w:r><w:t>';
-    xmlStr = xmlStr.replace(markeur, imgXml);
+      + '</w:drawing></w:r>';
   }
 
-  if (sigCsps) addImg(sigCsps, 'SIG_CSPS_PLACEHOLDER', nextRid++);
-  if (sigEnt) addImg(sigEnt, 'SIG_ENT_PLACEHOLDER', nextRid++);
-  xmlStr = xmlStr.split('SIG_CSPS_PLACEHOLDER').join('').split('SIG_ENT_PLACEHOLDER').join('');
+  function addImg(sigDataUrl, rid) {
+    if (!sigDataUrl) return false;
+    var base64 = sigDataUrl.split(',')[1];
+    var imgBytes = atob(base64);
+    var arr = new Uint8Array(imgBytes.length);
+    for (var i = 0; i < imgBytes.length; i++) arr[i] = imgBytes.charCodeAt(i);
+    zip.file('word/media/sig' + rid + '.png', arr);
+    var relXml = '<Relationship Id="rId' + rid + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/sig' + rid + '.png"/>';
+    relsStr = relsStr.replace('</Relationships>', relXml + '</Relationships>');
+    if (ctStr.indexOf('image/png') === -1) {
+      ctStr = ctStr.replace('</Types>', '<Default Extension="png" ContentType="image/png"/></Types>');
+    }
+    return true;
+  }
+
+  // Chercher "Signature :" dans le XML et inserer l image apres la balise </w:t>
+  // On remplace la premiere occurrence pour CSPS, la deuxieme pour entreprise
+  var sigTarget = 'Signature :</w:t></w:r>';
+  var sigImg1 = '', sigImg2 = '';
+
+  if (sigCsps && addImg(sigCsps, nextRid)) {
+    sigImg1 = makeImgXml(nextRid);
+    nextRid++;
+  }
+  if (sigEnt && addImg(sigEnt, nextRid)) {
+    sigImg2 = makeImgXml(nextRid);
+    nextRid++;
+  }
+
+  // Remplacer premiere occurrence = CSPS
+  if (sigImg1) {
+    xmlStr = xmlStr.replace(sigTarget, 'Signature :</w:t></w:r>' + sigImg1);
+  }
+  // Remplacer deuxieme occurrence = Entreprise
+  if (sigImg2) {
+    var parts = xmlStr.split(sigTarget);
+    if (parts.length >= 3) {
+      xmlStr = parts[0] + sigTarget + parts[1] + 'Signature :</w:t></w:r>' + sigImg2 + parts.slice(2).join(sigTarget);
+    }
+  }
+
   zip.file('word/document.xml', xmlStr);
   zip.file('word/_rels/document.xml.rels', relsStr);
   zip.file('[Content_Types].xml', ctStr);
@@ -1389,8 +1415,7 @@ function buildTagData(data) {
     oppbtp_adresse:   (org.oppbtp && org.oppbtp.adresse) || '',
     date_today:       today,
     ref_pgc:          data.num || '',
-    sig_csps:         'SIG_CSPS_PLACEHOLDER',
-    sig_ent:          'SIG_ENT_PLACEHOLDER',
+
   };
 }
 
