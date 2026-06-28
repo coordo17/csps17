@@ -924,13 +924,29 @@
           </div>
         </div>
 
+        <!-- SIGNATURE EU (optionnelle) -->
+        <div class="terrain-section" id="terrain-section-sig-eu" style="display:none;">
+          <div class="terrain-section-header">&#9997; Signature Representant EU / Exploitant (si present)</div>
+          <div class="terrain-section-body">
+            <div class="field" style="margin-bottom:10px;">
+              <label>Nom du representant EU</label>
+              <input type="text" id="sig-nom-eu" placeholder="Nom Prenom (facultatif)">
+            </div>
+            <canvas id="sig-canvas-eu" height="140" style="border:2px solid var(--border);border-radius:var(--radius);width:100%;touch-action:none;cursor:crosshair;background:white;"></canvas>
+            <div class="sig-actions">
+              <button class="btn btn-outline btn-sm" onclick="clearSig('sig-canvas-eu','eu','sig-status-eu')">&#10005; Effacer</button>
+              <span id="sig-status-eu" style="font-size:12px;color:var(--text-light);align-self:center;margin-left:8px;"></span>
+            </div>
+          </div>
+        </div>
+
         <!-- SIGNATURE CSPS -->
         <div class="terrain-section">
           <div class="terrain-section-header">&#9997; Signature CSPS — Alain SUZANNE</div>
           <div class="terrain-section-body">
             <canvas id="sig-canvas-csps" height="140" style="border:2px solid var(--border);border-radius:var(--radius);width:100%;touch-action:none;cursor:crosshair;background:white;"></canvas>
             <div class="sig-actions">
-              <button class="btn btn-outline btn-sm" onclick="clearSig('sig-canvas-csps','sig-data-csps','sig-status-csps')">&#10005; Effacer</button>
+              <button class="btn btn-outline btn-sm" onclick="clearSig('sig-canvas-csps','csps','sig-status-csps')">&#10005; Effacer</button>
               <span id="sig-status-csps" style="font-size:12px;color:var(--text-light);align-self:center;margin-left:8px;"></span>
             </div>
           </div>
@@ -1278,7 +1294,7 @@ function renderDocsGrid() {
 }
 
 // ── INJECTION SIGNATURES DANS DOCX ─────────────────────────────
-function injecterSignatures(zip, sigCsps, sigEnt) {
+function injecterSignatures(zip, sigCsps, sigEnt, sigEU) {
   var docFile = zip.file('word/document.xml');
   if (!docFile) return zip;
   var xmlStr = docFile.asText();
@@ -1320,9 +1336,9 @@ function injecterSignatures(zip, sigCsps, sigEnt) {
     return true;
   }
 
-  // Chercher "Signature :" dans le XML et inserer l image apres la balise </w:t>
-  // On remplace la premiere occurrence pour CSPS, la deuxieme pour entreprise
-  var sigTarget = 'Signature :</w:t></w:r>';
+  // Injection signature CSPS apres "Alain SUZANNE"
+  var ancreCSPS = 'Alain SUZANNE';
+  var ancreEnt = 'Qualité : Entreprise :';
   var sigImg1 = '', sigImg2 = '';
 
   if (sigCsps && addImg(sigCsps, nextRid)) {
@@ -1334,15 +1350,43 @@ function injecterSignatures(zip, sigCsps, sigEnt) {
     nextRid++;
   }
 
-  // Remplacer premiere occurrence = CSPS
+  // CSPS : inserer apres la cellule contenant Alain SUZANNE
   if (sigImg1) {
-    xmlStr = xmlStr.replace(sigTarget, 'Signature :</w:t></w:r>' + sigImg1);
+    var cspsTarget = 'Signature :</w:t></w:r>';
+    // Trouver la position apres Alain SUZANNE
+    var idxCSPS = xmlStr.indexOf(ancreCSPS);
+    if (idxCSPS !== -1) {
+      var idxSigCSPS = xmlStr.indexOf(cspsTarget, idxCSPS);
+      if (idxSigCSPS !== -1) {
+        xmlStr = xmlStr.slice(0, idxSigCSPS + cspsTarget.length) + sigImg1 + xmlStr.slice(idxSigCSPS + cspsTarget.length);
+      }
+    }
   }
-  // Remplacer deuxieme occurrence = Entreprise
+
+  // Entreprise : inserer apres "Qualite : Entreprise :"
   if (sigImg2) {
-    var parts = xmlStr.split(sigTarget);
-    if (parts.length >= 3) {
-      xmlStr = parts[0] + sigTarget + parts[1] + 'Signature :</w:t></w:r>' + sigImg2 + parts.slice(2).join(sigTarget);
+    var entTarget = 'Signature :</w:t></w:r>';
+    var idxEnt = xmlStr.indexOf(ancreEnt);
+    if (idxEnt !== -1) {
+      var idxSigEnt = xmlStr.indexOf(entTarget, idxEnt);
+      if (idxSigEnt !== -1) {
+        xmlStr = xmlStr.slice(0, idxSigEnt + entTarget.length) + sigImg2 + xmlStr.slice(idxSigEnt + entTarget.length);
+      }
+    }
+  }
+
+  // EU : inserer apres "Representant EU"
+  if (sigData.eu && addImg(sigData.eu, nextRid)) {
+    var sigImgEU = makeImgXml(nextRid);
+    nextRid++;
+    var ancreEU = 'Nom : Qualité : Signature :';
+    var idxEU = xmlStr.indexOf(ancreEU);
+    if (idxEU !== -1) {
+      var euTarget = '</w:t></w:r>';
+      var idxSigEU = xmlStr.indexOf(euTarget, idxEU);
+      if (idxSigEU !== -1) {
+        xmlStr = xmlStr.slice(0, idxSigEU + euTarget.length) + sigImgEU + xmlStr.slice(idxSigEU + euTarget.length);
+      }
     }
   }
 
@@ -1443,7 +1487,7 @@ async function generateDoc(ref) {
     doc.render(buildTagData(data));
     var finalZip = doc.getZip();
     if (typeof sigData !== 'undefined' && (sigData.csps || sigData.ent)) {
-      finalZip = injecterSignatures(finalZip, sigData.csps, sigData.ent);
+      finalZip = injecterSignatures(finalZip, sigData.csps, sigData.ent, sigData.eu);
     }
     if (data.cat) {
       var docXmlFile = finalZip.file('word/document.xml');
@@ -1638,7 +1682,7 @@ renderAffaireList();
 var terrainAffaire = null;
 var obsCount = 0;
 var currentTerrainDoc = null;
-var sigData = { ent: null, csps: null };
+var sigData = { ent: null, csps: null, eu: null };
 
 // Titres des documents terrain
 var DOC_TITRES = {
@@ -1813,6 +1857,9 @@ function ouvrirFormulaireDoc(ref) {
   // Section signature entreprise
   var secSigEnt = document.getElementById('terrain-section-sig-ent');
   secSigEnt.style.display = DOCS_AVEC_SIG_ENT.includes(ref) ? 'block' : 'none';
+  // Section signature EU uniquement pour FIC
+  var secSigEU = document.getElementById('terrain-section-sig-eu');
+  if (secSigEU) secSigEU.style.display = (ref === 'FIC') ? 'block' : 'none';
 
   // Afficher formulaire
   document.getElementById('terrain-step-select').style.display = 'none';
@@ -1822,6 +1869,7 @@ function ouvrirFormulaireDoc(ref) {
   // Init canvas signatures
   setTimeout(function() {
     initSigCanvas('sig-canvas-ent', 'ent');
+    initSigCanvas('sig-canvas-eu', 'eu');
     initSigCanvas('sig-canvas-csps', 'csps');
   }, 100);
 }
