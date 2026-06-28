@@ -1317,9 +1317,9 @@ function injecterSignatures(zip, sigCsps, sigEnt) {
     xmlStr = xmlStr.replace(markeur, imgXml);
   }
 
-  if (sigCsps) addImg(sigCsps, '{{sig_csps}}', nextRid++);
-  if (sigEnt) addImg(sigEnt, '{{sig_ent}}', nextRid++);
-  xmlStr = xmlStr.split('{{sig_csps}}').join('').split('{{sig_ent}}').join('');
+  if (sigCsps) addImg(sigCsps, 'SIG_CSPS_PLACEHOLDER', nextRid++);
+  if (sigEnt) addImg(sigEnt, 'SIG_ENT_PLACEHOLDER', nextRid++);
+  xmlStr = xmlStr.split('SIG_CSPS_PLACEHOLDER').join('').split('SIG_ENT_PLACEHOLDER').join('');
   zip.file('word/document.xml', xmlStr);
   zip.file('word/_rels/document.xml.rels', relsStr);
   zip.file('[Content_Types].xml', ctStr);
@@ -1389,6 +1389,8 @@ function buildTagData(data) {
     oppbtp_adresse:   (org.oppbtp && org.oppbtp.adresse) || '',
     date_today:       today,
     ref_pgc:          data.num || '',
+    sig_csps:         'SIG_CSPS_PLACEHOLDER',
+    sig_ent:          'SIG_ENT_PLACEHOLDER',
   };
 }
 
