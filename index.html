@@ -1579,21 +1579,24 @@ function addObs() {
   var div = document.createElement('div');
   div.className = 'obs-item';
   div.id = id;
-  div.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;">'
-    + '<strong>Observation ' + obsCount + '</strong>'
-    + '<button onclick="document.getElementById('' + id + '').remove()" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:16px;">&#10005;</button>'
-    + '</div>'
-    + '<div class="obs-type-btns">'
-    + '<button class="obs-type-btn obs" onclick="setObsType('' + id + '','obs',this)">&#128308; Observation</button>'
-    + '<button class="obs-type-btn notif" onclick="setObsType('' + id + '','notif',this)">&#9888; Notification</button>'
-    + '<button class="obs-type-btn dgi" onclick="setObsType('' + id + '','dgi',this)">&#128680; Danger grave</button>'
-    + '</div>'
-    + '<input type="hidden" class="obs-type-val" value="obs">'
-    + '<textarea class="obs-desc" placeholder="Description de l'observation..." rows="3"></textarea>'
-    + '<input type="text" class="obs-delai" placeholder="Delai de correction (ex: 48h, avant reprise)">'
-    + '<input type="text" class="obs-responsable" placeholder="Entreprise responsable">';
+  var h = '<div style="display:flex;justify-content:space-between;">';
+  h += '<strong>Observation ' + obsCount + '</strong>';
+  h += '<button onclick="removeObs(\'' + id + '\')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:16px;">X</button>';
+  h += '</div><div class="obs-type-btns">';
+  h += '<button class="obs-type-btn obs" onclick="setObsType(\'' + id + '\',\'obs\',this)">Observation</button>';
+  h += '<button class="obs-type-btn notif" onclick="setObsType(\'' + id + '\',\'notif\',this)">Notification</button>';
+  h += '<button class="obs-type-btn dgi" onclick="setObsType(\'' + id + '\',\'dgi\',this)">Danger grave</button>';
+  h += '</div>';
+  h += '<input type="hidden" class="obs-type-val" value="obs">';
+  h += '<textarea class="obs-desc" placeholder="Description..." rows="3"></textarea>';
+  h += '<input type="text" class="obs-delai" placeholder="Delai (ex: 48h)">';
+  h += '<input type="text" class="obs-responsable" placeholder="Entreprise responsable">';
+  div.innerHTML = h;
   document.getElementById('obs-list').appendChild(div);
 }
+
+function removeObs(id) { var el=document.getElementById(id); if(el) el.remove(); }
+
 
 function setObsType(id, type, btn) {
   var item = document.getElementById(id);
