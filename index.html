@@ -10,6 +10,8 @@
 <link rel="apple-touch-icon" href="/icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CSPS17 — Gestion de dossiers</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 <style>
   :root {
     --blue-dark: #1F4E79;
@@ -39,7 +41,6 @@
     font-size: 15px;
   }
 
-  /* ── HEADER ── */
   header {
     background: var(--blue-dark);
     color: white;
@@ -65,7 +66,6 @@
   .logo-name { font-size: 14px; opacity: 0.85; }
   .header-actions { display: flex; gap: 10px; }
 
-  /* ── LAYOUT ── */
   .app { display: flex; min-height: calc(100vh - 58px); }
 
   .sidebar {
@@ -80,8 +80,6 @@
 
   .main { flex: 1; padding: 24px; overflow-y: auto; }
 
-  /* ── SIDEBAR ── */
-  .sidebar-section { padding: 8px 16px 4px; }
   .sidebar-label {
     font-size: 11px;
     font-weight: 700;
@@ -144,11 +142,9 @@
   .cat-2 { background: #fef3c7; color: #92400e; }
   .cat-3 { background: #d1fae5; color: #065f46; }
 
-  /* ── MAIN CONTENT ── */
   .page { display: none; }
   .page.active { display: block; }
 
-  /* ── WELCOME ── */
   .welcome {
     max-width: 600px;
     margin: 60px auto;
@@ -158,7 +154,6 @@
   .welcome p { color: var(--text-light); line-height: 1.6; margin-bottom: 24px; }
   .welcome-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
 
-  /* ── FORM ── */
   .form-card {
     background: white;
     border-radius: var(--radius);
@@ -201,7 +196,6 @@
   .field textarea { resize: vertical; min-height: 70px; }
   .field input[readonly] { background: var(--grey); color: var(--text-light); }
 
-  /* ── CAT SELECTOR ── */
   .cat-selector { display: flex; gap: 10px; margin-bottom: 14px; }
   .cat-btn {
     flex: 1;
@@ -222,7 +216,6 @@
   .cat-btn.selected-3 { border-color: #16a34a; background: #f0fdf4; }
   .cat-btn.selected-3 .cat-num { color: #16a34a; }
 
-  /* ── ENTREPRISES ── */
   .entreprise-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
   .entreprise-card {
     border: 1px solid var(--border);
@@ -258,7 +251,6 @@
     line-height: 1;
   }
 
-  /* ── ORGANISMES ── */
   .organismes-note {
     background: var(--blue-xl);
     border-left: 3px solid var(--blue-mid);
@@ -269,7 +261,6 @@
     margin-bottom: 14px;
   }
 
-  /* ── BOUTONS ── */
   .btn {
     padding: 9px 18px;
     border-radius: var(--radius);
@@ -298,7 +289,6 @@
   .btn-danger { background: #dc2626; color: white; }
   .btn-danger:hover { background: #b91c1c; }
 
-  /* ── DOCS PANEL ── */
   .docs-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -324,7 +314,6 @@
   .doc-ref { font-size: 11px; color: var(--text-light); margin-top: 2px; }
   .doc-actions { display: flex; gap: 6px; margin-top: 4px; }
 
-  /* ── IMPORT PGC ── */
   .import-zone {
     border: 2px dashed var(--blue-mid);
     border-radius: var(--radius);
@@ -352,7 +341,6 @@
   }
   .extract-result.show { display: block; }
 
-  /* ── TABS ── */
   .tabs { display: flex; gap: 2px; border-bottom: 2px solid var(--border); margin-bottom: 20px; }
   .tab {
     padding: 10px 18px;
@@ -370,7 +358,6 @@
   .tab-content { display: none; }
   .tab-content.active { display: block; }
 
-  /* ── AFFAIRE HEADER ── */
   .affaire-header {
     display: flex;
     align-items: flex-start;
@@ -382,7 +369,6 @@
   .affaire-title h2 { font-size: 22px; color: var(--blue-dark); }
   .affaire-title p { color: var(--text-light); font-size: 13px; margin-top: 3px; }
 
-  /* ── STATUS ── */
   .status-bar {
     background: white;
     border-radius: var(--radius);
@@ -400,7 +386,6 @@
   .dot-orange { background: #f59e0b; }
   .dot-grey { background: #9ca3af; }
 
-  /* ── TOASTS ── */
   #toast {
     position: fixed;
     bottom: 24px;
@@ -422,7 +407,6 @@
   #toast.success { background: var(--success); }
   #toast.error { background: var(--danger); }
 
-  /* ── LOADING ── */
   .spinner {
     display: inline-block;
     width: 16px;
@@ -434,7 +418,6 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* ── MOBILE ── */
   @media (max-width: 680px) {
     .sidebar { display: none; }
     .sidebar.open {
@@ -462,7 +445,6 @@
     padding: 4px;
   }
 
-  /* ── MODAL ── */
   .modal-overlay {
     position: fixed; inset: 0;
     background: rgba(0,0,0,0.45);
@@ -486,7 +468,6 @@
   .modal p { color: var(--text-light); font-size: 13px; margin-bottom: 16px; }
   .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
 
-  /* ── PROGRESS ── */
   .gen-progress {
     background: var(--blue-xl);
     border-radius: var(--radius);
@@ -521,132 +502,94 @@
 
 <header>
   <div class="logo">
-    <button class="btn-menu" onclick="toggleSidebar()">☰</button>
+    <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE · Coordination SPS</span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS</span>
   </div>
   <div class="header-actions">
-    <button class="btn btn-outline btn-sm" onclick="showPage('import')">📥 Importer PGC</button>
+    <button class="btn btn-outline btn-sm" onclick="showPage('import')">&#128229; Importer PGC</button>
   </div>
 </header>
 
 <div id="install-banner" style="display:none;background:#1F4E79;color:white;padding:10px 16px;align-items:center;gap:12px;font-size:13px;position:sticky;top:58px;z-index:99;">
-  <span>📱 Installer CSPS17 sur votre téléphone</span>
+  <span>&#128242; Installer CSPS17 sur votre telephone</span>
   <button onclick="installPWA()" style="background:white;color:#1F4E79;border:none;border-radius:6px;padding:6px 14px;font-weight:700;cursor:pointer;font-size:12px;">Installer</button>
-  <button onclick="document.getElementById('install-banner').style.display='none'" style="background:none;border:none;color:rgba(255,255,255,0.7);cursor:pointer;font-size:18px;margin-left:auto;">✕</button>
+  <button onclick="document.getElementById('install-banner').style.display='none'" style="background:none;border:none;color:rgba(255,255,255,0.7);cursor:pointer;font-size:18px;margin-left:auto;">&#10005;</button>
 </div>
-<div class="app">
 
-  <!-- SIDEBAR -->
+<div class="app">
   <div class="sidebar" id="sidebar">
-    <button class="btn-new-affaire" onclick="showNewAffaire()">
-      ＋ Nouvelle affaire
-    </button>
+    <button class="btn-new-affaire" onclick="showNewAffaire()">+ Nouvelle affaire</button>
     <div class="sidebar-label">MES AFFAIRES</div>
-    <div class="affaire-list" id="affaire-list">
-      <!-- rempli dynamiquement -->
-    </div>
+    <div class="affaire-list" id="affaire-list"></div>
   </div>
 
-  <!-- MAIN -->
   <div class="main" id="main-content">
 
-    <!-- PAGE WELCOME -->
     <div class="page active" id="page-welcome">
       <div class="welcome">
-        <div style="font-size:64px;margin-bottom:16px;">📋</div>
+        <div style="font-size:64px;margin-bottom:16px;">&#128203;</div>
         <h1>Gestionnaire CSPS17</h1>
-        <p>Créez une nouvelle affaire ou importez un PGC existant pour remplir automatiquement vos 17 documents de coordination SPS.</p>
+        <p>Creez une nouvelle affaire ou importez un PGC existant pour remplir automatiquement vos 17 documents de coordination SPS.</p>
         <div class="welcome-actions">
-          <button class="btn btn-primary" onclick="showNewAffaire()">＋ Nouvelle affaire</button>
-          <button class="btn btn-outline" onclick="showPage('import')">📥 Importer un PGC</button>
+          <button class="btn btn-primary" onclick="showNewAffaire()">+ Nouvelle affaire</button>
+          <button class="btn btn-outline" onclick="showPage('import')">&#128229; Importer un PGC</button>
         </div>
       </div>
     </div>
 
-    <!-- PAGE NOUVELLE AFFAIRE / FORMULAIRE -->
     <div class="page" id="page-form">
       <div class="affaire-header">
         <div class="affaire-title">
           <h2 id="form-title">Nouvelle affaire</h2>
-          <p id="form-subtitle">Renseignez les informations pour pré-remplir tous vos documents</p>
+          <p id="form-subtitle">Renseignez les informations pour pre-remplir tous vos documents</p>
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
-          <button class="btn btn-outline btn-sm" onclick="saveAffaire()">💾 Sauvegarder</button>
-          <button class="btn btn-success" onclick="generateDocs()">⚡ Générer les documents</button>
+          <button class="btn btn-outline btn-sm" onclick="saveAffaire()">&#128190; Sauvegarder</button>
+          <button class="btn btn-success" onclick="generateDocs()">&#9889; Generer les documents</button>
         </div>
       </div>
 
       <div class="tabs">
-        <div class="tab active" onclick="switchTab('chantier')">🏗️ Chantier</div>
-        <div class="tab" onclick="switchTab('intervenants')">👥 Intervenants</div>
-        <div class="tab" onclick="switchTab('organismes')">🏛️ Organismes</div>
-        <div class="tab" onclick="switchTab('documents')">📄 Documents</div>
+        <div class="tab active" onclick="switchTab('chantier')">&#127959; Chantier</div>
+        <div class="tab" onclick="switchTab('intervenants')">&#128101; Intervenants</div>
+        <div class="tab" onclick="switchTab('organismes')">&#127963; Organismes</div>
+        <div class="tab" onclick="switchTab('documents')">&#128196; Documents</div>
       </div>
 
-      <!-- TAB CHANTIER -->
       <div class="tab-content active" id="tab-chantier">
-
         <div class="form-card">
-          <div class="form-card-header">📋 Identification de l'opération</div>
+          <div class="form-card-header">&#128203; Identification de l'operation</div>
           <div class="form-card-body">
             <div class="form-row">
-              <div class="field">
-                <label>N° Affaire (auto)</label>
-                <input type="text" id="num-affaire" readonly placeholder="CSPS-2026-0001">
-              </div>
-              <div class="field">
-                <label>Désignation du chantier *</label>
-                <input type="text" id="chantier-nom" placeholder="Ex : Négoce Chausson Plonéour-Lanvern">
-              </div>
+              <div class="field"><label>N Affaire (auto)</label><input type="text" id="num-affaire" readonly placeholder="CSPS-2026-0001"></div>
+              <div class="field"><label>Designation du chantier *</label><input type="text" id="chantier-nom" placeholder="Ex : Negoce Chausson Ploneour-Lanvern"></div>
             </div>
             <div class="form-row">
-              <div class="field">
-                <label>Adresse complète *</label>
-                <input type="text" id="chantier-adresse" placeholder="ZA de Kerganet, 29720 Plonéour-Lanvern">
-              </div>
-              <div class="field">
-                <label>Nature des travaux *</label>
-                <input type="text" id="chantier-nature" placeholder="Ex : Démolition + construction négoce matériaux">
-              </div>
+              <div class="field"><label>Adresse complete *</label><input type="text" id="chantier-adresse" placeholder="ZA de Kerganet, 29720 Ploneour-Lanvern"></div>
+              <div class="field"><label>Nature des travaux *</label><input type="text" id="chantier-nature" placeholder="Ex : Demolition + construction negoce materiaux"></div>
             </div>
             <div class="form-row">
-              <div class="field">
-                <label>Date prévisionnelle début travaux</label>
-                <input type="date" id="chantier-debut">
-              </div>
-              <div class="field">
-                <label>Durée prévisionnelle</label>
-                <input type="text" id="chantier-duree" placeholder="Ex : 10 mois">
-              </div>
-              <div class="field">
-                <label>Montant estimé (€ HT)</label>
-                <input type="text" id="chantier-montant" placeholder="NC">
-              </div>
+              <div class="field"><label>Date previsionnelle debut travaux</label><input type="date" id="chantier-debut"></div>
+              <div class="field"><label>Duree previsionnelle</label><input type="text" id="chantier-duree" placeholder="Ex : 10 mois"></div>
+              <div class="field"><label>Montant estime (EUR HT)</label><input type="text" id="chantier-montant" placeholder="NC"></div>
             </div>
             <div class="form-row">
-              <div class="field">
-                <label>Type de marché</label>
+              <div class="field"><label>Type de marche</label>
                 <select id="chantier-marche">
-                  <option value="Lots séparés">Lots séparés</option>
-                  <option value="Entreprise générale">Entreprise générale</option>
+                  <option value="Lots separes">Lots separes</option>
+                  <option value="Entreprise generale">Entreprise generale</option>
                   <option value="Co-traitance">Co-traitance</option>
                 </select>
               </div>
-              <div class="field">
-                <label>N° Déclaration Préalable</label>
-                <input type="text" id="chantier-dp" placeholder="Ex : DP 029 2026 00123">
-              </div>
-              <div class="field">
-                <label>N° Permis de Construire</label>
-                <input type="text" id="chantier-pc" placeholder="Ou N/A">
-              </div>
+              <div class="field"><label>N Declaration Prealable</label><input type="text" id="chantier-dp" placeholder="Ex : DP 029 2026 00123"></div>
+              <div class="field"><label>N Permis de Construire</label><input type="text" id="chantier-pc" placeholder="Ou N/A"></div>
             </div>
           </div>
         </div>
 
         <div class="form-card">
-          <div class="form-card-header">🎯 Catégorie de l'opération</div>
+          <div class="form-card-header">&#127919; Categorie de l'operation</div>
           <div class="form-card-body">
             <div class="cat-selector">
               <div class="cat-btn" onclick="selectCat(1)" id="cat-btn-1">
@@ -659,255 +602,154 @@
               </div>
               <div class="cat-btn" onclick="selectCat(3)" id="cat-btn-3">
                 <div class="cat-num">3</div>
-                <div class="cat-desc">Autres chantiers<br>PGC simplifié si risques part.</div>
+                <div class="cat-desc">Autres chantiers<br>PGC simplifie si risques part.</div>
               </div>
             </div>
             <div class="form-row">
-              <div class="field">
-                <label>Effectif prévisible (hommes-jours)</label>
-                <input type="text" id="chantier-hj" placeholder="Ex : 850">
-              </div>
-              <div class="field">
-                <label>Nb d'entreprises prévues</label>
-                <input type="number" id="chantier-nb-ent" placeholder="Ex : 8" min="1">
-              </div>
+              <div class="field"><label>Effectif previsible (hommes-jours)</label><input type="text" id="chantier-hj" placeholder="Ex : 850"></div>
+              <div class="field"><label>Nb d'entreprises prevues</label><input type="number" id="chantier-nb-ent" placeholder="Ex : 8" min="1"></div>
             </div>
             <div id="cat-warning" style="display:none;background:var(--orange);border-radius:6px;padding:10px 14px;font-size:13px;color:var(--orange-dark);margin-top:8px;"></div>
           </div>
         </div>
 
         <div class="form-card">
-          <div class="form-card-header">⚠️ Risques particuliers</div>
+          <div class="form-card-header">&#9888; Risques particuliers</div>
           <div class="form-card-body">
             <div class="form-row">
-              <div class="field">
-                <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;">
-                  <input type="checkbox" id="rp-amiante"> Présence amiante (Sous-section 3 ou 4)
-                </label>
-              </div>
-              <div class="field">
-                <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;">
-                  <input type="checkbox" id="rp-plomb"> Présence plomb (CREP)
-                </label>
-              </div>
-              <div class="field">
-                <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;">
-                  <input type="checkbox" id="rp-demolition"> Travaux de démolition
-                </label>
-              </div>
-              <div class="field">
-                <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;">
-                  <input type="checkbox" id="rp-terrassement"> Terrassement / fouilles
-                </label>
-              </div>
-              <div class="field">
-                <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;">
-                  <input type="checkbox" id="rp-reseaux"> Travaux à proximité réseaux (AIPR)
-                </label>
-              </div>
-              <div class="field">
-                <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;">
-                  <input type="checkbox" id="rp-hauteur"> Travaux en hauteur &gt;3m
-                </label>
-              </div>
+              <div class="field"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;"><input type="checkbox" id="rp-amiante"> Presence amiante (Sous-section 3 ou 4)</label></div>
+              <div class="field"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;"><input type="checkbox" id="rp-plomb"> Presence plomb (CREP)</label></div>
+              <div class="field"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;"><input type="checkbox" id="rp-demolition"> Travaux de demolition</label></div>
+              <div class="field"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;"><input type="checkbox" id="rp-terrassement"> Terrassement / fouilles</label></div>
+              <div class="field"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;"><input type="checkbox" id="rp-reseaux"> Travaux a proximite reseaux (AIPR)</label></div>
+              <div class="field"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;"><input type="checkbox" id="rp-hauteur"> Travaux en hauteur &gt;3m</label></div>
             </div>
           </div>
         </div>
-
       </div>
 
-      <!-- TAB INTERVENANTS -->
       <div class="tab-content" id="tab-intervenants">
-
         <div class="form-card">
-          <div class="form-card-header">🏢 Maître d'Ouvrage (MOA)</div>
+          <div class="form-card-header">&#127970; Maitre d'Ouvrage (MOA)</div>
           <div class="form-card-body">
             <div class="form-row">
-              <div class="field">
-                <label>Raison sociale *</label>
-                <input type="text" id="moa-nom" placeholder="Ex : TRIALISSIMMO">
-              </div>
-              <div class="field">
-                <label>Représentant / Chef de projet</label>
-                <input type="text" id="moa-contact" placeholder="Ex : Quentin Pagès">
-              </div>
+              <div class="field"><label>Raison sociale *</label><input type="text" id="moa-nom" placeholder="Ex : TRIALISSIMMO"></div>
+              <div class="field"><label>Representant / Chef de projet</label><input type="text" id="moa-contact" placeholder="Ex : Quentin Pages"></div>
             </div>
             <div class="form-row">
-              <div class="field">
-                <label>Adresse</label>
-                <input type="text" id="moa-adresse" placeholder="60 rue de Fenouillet – 31140 St-Alban">
-              </div>
-              <div class="field">
-                <label>Téléphone</label>
-                <input type="tel" id="moa-tel" placeholder="06 15 95 06 33">
-              </div>
-              <div class="field">
-                <label>Email</label>
-                <input type="email" id="moa-mail" placeholder="quentin.pages@chausson.fr">
-              </div>
+              <div class="field"><label>Adresse</label><input type="text" id="moa-adresse" placeholder="60 rue de Fenouillet - 31140 St-Alban"></div>
+              <div class="field"><label>Telephone</label><input type="tel" id="moa-tel" placeholder="06 15 95 06 33"></div>
+              <div class="field"><label>Email</label><input type="email" id="moa-mail" placeholder="contact@example.fr"></div>
             </div>
           </div>
         </div>
 
         <div class="form-card">
-          <div class="form-card-header">📐 Maître d'Œuvre (MOE)</div>
+          <div class="form-card-header">&#128208; Maitre d'Oeuvre (MOE)</div>
           <div class="form-card-body">
             <div class="form-row">
-              <div class="field">
-                <label>Raison sociale</label>
-                <input type="text" id="moe-nom" placeholder="Ex : Cabinet Architecture X">
-              </div>
-              <div class="field">
-                <label>Représentant</label>
-                <input type="text" id="moe-contact" placeholder="Nom Prénom">
-              </div>
+              <div class="field"><label>Raison sociale</label><input type="text" id="moe-nom" placeholder="Ex : Cabinet Architecture X"></div>
+              <div class="field"><label>Representant</label><input type="text" id="moe-contact" placeholder="Nom Prenom"></div>
             </div>
             <div class="form-row">
-              <div class="field">
-                <label>Adresse</label>
-                <input type="text" id="moe-adresse" placeholder="Adresse complète">
-              </div>
-              <div class="field">
-                <label>Téléphone</label>
-                <input type="tel" id="moe-tel" placeholder="06 xx xx xx xx">
-              </div>
-              <div class="field">
-                <label>Email</label>
-                <input type="email" id="moe-mail" placeholder="contact@moe.fr">
-              </div>
+              <div class="field"><label>Adresse</label><input type="text" id="moe-adresse" placeholder="Adresse complete"></div>
+              <div class="field"><label>Telephone</label><input type="tel" id="moe-tel" placeholder="06 xx xx xx xx"></div>
+              <div class="field"><label>Email</label><input type="email" id="moe-mail" placeholder="contact@moe.fr"></div>
             </div>
           </div>
         </div>
 
         <div class="form-card">
-          <div class="form-card-header">🔵 CSPS Conception (si différent)</div>
+          <div class="form-card-header">&#128309; CSPS Conception (si different)</div>
           <div class="form-card-body">
             <div class="form-row">
-              <div class="field">
-                <label>Raison sociale / Nom</label>
-                <input type="text" id="cspsc-nom" placeholder="Laisser vide si Alain SUZANNE assure la conception">
-              </div>
-              <div class="field">
-                <label>Téléphone</label>
-                <input type="tel" id="cspsc-tel" placeholder="">
-              </div>
-              <div class="field">
-                <label>Email</label>
-                <input type="email" id="cspsc-mail" placeholder="">
-              </div>
+              <div class="field"><label>Raison sociale / Nom</label><input type="text" id="cspsc-nom" placeholder="Laisser vide si Alain SUZANNE assure la conception"></div>
+              <div class="field"><label>Telephone</label><input type="tel" id="cspsc-tel" placeholder=""></div>
+              <div class="field"><label>Email</label><input type="email" id="cspsc-mail" placeholder=""></div>
             </div>
           </div>
         </div>
 
         <div class="form-card">
-          <div class="form-card-header">🏗️ Entreprises intervenantes</div>
+          <div class="form-card-header">&#127959; Entreprises intervenantes</div>
           <div class="form-card-body">
             <div class="entreprise-list" id="entreprise-list"></div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <button class="btn btn-outline btn-sm" onclick="addEntreprise('principale')">＋ Entreprise principale</button>
-              <button class="btn btn-outline btn-sm" onclick="addEntreprise('sous-traitant')">＋ Sous-traitant</button>
-              <button class="btn btn-outline btn-sm" onclick="addEntreprise('prestataire')">＋ Prestataire de service</button>
+              <button class="btn btn-outline btn-sm" onclick="addEntreprise('principale')">+ Entreprise principale</button>
+              <button class="btn btn-outline btn-sm" onclick="addEntreprise('sous-traitant')">+ Sous-traitant</button>
+              <button class="btn btn-outline btn-sm" onclick="addEntreprise('prestataire')">+ Prestataire de service</button>
             </div>
           </div>
         </div>
-
       </div>
 
-      <!-- TAB ORGANISMES -->
       <div class="tab-content" id="tab-organismes">
         <div class="form-card">
-          <div class="form-card-header">🏛️ Organismes de prévention (selon région du chantier)</div>
+          <div class="form-card-header">&#127963; Organismes de prevention (selon region du chantier)</div>
           <div class="form-card-body">
-            <div class="organismes-note">
-              Ces organismes seront utilisés dans tous les documents : Déclaration Préalable, Fiche Diffusion PGC, RJC, DGI, etc.
+            <div class="organismes-note">Ces organismes seront utilises dans tous les documents : Declaration Prealable, Fiche Diffusion PGC, RJC, DGI, etc.</div>
+            <div class="form-row">
+              <div class="field"><label>Inspection du Travail (DREETS / DDETS)</label><input type="text" id="org-dreets-nom" placeholder="Ex : DDETSPP 29 - Direction Departementale Finistere"></div>
+              <div class="field"><label>Adresse DREETS</label><input type="text" id="org-dreets-adresse" placeholder="Ex : 2 rue de Kerivin, 29000 Quimper"></div>
             </div>
             <div class="form-row">
-              <div class="field">
-                <label>Inspection du Travail (DREETS / DDETS)</label>
-                <input type="text" id="org-dreets-nom" placeholder="Ex : DDETSPP 29 — Direction Départementale Finistère">
-              </div>
-              <div class="field">
-                <label>Adresse DREETS</label>
-                <input type="text" id="org-dreets-adresse" placeholder="Ex : 2 rue de Kérivin, 29000 Quimper">
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="field">
-                <label>CARSAT / CRAMIF / CGSS (selon région)</label>
+              <div class="field"><label>CARSAT / CRAMIF / CGSS (selon region)</label>
                 <select id="org-carsat-type">
-                  <option value="CARSAT">CARSAT (métropole hors IDF)</option>
-                  <option value="CRAMIF">CRAMIF (Île-de-France)</option>
+                  <option value="CARSAT">CARSAT (metropole hors IDF)</option>
+                  <option value="CRAMIF">CRAMIF (Ile-de-France)</option>
                   <option value="CGSS">CGSS (DOM-TOM)</option>
                 </select>
               </div>
-              <div class="field">
-                <label>Nom de l'organisme</label>
-                <input type="text" id="org-carsat-nom" placeholder="Ex : CARSAT Bretagne">
-              </div>
-              <div class="field">
-                <label>Adresse</label>
-                <input type="text" id="org-carsat-adresse" placeholder="Ex : 236 rue de Châteaugiron, 35030 Rennes">
-              </div>
+              <div class="field"><label>Nom de l'organisme</label><input type="text" id="org-carsat-nom" placeholder="Ex : CARSAT Bretagne"></div>
+              <div class="field"><label>Adresse</label><input type="text" id="org-carsat-adresse" placeholder="Ex : 236 rue de Chateaugiron, 35030 Rennes"></div>
             </div>
             <div class="form-row">
-              <div class="field">
-                <label>OPPBTP (agence régionale)</label>
-                <input type="text" id="org-oppbtp-nom" placeholder="Ex : OPPBTP Bretagne / Pays de la Loire">
-              </div>
-              <div class="field">
-                <label>Adresse OPPBTP</label>
-                <input type="text" id="org-oppbtp-adresse" placeholder="Ex : 4 rue Ampère, 35000 Rennes">
-              </div>
+              <div class="field"><label>OPPBTP (agence regionale)</label><input type="text" id="org-oppbtp-nom" placeholder="Ex : OPPBTP Bretagne / Pays de la Loire"></div>
+              <div class="field"><label>Adresse OPPBTP</label><input type="text" id="org-oppbtp-adresse" placeholder="Ex : 4 rue Ampere, 35000 Rennes"></div>
             </div>
             <div class="form-row">
-              <div class="field">
-                <label>Médecin du Travail (service de santé au travail)</label>
-                <input type="text" id="org-medecin" placeholder="Ex : BTP Santé Bretagne — 35000 Rennes">
-              </div>
+              <div class="field"><label>Medecin du Travail (service de sante au travail)</label><input type="text" id="org-medecin" placeholder="Ex : BTP Sante Bretagne - 35000 Rennes"></div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- TAB DOCUMENTS -->
       <div class="tab-content" id="tab-documents">
-        <div class="section-title">Documents disponibles selon catégorie</div>
+        <div class="section-title">Documents disponibles selon categorie</div>
         <div id="cat-reminder" style="margin-bottom:16px;padding:10px 14px;border-radius:6px;font-size:13px;"></div>
         <div class="docs-grid" id="docs-grid"></div>
         <div class="gen-progress" id="gen-progress">
-          <h4>⚡ Génération en cours...</h4>
+          <h4>&#9889; Generation en cours...</h4>
           <div id="progress-list"></div>
         </div>
       </div>
-
     </div>
 
-    <!-- PAGE IMPORT PGC -->
     <div class="page" id="page-import">
       <div style="max-width:680px;">
-        <h2 style="color:var(--blue-dark);margin-bottom:6px;">📥 Importer un PGC</h2>
-        <p style="color:var(--text-light);margin-bottom:20px;">Uploadez votre PGC (PDF ou Word) — l'application extraira automatiquement les informations pour pré-remplir votre dossier.</p>
+        <h2 style="color:var(--blue-dark);margin-bottom:6px;">&#128229; Importer un PGC</h2>
+        <p style="color:var(--text-light);margin-bottom:20px;">Uploadez votre PGC (PDF ou Word) — l'application extraira automatiquement les informations pour pre-remplir votre dossier.</p>
 
         <div class="import-zone" onclick="document.getElementById('pgc-file-input').click()"
              ondragover="handleDragOver(event)" ondrop="handleDrop(event)" id="import-zone">
-          <div style="font-size:40px;margin-bottom:12px;">📄</div>
+          <div style="font-size:40px;margin-bottom:12px;">&#128196;</div>
           <p>Cliquez ou glissez votre PGC ici</p>
           <span>PDF ou Word (.docx) — max 20 Mo</span>
         </div>
         <input type="file" id="pgc-file-input" accept=".pdf,.docx" onchange="handleFileSelect(event)">
 
         <div class="extract-result" id="extract-result">
-          <div style="font-weight:700;color:var(--success);margin-bottom:10px;">✅ Extraction réussie</div>
+          <div style="font-weight:700;color:var(--success);margin-bottom:10px;">&#10003; Extraction reussie</div>
           <div id="extract-preview"></div>
           <div style="margin-top:12px;display:flex;gap:10px;">
-            <button class="btn btn-primary btn-sm" onclick="applyExtracted()">✓ Créer l'affaire avec ces données</button>
-            <button class="btn btn-outline btn-sm" onclick="document.getElementById('extract-result').classList.remove('show')">✗ Annuler</button>
+            <button class="btn btn-primary btn-sm" onclick="applyExtracted()">Creer l'affaire avec ces donnees</button>
+            <button class="btn btn-outline btn-sm" onclick="document.getElementById('extract-result').classList.remove('show')">Annuler</button>
           </div>
         </div>
 
         <div id="import-loading" style="display:none;text-align:center;padding:24px;color:var(--blue-dark);">
           <div class="spinner" style="border-color:rgba(31,78,121,0.3);border-top-color:var(--blue-dark);width:32px;height:32px;border-width:3px;margin:0 auto 12px;"></div>
-          <p style="font-weight:600;">Extraction des données en cours...</p>
+          <p style="font-weight:600;">Extraction des donnees en cours...</p>
           <p style="font-size:12px;color:var(--text-light);margin-top:4px;">Analyse du PGC par IA</p>
         </div>
       </div>
@@ -916,11 +758,10 @@
   </div>
 </div>
 
-<!-- MODAL CONFIRMATION -->
 <div class="modal-overlay" id="modal-overlay">
   <div class="modal">
     <h3 id="modal-title">Confirmer</h3>
-    <p id="modal-body">Êtes-vous sûr ?</p>
+    <p id="modal-body">Etes-vous sur ?</p>
     <div class="modal-actions">
       <button class="btn btn-outline btn-sm" onclick="closeModal()">Annuler</button>
       <button class="btn btn-danger btn-sm" id="modal-confirm-btn">Confirmer</button>
@@ -931,67 +772,58 @@
 <div id="toast"></div>
 
 <script>
-// ── STATE ──────────────────────────────────────────────────────────
-let affaires = JSON.parse(localStorage.getItem('csps17_affaires') || '[]');
-// Sync depuis serveur au démarrage
-fetch('/api/affaires').then(r=>r.json()).then(data=>{
-  if(data && data.length) { affaires=data; localStorage.setItem('csps17_affaires',JSON.stringify(affaires)); renderAffaireList(); }
-}).catch(()=>{});
-let currentAffaireId = null;
-let currentCat = null;
-let entrepriseCount = 0;
-let extractedData = null;
+var affaires = JSON.parse(localStorage.getItem('csps17_affaires') || '[]');
+fetch('/api/affaires').then(function(r){return r.json();}).then(function(data){
+  if(data && data.length){ affaires=data; localStorage.setItem('csps17_affaires',JSON.stringify(affaires)); renderAffaireList(); }
+}).catch(function(){});
+var currentAffaireId = null;
+var currentCat = null;
+var entrepriseCount = 0;
+var extractedData = null;
 
-// ── DOCS DEFINITION ───────────────────────────────────────────────
-const DOCS = [
-  { ref: 'DP',        title: 'Suivi Déclaration Préalable', icon: '📋', cats: [1,2], file: 'CSPS17_Suivi_Declaration_Prealable_v3.docx' },
-  { ref: 'RJC',       title: 'Registre Journal de Coordination', icon: '📔', cats: [1,2,3], file: 'CSPS17_Registre_Journal_Bordereau_v3_1.docx' },
-  { ref: 'DIF',       title: 'Fiche Diffusion PGC', icon: '📢', cats: [1,2], file: 'CSPS17_Fiche_Diffusion_PGC_v3.docx' },
-  { ref: 'FIC',       title: 'Fiche IC Vierge', icon: '🔍', cats: [1,2,3], file: 'Fiche_IC_Vierge_CSPS17_v15.docx' },
-  { ref: 'IC',        title: 'Courrier Transmission IC', icon: '✉️', cats: [1,2,3], file: 'CSPS17_Courrier_Transmission_IC_v2_1.docx' },
-  { ref: 'PPP',       title: 'Grille Analyse PPSPS', icon: '📊', cats: [1,2], file: 'CSPS17_Grille_Analyse_PPSPS_v3.docx' },
-  { ref: 'VIS',       title: 'CR Visite Chantier', icon: '👁️', cats: [1,2,3], file: 'CR_Visite_Chantier_CSPS17_v2.docx' },
-  { ref: 'OBS',       title: 'Observation / Notification RJC', icon: '⚠️', cats: [1,2,3], file: 'CSPS17_Observation_Notification_RJC_v2.docx' },
-  { ref: 'DGI',       title: 'Mise en Demeure DGI', icon: '🚨', cats: [1,2,3], file: 'CSPS17_Mise_en_Demeure_DGI_v3_1.docx' },
-  { ref: 'RCO',       title: 'CR Réunion Coordination', icon: '🤝', cats: [1,2], file: 'CSPS17_CR_Reunion_Coordination_v2.docx' },
-  { ref: 'DIUO',      title: 'DIUO Trame', icon: '🏛️', cats: [1,2,3], file: 'CSPS17_DIUO_Trame_v3.docx' },
-  { ref: 'PV-DIUO',   title: 'PV Transmission DIUO', icon: '📑', cats: [1,2,3], file: 'CSPS17_PV_Transmission_DIUO_v3.docx' },
-  { ref: 'PV-PC',     title: 'PV Passation Consignes', icon: '🔄', cats: [1,2], file: 'CSPS17_PV_Passation_Consignes_v3.docx' },
-  { ref: 'CISSCT-RI', title: 'CISSCT Règlement Intérieur', icon: '📜', cats: [1], file: 'CSPS17_CISSCT_Reglement_Interieur_v3.docx' },
-  { ref: 'CISSCT-CONV', title: 'CISSCT Convocation', icon: '📩', cats: [1], file: 'CSPS17_CISSCT_Convocation_v2.docx' },
-  { ref: 'CISSCT-CR', title: 'CISSCT CR Réunion', icon: '🏛️', cats: [1], file: 'CSPS17_CISSCT_CR_Reunion_v2.docx' },
-  { ref: 'RFM',       title: 'Rapport Fin de Mission', icon: '🎯', cats: [1,2,3], file: 'CSPS17_Rapport_Fin_Mission_v2.docx' },
+var DOCS = [
+  { ref: 'DP',        title: 'Suivi Declaration Prealable', icon: '&#128203;', cats: [1,2] },
+  { ref: 'RJC',       title: 'Registre Journal de Coordination', icon: '&#128212;', cats: [1,2,3] },
+  { ref: 'DIF',       title: 'Fiche Diffusion PGC', icon: '&#128226;', cats: [1,2] },
+  { ref: 'FIC',       title: 'Fiche IC Vierge', icon: '&#128269;', cats: [1,2,3] },
+  { ref: 'IC',        title: 'Courrier Transmission IC', icon: '&#9993;', cats: [1,2,3] },
+  { ref: 'PPP',       title: 'Grille Analyse PPSPS', icon: '&#128202;', cats: [1,2] },
+  { ref: 'VIS',       title: 'CR Visite Chantier', icon: '&#128065;', cats: [1,2,3] },
+  { ref: 'OBS',       title: 'Observation / Notification RJC', icon: '&#9888;', cats: [1,2,3] },
+  { ref: 'DGI',       title: 'Mise en Demeure DGI', icon: '&#128680;', cats: [1,2,3] },
+  { ref: 'RCO',       title: 'CR Reunion Coordination', icon: '&#129309;', cats: [1,2] },
+  { ref: 'DIUO',      title: 'DIUO Trame', icon: '&#127963;', cats: [1,2,3] },
+  { ref: 'PV-DIUO',   title: 'PV Transmission DIUO', icon: '&#128209;', cats: [1,2,3] },
+  { ref: 'PV-PC',     title: 'PV Passation Consignes', icon: '&#128260;', cats: [1,2] },
+  { ref: 'CISSCT-RI', title: 'CISSCT Reglement Interieur', icon: '&#128220;', cats: [1] },
+  { ref: 'CISSCT-CONV', title: 'CISSCT Convocation', icon: '&#128233;', cats: [1] },
+  { ref: 'CISSCT-CR', title: 'CISSCT CR Reunion', icon: '&#127963;', cats: [1] },
+  { ref: 'RFM',       title: 'Rapport Fin de Mission', icon: '&#127919;', cats: [1,2,3] },
 ];
 
-// ── NAVIGATION ────────────────────────────────────────────────────
 function showPage(id) {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
   document.getElementById('page-' + id).classList.add('active');
-  document.querySelectorAll('.affaire-item').forEach(i => i.classList.remove('active'));
+  document.querySelectorAll('.affaire-item').forEach(function(i){ i.classList.remove('active'); });
   closeSidebar();
 }
 
 function switchTab(tab) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('active'); });
+  document.querySelectorAll('.tab-content').forEach(function(t){ t.classList.remove('active'); });
   event.target.classList.add('active');
   document.getElementById('tab-' + tab).classList.add('active');
   if (tab === 'documents') renderDocsGrid();
 }
 
-function toggleSidebar() {
-  document.getElementById('sidebar').classList.toggle('open');
-}
-function closeSidebar() {
-  document.getElementById('sidebar').classList.remove('open');
-}
+function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
+function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); }
 
-// ── AFFAIRES ──────────────────────────────────────────────────────
 function genNumAffaire() {
-  const year = new Date().getFullYear();
-  const existing = affaires.filter(a => a.num && a.num.startsWith('CSPS-' + year));
-  const n = existing.length + 1;
-  return `CSPS-${year}-${String(n).padStart(4,'0')}`;
+  var year = new Date().getFullYear();
+  var existing = affaires.filter(function(a){ return a.num && a.num.startsWith('CSPS-' + year); });
+  var n = existing.length + 1;
+  return 'CSPS-' + year + '-' + String(n).padStart(4,'0');
 }
 
 function showNewAffaire() {
@@ -1006,86 +838,84 @@ function showNewAffaire() {
    'cspsc-nom','cspsc-tel','cspsc-mail',
    'org-dreets-nom','org-dreets-adresse','org-carsat-nom','org-carsat-adresse',
    'org-oppbtp-nom','org-oppbtp-adresse','org-medecin'
-  ].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
-  document.querySelectorAll('[id^="cat-btn-"]').forEach(b => b.className = 'cat-btn');
-  document.getElementById('cat-warning').style.display = 'none';
-  document.getElementById('entreprise-list').innerHTML = '';
-  ['rp-amiante','rp-plomb','rp-demolition','rp-terrassement','rp-reseaux','rp-hauteur'].forEach(id => {
-    document.getElementById(id).checked = false;
+  ].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  document.querySelectorAll('[id^="cat-btn-"]').forEach(function(b){ b.className='cat-btn'; });
+  document.getElementById('cat-warning').style.display='none';
+  document.getElementById('entreprise-list').innerHTML='';
+  ['rp-amiante','rp-plomb','rp-demolition','rp-terrassement','rp-reseaux','rp-hauteur'].forEach(function(id){
+    document.getElementById(id).checked=false;
   });
-  document.getElementById('form-title').textContent = 'Nouvelle affaire';
-  document.getElementById('form-subtitle').textContent = 'Renseignez les informations pour pré-remplir tous vos documents';
+  document.getElementById('form-title').textContent='Nouvelle affaire';
+  document.getElementById('form-subtitle').textContent='Renseignez les informations pour pre-remplir tous vos documents';
   document.getElementById('gen-progress').classList.remove('show');
   switchTabDirect('chantier');
   showPage('form');
 }
 
 function switchTabDirect(tab) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-  const tabs = document.querySelectorAll('.tab');
-  const tabMap = ['chantier','intervenants','organismes','documents'];
-  const idx = tabMap.indexOf(tab);
+  document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('active'); });
+  document.querySelectorAll('.tab-content').forEach(function(t){ t.classList.remove('active'); });
+  var tabs = document.querySelectorAll('.tab');
+  var tabMap = ['chantier','intervenants','organismes','documents'];
+  var idx = tabMap.indexOf(tab);
   if (idx >= 0) tabs[idx].classList.add('active');
   document.getElementById('tab-' + tab).classList.add('active');
 }
 
 function selectCat(n) {
   currentCat = n;
-  document.querySelectorAll('[id^="cat-btn-"]').forEach(b => b.className = 'cat-btn');
+  document.querySelectorAll('[id^="cat-btn-"]').forEach(function(b){ b.className='cat-btn'; });
   document.getElementById('cat-btn-' + n).classList.add('selected-' + n);
-  const warn = document.getElementById('cat-warning');
+  var warn = document.getElementById('cat-warning');
   if (n === 1) {
-    warn.style.display = 'block';
-    warn.innerHTML = '⚠️ Catégorie 1 : CISSCT obligatoire — constitué au plus tard 21 jours avant le début des travaux (R4532-77)';
+    warn.style.display='block';
+    warn.innerHTML='CISSCT obligatoire - constitue au plus tard 21 jours avant le debut des travaux (R4532-77)';
   } else if (n === 2) {
-    warn.style.display = 'block';
-    warn.innerHTML = '📋 Catégorie 2 : Déclaration Préalable + PGC complet obligatoires';
+    warn.style.display='block';
+    warn.innerHTML='Categorie 2 : Declaration Prealable + PGC complet obligatoires';
   } else {
-    warn.style.display = 'block';
-    warn.innerHTML = '✅ Catégorie 3 : PGC simplifié si travaux à risques particuliers (arrêté 25/02/2003)';
+    warn.style.display='block';
+    warn.innerHTML='Categorie 3 : PGC simplifie si travaux a risques particuliers (arrete 25/02/2003)';
   }
 }
 
-// ── ENTREPRISES ───────────────────────────────────────────────────
 function addEntreprise(type) {
-  const id = 'ent-' + Date.now();
+  var id = 'ent-' + Date.now();
   entrepriseCount++;
-  const typeBadgeClass = type === 'principale' ? 'type-principale' : type === 'sous-traitant' ? 'type-sous-traitant' : 'type-prestataire';
-  const typeLabel = type === 'principale' ? 'Principale' : type === 'sous-traitant' ? 'Sous-traitant' : 'Prestataire';
-  const div = document.createElement('div');
+  var typeBadgeClass = type === 'principale' ? 'type-principale' : type === 'sous-traitant' ? 'type-sous-traitant' : 'type-prestataire';
+  var typeLabel = type === 'principale' ? 'Principale' : type === 'sous-traitant' ? 'Sous-traitant' : 'Prestataire';
+  var div = document.createElement('div');
   div.className = 'entreprise-card';
   div.id = id;
-  div.innerHTML = `
-    <div class="entreprise-card-head" onclick="toggleEntCard('${id}')">
-      <span>${typeLabel} ${entrepriseCount}</span>
-      <span class="ent-type-badge ${typeBadgeClass}">${typeLabel}</span>
-      <button class="btn-remove-ent" onclick="removeEntreprise(event,'${id}')">✕</button>
-    </div>
-    <div class="entreprise-card-body" id="body-${id}">
-      <input type="hidden" class="ent-type" value="${type}">
-      <div class="form-row">
-        <div class="field"><label>Raison sociale *</label><input type="text" class="ent-nom" placeholder="Ex : SAS Maçonnerie Bretagne"></div>
-        <div class="field"><label>SIRET</label><input type="text" class="ent-siret" placeholder="000 000 000 00000"></div>
-      </div>
-      <div class="form-row">
-        <div class="field"><label>Lot / Travaux</label><input type="text" class="ent-lot" placeholder="Ex : Gros œuvre"></div>
-        <div class="field"><label>Représentant / Chef chantier</label><input type="text" class="ent-contact" placeholder="Nom Prénom"></div>
-      </div>
-      <div class="form-row">
-        <div class="field"><label>Téléphone</label><input type="tel" class="ent-tel" placeholder="06 xx xx xx xx"></div>
-        <div class="field"><label>Email</label><input type="email" class="ent-mail" placeholder="contact@entreprise.fr"></div>
-      </div>
-      <div class="form-row">
-        <div class="field"><label>Représentant salarié (CSE / désigné)</label><input type="text" class="ent-rs" placeholder="Nom du représentant salarié"></div>
-        <div class="field"><label>Effectif prévu sur chantier</label><input type="number" class="ent-effectif" placeholder="Ex : 4" min="1"></div>
-      </div>
-    </div>`;
+  div.innerHTML = '<div class="entreprise-card-head" onclick="toggleEntCard(\'' + id + '\')">'
+    + '<span>' + typeLabel + ' ' + entrepriseCount + '</span>'
+    + '<span class="ent-type-badge ' + typeBadgeClass + '">' + typeLabel + '</span>'
+    + '<button class="btn-remove-ent" onclick="removeEntreprise(event,\'' + id + '\')">x</button>'
+    + '</div>'
+    + '<div class="entreprise-card-body" id="body-' + id + '">'
+    + '<input type="hidden" class="ent-type" value="' + type + '">'
+    + '<div class="form-row">'
+    + '<div class="field"><label>Raison sociale *</label><input type="text" class="ent-nom" placeholder="Ex : SAS Maconnerie Bretagne"></div>'
+    + '<div class="field"><label>SIRET</label><input type="text" class="ent-siret" placeholder="000 000 000 00000"></div>'
+    + '</div>'
+    + '<div class="form-row">'
+    + '<div class="field"><label>Lot / Travaux</label><input type="text" class="ent-lot" placeholder="Ex : Gros oeuvre"></div>'
+    + '<div class="field"><label>Representant / Chef chantier</label><input type="text" class="ent-contact" placeholder="Nom Prenom"></div>'
+    + '</div>'
+    + '<div class="form-row">'
+    + '<div class="field"><label>Telephone</label><input type="tel" class="ent-tel" placeholder="06 xx xx xx xx"></div>'
+    + '<div class="field"><label>Email</label><input type="email" class="ent-mail" placeholder="contact@entreprise.fr"></div>'
+    + '</div>'
+    + '<div class="form-row">'
+    + '<div class="field"><label>Representant salarie (CSE)</label><input type="text" class="ent-rs" placeholder="Nom du representant salarie"></div>'
+    + '<div class="field"><label>Effectif prevu sur chantier</label><input type="number" class="ent-effectif" placeholder="Ex : 4" min="1"></div>'
+    + '</div>'
+    + '</div>';
   document.getElementById('entreprise-list').appendChild(div);
 }
 
 function toggleEntCard(id) {
-  const body = document.getElementById('body-' + id);
+  var body = document.getElementById('body-' + id);
   body.style.display = body.style.display === 'none' ? 'block' : '';
 }
 
@@ -1094,10 +924,9 @@ function removeEntreprise(e, id) {
   document.getElementById(id).remove();
 }
 
-// ── SAUVEGARDE ────────────────────────────────────────────────────
 function collectFormData() {
-  const entreprises = [];
-  document.querySelectorAll('#entreprise-list .entreprise-card').forEach(card => {
+  var entreprises = [];
+  document.querySelectorAll('#entreprise-list .entreprise-card').forEach(function(card){
     entreprises.push({
       type: card.querySelector('.ent-type').value,
       nom: card.querySelector('.ent-nom').value,
@@ -1134,207 +963,163 @@ function collectFormData() {
       reseaux: document.getElementById('rp-reseaux').checked,
       hauteur: document.getElementById('rp-hauteur').checked,
     },
-    moa: {
-      nom: document.getElementById('moa-nom').value,
-      contact: document.getElementById('moa-contact').value,
-      adresse: document.getElementById('moa-adresse').value,
-      tel: document.getElementById('moa-tel').value,
-      mail: document.getElementById('moa-mail').value,
-    },
-    moe: {
-      nom: document.getElementById('moe-nom').value,
-      contact: document.getElementById('moe-contact').value,
-      adresse: document.getElementById('moe-adresse').value,
-      tel: document.getElementById('moe-tel').value,
-      mail: document.getElementById('moe-mail').value,
-    },
-    cspsc: {
-      nom: document.getElementById('cspsc-nom').value,
-      tel: document.getElementById('cspsc-tel').value,
-      mail: document.getElementById('cspsc-mail').value,
-    },
+    moa: { nom: document.getElementById('moa-nom').value, contact: document.getElementById('moa-contact').value, adresse: document.getElementById('moa-adresse').value, tel: document.getElementById('moa-tel').value, mail: document.getElementById('moa-mail').value },
+    moe: { nom: document.getElementById('moe-nom').value, contact: document.getElementById('moe-contact').value, adresse: document.getElementById('moe-adresse').value, tel: document.getElementById('moe-tel').value, mail: document.getElementById('moe-mail').value },
+    cspsc: { nom: document.getElementById('cspsc-nom').value, tel: document.getElementById('cspsc-tel').value, mail: document.getElementById('cspsc-mail').value },
     organismes: {
       dreets: { nom: document.getElementById('org-dreets-nom').value, adresse: document.getElementById('org-dreets-adresse').value },
       carsat: { type: document.getElementById('org-carsat-type').value, nom: document.getElementById('org-carsat-nom').value, adresse: document.getElementById('org-carsat-adresse').value },
       oppbtp: { nom: document.getElementById('org-oppbtp-nom').value, adresse: document.getElementById('org-oppbtp-adresse').value },
       medecin: document.getElementById('org-medecin').value,
     },
-    entreprises,
+    entreprises: entreprises,
     savedAt: new Date().toISOString(),
   };
 }
 
 function saveAffaire() {
-  const data = collectFormData();
-  if (!data.chantier.nom) { showToast('⚠️ Indiquez au moins le nom du chantier', 'error'); return; }
-  if (!data.cat) { showToast('⚠️ Sélectionnez la catégorie de l\'opération', 'error'); return; }
+  var data = collectFormData();
+  if (!data.chantier.nom) { showToast('Indiquez au moins le nom du chantier', 'error'); return; }
+  if (!data.cat) { showToast('Selectionnez la categorie de l\'operation', 'error'); return; }
   if (currentAffaireId) {
-    const idx = affaires.findIndex(a => a.id === currentAffaireId);
-    if (idx >= 0) affaires[idx] = { ...affaires[idx], ...data };
+    var idx = affaires.findIndex(function(a){ return a.id === currentAffaireId; });
+    if (idx >= 0) affaires[idx] = Object.assign({}, affaires[idx], data);
   } else {
     currentAffaireId = 'aff-' + Date.now();
-    affaires.push({ id: currentAffaireId, ...data });
+    affaires.push(Object.assign({ id: currentAffaireId }, data));
   }
   localStorage.setItem('csps17_affaires', JSON.stringify(affaires));
-  // Sauvegarde serveur
-  fetch('/api/affaires', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(affaires)}).catch(()=>{});
+  fetch('/api/affaires', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(affaires)}).catch(function(){});
   renderAffaireList();
-  showToast('✅ Affaire sauvegardée', 'success');
+  showToast('Affaire sauvegardee', 'success');
 }
 
 function loadAffaire(id) {
-  const a = affaires.find(x => x.id === id);
+  var a = affaires.find(function(x){ return x.id === id; });
   if (!a) return;
   currentAffaireId = id;
   currentCat = a.cat;
   document.getElementById('num-affaire').value = a.num || '';
-  document.getElementById('form-title').textContent = a.chantier?.nom || 'Affaire';
-  document.getElementById('form-subtitle').textContent = a.num + (a.cat ? ` — Cat. ${a.cat}` : '');
-  // Chantier
-  const c = a.chantier || {};
-  ['nom','adresse','nature','debut','duree','montant','marche','dp','pc','hj'].forEach(f => {
-    const el = document.getElementById('chantier-' + f); if(el) el.value = c[f] || '';
+  document.getElementById('form-title').textContent = a.chantier && a.chantier.nom ? a.chantier.nom : 'Affaire';
+  document.getElementById('form-subtitle').textContent = a.num + (a.cat ? ' - Cat. ' + a.cat : '');
+  var c = a.chantier || {};
+  ['nom','adresse','nature','debut','duree','montant','marche','dp','pc','hj'].forEach(function(f){
+    var el=document.getElementById('chantier-'+f); if(el) el.value=c[f]||'';
   });
   document.getElementById('chantier-nb-ent').value = c.nbEnt || '';
-  // Cat
   if (a.cat) selectCat(a.cat);
-  // Risques
-  const r = a.risques || {};
-  ['amiante','plomb','demolition','terrassement','reseaux','hauteur'].forEach(f => {
-    document.getElementById('rp-' + f).checked = !!r[f];
+  var r = a.risques || {};
+  ['amiante','plomb','demolition','terrassement','reseaux','hauteur'].forEach(function(f){
+    document.getElementById('rp-'+f).checked = !!r[f];
   });
-  // MOA/MOE/CSPSC
-  ['moa','moe','cspsc'].forEach(role => {
-    const d = a[role] || {};
-    ['nom','contact','adresse','tel','mail'].forEach(f => {
-      const el = document.getElementById(role + '-' + f); if(el) el.value = d[f] || '';
+  ['moa','moe','cspsc'].forEach(function(role){
+    var d = a[role] || {};
+    ['nom','contact','adresse','tel','mail'].forEach(function(f){
+      var el=document.getElementById(role+'-'+f); if(el) el.value=d[f]||'';
     });
   });
-  // Organismes
-  const org = a.organismes || {};
-  document.getElementById('org-dreets-nom').value = org.dreets?.nom || '';
-  document.getElementById('org-dreets-adresse').value = org.dreets?.adresse || '';
-  document.getElementById('org-carsat-type').value = org.carsat?.type || 'CARSAT';
-  document.getElementById('org-carsat-nom').value = org.carsat?.nom || '';
-  document.getElementById('org-carsat-adresse').value = org.carsat?.adresse || '';
-  document.getElementById('org-oppbtp-nom').value = org.oppbtp?.nom || '';
-  document.getElementById('org-oppbtp-adresse').value = org.oppbtp?.adresse || '';
+  var org = a.organismes || {};
+  document.getElementById('org-dreets-nom').value = (org.dreets && org.dreets.nom) ? org.dreets.nom : '';
+  document.getElementById('org-dreets-adresse').value = (org.dreets && org.dreets.adresse) ? org.dreets.adresse : '';
+  document.getElementById('org-carsat-type').value = (org.carsat && org.carsat.type) ? org.carsat.type : 'CARSAT';
+  document.getElementById('org-carsat-nom').value = (org.carsat && org.carsat.nom) ? org.carsat.nom : '';
+  document.getElementById('org-carsat-adresse').value = (org.carsat && org.carsat.adresse) ? org.carsat.adresse : '';
+  document.getElementById('org-oppbtp-nom').value = (org.oppbtp && org.oppbtp.nom) ? org.oppbtp.nom : '';
+  document.getElementById('org-oppbtp-adresse').value = (org.oppbtp && org.oppbtp.adresse) ? org.oppbtp.adresse : '';
   document.getElementById('org-medecin').value = org.medecin || '';
-  // Entreprises
   document.getElementById('entreprise-list').innerHTML = '';
   entrepriseCount = 0;
-  (a.entreprises || []).forEach(ent => {
+  (a.entreprises || []).forEach(function(ent){
     addEntreprise(ent.type);
-    const cards = document.querySelectorAll('#entreprise-list .entreprise-card');
-    const last = cards[cards.length - 1];
-    ['nom','siret','lot','contact','tel','mail','rs','effectif'].forEach(f => {
-      const el = last.querySelector('.ent-' + f); if(el) el.value = ent[f] || '';
+    var cards = document.querySelectorAll('#entreprise-list .entreprise-card');
+    var last = cards[cards.length-1];
+    ['nom','siret','lot','contact','tel','mail','rs','effectif'].forEach(function(f){
+      var el=last.querySelector('.ent-'+f); if(el) el.value=ent[f]||'';
     });
   });
   document.getElementById('gen-progress').classList.remove('show');
   switchTabDirect('chantier');
   showPage('form');
-  // Active dans sidebar
-  document.querySelectorAll('.affaire-item').forEach(i => {
+  document.querySelectorAll('.affaire-item').forEach(function(i){
     i.classList.toggle('active', i.dataset.id === id);
   });
 }
 
-// ── RENDER ────────────────────────────────────────────────────────
 function renderAffaireList() {
-  const list = document.getElementById('affaire-list');
+  var list = document.getElementById('affaire-list');
   if (!affaires.length) {
     list.innerHTML = '<div style="padding:16px;font-size:12px;color:var(--text-light);text-align:center;">Aucune affaire</div>';
     return;
   }
-  list.innerHTML = affaires.slice().reverse().map(a => `
-    <div class="affaire-item" data-id="${a.id}" onclick="loadAffaire('${a.id}')">
-      <div>
-        <div class="affaire-num">${a.num || '—'}</div>
-        <div class="affaire-name">${a.chantier?.nom || 'Sans nom'}</div>
-      </div>
-      ${a.cat ? `<span class="cat-badge cat-${a.cat}">Cat.${a.cat}</span>` : ''}
-    </div>`).join('');
-}
-
-function renderDocsGrid() {
-  const grid = document.getElementById('docs-grid');
-  const reminder = document.getElementById('cat-reminder');
-  if (!currentCat) {
-    reminder.style.cssText = 'background:var(--orange);color:var(--orange-dark);';
-    reminder.textContent = '⚠️ Sélectionnez la catégorie de l\'opération dans l\'onglet Chantier pour voir les documents disponibles.';
-    grid.innerHTML = '';
-    return;
-  }
-  const catColors = { 1: '#fef2f2', 2: '#fffbeb', 3: '#f0fdf4' };
-  const catText = { 1: '#991b1b', 2: '#92400e', 3: '#065f46' };
-  reminder.style.cssText = `background:${catColors[currentCat]};color:${catText[currentCat]};`;
-  const docsForCat = DOCS.filter(d => d.cats.includes(currentCat));
-  const total = docsForCat.length;
-  reminder.textContent = `Catégorie ${currentCat} — ${total} documents disponibles sur 17`;
-  grid.innerHTML = DOCS.map(doc => {
-    const active = doc.cats.includes(currentCat);
-    return `<div class="doc-card ${active ? '' : 'disabled'}">
-      <div class="doc-card-top">
-        <div class="doc-icon">${doc.icon}</div>
-        <div class="doc-info">
-          <div class="doc-title">${doc.title}</div>
-          <div class="doc-ref">CSPS17/${doc.ref}</div>
-        </div>
-      </div>
-      <div class="doc-actions">
-        <button class="btn btn-primary btn-sm" ${active ? `onclick="generateDoc('${doc.ref}')"` : 'disabled'}>
-          ⚡ Générer
-        </button>
-        <button class="btn btn-outline btn-sm" ${active ? `onclick="previewDoc('${doc.ref}')"` : 'disabled'}>
-          👁️ Aperçu
-        </button>
-      </div>
-    </div>`;
+  list.innerHTML = affaires.slice().reverse().map(function(a){
+    return '<div class="affaire-item" data-id="' + a.id + '" onclick="loadAffaire(\'' + a.id + '\')">'
+      + '<div><div class="affaire-num">' + (a.num || '-') + '</div>'
+      + '<div class="affaire-name">' + ((a.chantier && a.chantier.nom) ? a.chantier.nom : 'Sans nom') + '</div></div>'
+      + (a.cat ? '<span class="cat-badge cat-' + a.cat + '">Cat.' + a.cat + '</span>' : '')
+      + '</div>';
   }).join('');
 }
 
-// ── GÉNÉRATION ────────────────────────────────────────────────────
+function renderDocsGrid() {
+  var grid = document.getElementById('docs-grid');
+  var reminder = document.getElementById('cat-reminder');
+  if (!currentCat) {
+    reminder.style.cssText = 'background:var(--orange);color:var(--orange-dark);';
+    reminder.textContent = 'Selectionnez la categorie de l\'operation dans l\'onglet Chantier pour voir les documents disponibles.';
+    grid.innerHTML = '';
+    return;
+  }
+  var catColors = { 1: '#fef2f2', 2: '#fffbeb', 3: '#f0fdf4' };
+  var catText = { 1: '#991b1b', 2: '#92400e', 3: '#065f46' };
+  reminder.style.cssText = 'background:' + catColors[currentCat] + ';color:' + catText[currentCat] + ';';
+  var docsForCat = DOCS.filter(function(d){ return d.cats.includes(currentCat); });
+  reminder.textContent = 'Categorie ' + currentCat + ' - ' + docsForCat.length + ' documents disponibles sur 17';
+  grid.innerHTML = DOCS.map(function(doc){
+    var active = doc.cats.includes(currentCat);
+    return '<div class="doc-card ' + (active ? '' : 'disabled') + '">'
+      + '<div class="doc-card-top"><div class="doc-icon">' + doc.icon + '</div>'
+      + '<div class="doc-info"><div class="doc-title">' + doc.title + '</div>'
+      + '<div class="doc-ref">CSPS17/' + doc.ref + '</div></div></div>'
+      + '<div class="doc-actions">'
+      + '<button class="btn btn-primary btn-sm" ' + (active ? 'onclick="generateDoc(\'' + doc.ref + '\')"' : 'disabled') + '>Generer</button>'
+      + '<button class="btn btn-outline btn-sm" ' + (active ? 'onclick="previewDoc(\'' + doc.ref + '\')"' : 'disabled') + '>Apercu</button>'
+      + '</div></div>';
+  }).join('');
+}
+
 async function generateDoc(ref) {
-  const data = collectFormData();
-  if (!data.chantier.nom) { showToast('⚠️ Renseignez le chantier d\'abord', 'error'); return; }
-  showToast(`⚡ Génération ${ref} en cours...`);
-  // Ici : appel API pour générer le docx avec les données
-  // Pour la démo, on simule
+  var data = collectFormData();
+  if (!data.chantier.nom) { showToast('Renseignez le chantier d\'abord', 'error'); return; }
+  showToast('Generation ' + ref + ' en cours...');
   await delay(1200);
-  showToast(`✅ ${ref} généré`, 'success');
+  showToast(ref + ' genere', 'success');
 }
 
 async function generateDocs() {
-  const data = collectFormData();
-  if (!data.chantier.nom) { showToast('⚠️ Renseignez le nom du chantier', 'error'); return; }
-  if (!data.cat) { showToast('⚠️ Sélectionnez la catégorie', 'error'); return; }
+  var data = collectFormData();
+  if (!data.chantier.nom) { showToast('Renseignez le nom du chantier', 'error'); return; }
+  if (!data.cat) { showToast('Selectionnez la categorie', 'error'); return; }
   saveAffaire();
   switchTabDirect('documents');
   renderDocsGrid();
-  const prog = document.getElementById('gen-progress');
-  const list = document.getElementById('progress-list');
+  var prog = document.getElementById('gen-progress');
+  var list = document.getElementById('progress-list');
   prog.classList.add('show');
-  const docs = DOCS.filter(d => d.cats.includes(data.cat));
-  list.innerHTML = docs.map(d => `
-    <div class="progress-item" id="prog-${d.ref}">
-      <span class="progress-icon">⏳</span>
-      <span>${d.title}</span>
-    </div>`).join('');
-  for (const doc of docs) {
+  var docs = DOCS.filter(function(d){ return d.cats.includes(data.cat); });
+  list.innerHTML = docs.map(function(d){
+    return '<div class="progress-item" id="prog-' + d.ref + '"><span class="progress-icon">...</span><span>' + d.title + '</span></div>';
+  }).join('');
+  for (var i=0; i<docs.length; i++) {
     await delay(600);
-    const item = document.getElementById('prog-' + doc.ref);
-    item.querySelector('.progress-icon').textContent = '✅';
+    var item = document.getElementById('prog-' + docs[i].ref);
+    item.querySelector('.progress-icon').textContent = 'OK';
     item.style.color = 'var(--success)';
   }
-  showToast(`✅ ${docs.length} documents générés !`, 'success');
+  showToast(docs.length + ' documents generes !', 'success');
 }
 
-function previewDoc(ref) {
-  showToast(`👁️ Aperçu ${ref} — fonctionnalité à venir`);
-}
+function previewDoc(ref) { showToast('Apercu ' + ref + ' - fonctionnalite a venir'); }
 
-// ── IMPORT PGC ────────────────────────────────────────────────────
 function handleDragOver(e) {
   e.preventDefault();
   document.getElementById('import-zone').classList.add('dragover');
@@ -1342,11 +1127,11 @@ function handleDragOver(e) {
 function handleDrop(e) {
   e.preventDefault();
   document.getElementById('import-zone').classList.remove('dragover');
-  const file = e.dataTransfer.files[0];
+  var file = e.dataTransfer.files[0];
   if (file) processPGCFile(file);
 }
 function handleFileSelect(e) {
-  const file = e.target.files[0];
+  var file = e.target.files[0];
   if (file) processPGCFile(file);
 }
 
@@ -1355,91 +1140,61 @@ async function processPGCFile(file) {
   document.getElementById('extract-result').classList.remove('show');
 
   try {
-    // Lire le PDF/docx en base64
-    const base64 = await fileToBase64(file);
-    const isPdf = file.name.endsWith('.pdf');
+    var pdfText = '';
+    if (file.name.endsWith('.pdf')) {
+      var arrayBuffer = await file.arrayBuffer();
+      var pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      var maxPages = Math.min(pdf.numPages, 15);
+      for (var i = 1; i <= maxPages; i++) {
+        var page = await pdf.getPage(i);
+        var tc = await page.getTextContent();
+        pdfText += tc.items.map(function(it){ return it.str; }).join(' ') + '\n';
+      }
+    } else {
+      pdfText = await file.text();
+    }
+    pdfText = pdfText.slice(0, 12000);
 
-    const response = await fetch('/api/claude', {
+    var prompt = 'Voici le contenu d\'un PGC SPS :\n\n' + pdfText + '\n\nExtrais les informations suivantes et reponds UNIQUEMENT en JSON valide, sans markdown ni backtick :\n{"chantier_nom":"...","chantier_adresse":"...","chantier_nature":"...","chantier_debut":"...","chantier_duree":"...","categorie":1,"moa_nom":"...","moa_contact":"...","moa_adresse":"...","moa_tel":"...","moa_mail":"...","moe_nom":"...","moe_contact":"...","cspsc_nom":"...","cspsc_tel":"...","cspsc_mail":"...","dreets_nom":"...","dreets_adresse":"...","carsat_nom":"...","carsat_adresse":"...","oppbtp_nom":"...","oppbtp_adresse":"...","rp_amiante":false,"rp_plomb":false,"rp_demolition":false,"rp_reseaux":false}\nMet null pour les champs non trouves.';
+
+    var response = await fetch('/api/claude', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
+        model: 'llama-3.3-70b-versatile',
         max_tokens: 1000,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'document',
-              source: { type: 'base64', media_type: isPdf ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', data: base64 }
-            },
-            {
-              type: 'text',
-              text: `Extrais les informations suivantes de ce PGC SPS et réponds UNIQUEMENT en JSON valide, sans markdown ni backtick :
-{
-  "chantier_nom": "...",
-  "chantier_adresse": "...",
-  "chantier_nature": "...",
-  "chantier_debut": "...",
-  "chantier_duree": "...",
-  "categorie": 1 ou 2 ou 3,
-  "moa_nom": "...",
-  "moa_contact": "...",
-  "moa_adresse": "...",
-  "moa_tel": "...",
-  "moa_mail": "...",
-  "moe_nom": "...",
-  "moe_contact": "...",
-  "cspsc_nom": "...",
-  "cspsc_tel": "...",
-  "cspsc_mail": "...",
-  "dreets_nom": "...",
-  "dreets_adresse": "...",
-  "carsat_nom": "...",
-  "carsat_adresse": "...",
-  "oppbtp_nom": "...",
-  "oppbtp_adresse": "...",
-  "rp_amiante": true/false,
-  "rp_plomb": true/false,
-  "rp_demolition": true/false,
-  "rp_reseaux": true/false
-}
-Met null pour les champs non trouvés.`
-            }
-          ]
-        }]
+        messages: [{ role: 'user', content: prompt }]
       })
     });
 
-    const result = await response.json();
-    const text = result.content?.find(c => c.type === 'text')?.text || '{}';
-    const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+    var result = await response.json();
+    var text = (result.content && result.content[0] && result.content[0].text) ? result.content[0].text : '{}';
+    var parsed = JSON.parse(text.replace(/```json|```/g,'').trim());
     extractedData = parsed;
 
-    // Afficher le résumé
-    const fields = [
+    var fields = [
       ['Chantier', parsed.chantier_nom],
       ['Adresse', parsed.chantier_adresse],
       ['Nature travaux', parsed.chantier_nature],
-      ['Catégorie', parsed.categorie ? `Catégorie ${parsed.categorie}` : null],
+      ['Categorie', parsed.categorie ? 'Categorie ' + parsed.categorie : null],
       ['MOA', parsed.moa_nom],
       ['MOE', parsed.moe_nom],
       ['CSPS Conception', parsed.cspsc_nom],
       ['DREETS', parsed.dreets_nom],
       ['CARSAT', parsed.carsat_nom],
       ['OPPBTP', parsed.oppbtp_nom],
-    ].filter(([,v]) => v);
+    ].filter(function(item){ return item[1]; });
 
-    document.getElementById('extract-preview').innerHTML = fields.map(([k,v]) =>
-      `<div style="display:flex;gap:8px;margin-bottom:4px;font-size:13px;">
-        <span style="color:var(--text-light);min-width:120px;">${k}</span>
-        <span style="font-weight:600;">${v}</span>
-      </div>`
-    ).join('');
+    document.getElementById('extract-preview').innerHTML = fields.map(function(item){
+      return '<div style="display:flex;gap:8px;margin-bottom:4px;font-size:13px;">'
+        + '<span style="color:var(--text-light);min-width:120px;">' + item[0] + '</span>'
+        + '<span style="font-weight:600;">' + item[1] + '</span></div>';
+    }).join('');
 
     document.getElementById('extract-result').classList.add('show');
 
   } catch(err) {
-    showToast('❌ Erreur lors de l\'extraction : ' + err.message, 'error');
+    showToast('Erreur lors de l\'extraction : ' + err.message, 'error');
   } finally {
     document.getElementById('import-loading').style.display = 'none';
   }
@@ -1447,7 +1202,7 @@ Met null pour les champs non trouvés.`
 
 function applyExtracted() {
   if (!extractedData) return;
-  const d = extractedData;
+  var d = extractedData;
   showNewAffaire();
   if (d.chantier_nom) document.getElementById('chantier-nom').value = d.chantier_nom;
   if (d.chantier_adresse) document.getElementById('chantier-adresse').value = d.chantier_adresse;
@@ -1476,59 +1231,41 @@ function applyExtracted() {
   if (d.rp_demolition) document.getElementById('rp-demolition').checked = true;
   if (d.rp_reseaux) document.getElementById('rp-reseaux').checked = true;
   showPage('form');
-  showToast('✅ Données importées depuis le PGC', 'success');
+  showToast('Donnees importees depuis le PGC', 'success');
 }
 
-// ── MODAL ─────────────────────────────────────────────────────────
 function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
 
-// ── TOAST ─────────────────────────────────────────────────────────
-let toastTimer;
-function showToast(msg, type = '') {
-  const t = document.getElementById('toast');
+var toastTimer;
+function showToast(msg, type) {
+  var t = document.getElementById('toast');
   t.textContent = msg;
   t.className = 'show' + (type ? ' ' + type : '');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.className = '', 3000);
+  toastTimer = setTimeout(function(){ t.className=''; }, 3000);
 }
 
-// ── UTILS ─────────────────────────────────────────────────────────
-function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
-function fileToBase64(file) {
-  return new Promise((res, rej) => {
-    const r = new FileReader();
-    r.onload = () => res(r.result.split(',')[1]);
-    r.onerror = () => rej(new Error('Erreur lecture fichier'));
-    r.readAsDataURL(file);
-  });
-}
+function delay(ms) { return new Promise(function(r){ setTimeout(r, ms); }); }
 
-// ── INIT ──────────────────────────────────────────────────────────
 renderAffaireList();
-
-// Pré-charger avec le PGC Plonéour si on veut tester
-// (décommentez pour démo)
 </script>
 <script>
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/sw.js").then(() => {
-    console.log("SW enregistré");
-  }).catch(err => console.log("SW erreur:", err));
+  navigator.serviceWorker.register("/sw.js").catch(function(err){ console.log("SW erreur:", err); });
 }
-// Bannière installation PWA
-let deferredPrompt;
-window.addEventListener("beforeinstallprompt", (e) => {
+var deferredPrompt;
+window.addEventListener("beforeinstallprompt", function(e) {
   e.preventDefault();
   deferredPrompt = e;
-  const banner = document.getElementById("install-banner");
+  var banner = document.getElementById("install-banner");
   if (banner) banner.style.display = "flex";
 });
 function installPWA() {
   if (deferredPrompt) {
     deferredPrompt.prompt();
-    deferredPrompt.userChoice.then(() => {
+    deferredPrompt.userChoice.then(function(){
       deferredPrompt = null;
-      const banner = document.getElementById("install-banner");
+      var banner = document.getElementById("install-banner");
       if (banner) banner.style.display = "none";
     });
   }
