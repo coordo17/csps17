@@ -1320,10 +1320,17 @@ function injecterObservations(zip, observations) {
       + '<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'
       + '<w:b/><w:bCs/><w:color w:val="000000"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr>'
       + '<w:t>' + num + '</w:t></w:r></w:p>');
-    // Cellule Type
-    var cType = tc(2200, '<w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'
+    // Cellule Type (2 lignes pour eviter troncature)
+    var typeL1 = type.replace(' ☐ Danger grave immédiat','').replace(' ☑ Danger grave immédiat','');
+    var hasDgi = type.indexOf('Danger grave') !== -1;
+    var dgiCheck = type.indexOf('☑ Danger') !== -1 ? '☑' : '☐';
+    var cType = tc(2200,
+      '<w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'
       + '<w:sz w:val="15"/><w:szCs w:val="15"/></w:rPr>'
-      + '<w:t>' + escXml(type) + '</w:t></w:r></w:p>');
+      + '<w:t>' + escXml(typeL1) + '</w:t></w:r></w:p>'
+      + '<w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'
+      + '<w:sz w:val="15"/><w:szCs w:val="15"/></w:rPr>'
+      + '<w:t>' + dgiCheck + ' Danger grave immédiat</w:t></w:r></w:p>');
     // Cellule Description
     var cDesc = tc(3940, desc ? cellTexte(desc, 18) : '<w:p/>');
     // Cellule Delai
@@ -1382,69 +1389,154 @@ function injecterPhotos(zip, photos, legendes) {
     ctStr = ctStr.replace('</Types>', '<Default Extension="png" ContentType="image/png"/></Types>');
   }
 
-  // 1. Remplir les 4 cases Photo existantes dans le template
-  var photoAncres = ['Photo 1</w:t>', 'Photo 2</w:t>', 'Photo 3</w:t>', 'Photo 4</w:t>'];
-  var legendeAncres = [];
-  // Trouver les 4 legendes
-  var searchFrom = 0;
-  for (var k = 0; k < 4; k++) {
-    var li = xmlStr.indexOf('Légende / localisation :</w:t>', searchFrom);
-    if (li !== -1) { legendeAncres.push(li); searchFrom = li + 1; }
-  }
-
-  // Injecter photos 1-4 dans les cases existantes (de la fin vers le debut)
-  var nbCases = Math.min(photos.length, 4);
-  for (var i = nbCases - 1; i >= 0; i--) {
-    var rid = 200 + i;
-    var b64 = photos[i].indexOf(',') >= 0 ? photos[i].split(',')[1] : photos[i];
+  // Ajouter une image dans le zip et dans les rels
+  function addImage(rid, b64data) {
+    var b64 = b64data.indexOf(',') >= 0 ? b64data.split(',')[1] : b64data;
     var imgBytes = atob(b64);
     var arr = new Uint8Array(imgBytes.length);
     for (var j = 0; j < imgBytes.length; j++) arr[j] = imgBytes.charCodeAt(j);
     zip.file('word/media/photo' + rid + '.png', arr);
     relsStr = relsStr.replace('</Relationships>',
-      '<Relationship Id="rId' + rid + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/photo' + rid + '.png"/></Relationships>');
-
-    // Inserer image apres l'ancre Photo X
-    var ancrePos = xmlStr.indexOf(photoAncres[i]);
-    if (ancrePos !== -1) {
-      var endP = xmlStr.indexOf('</w:p>', ancrePos) + 6;
-      xmlStr = xmlStr.slice(0, endP) + '<w:p>' + makePhotoXml(rid, 2700000, 2025000) + '</w:p>' + xmlStr.slice(endP);
-    }
-
-    // Remplacer legende
-    if (legendeAncres[i] !== undefined && legendes[i]) {
-      var legOld = 'Légende / localisation :</w:t>';
-      var legNew = 'Légende : ' + legendes[i].substring(0, 80) + '</w:t>';
-      // Remplacer la i-eme occurrence
-      var occ = 0;
-      var pos2 = 0;
-      while (true) {
-        var fi = xmlStr.indexOf(legOld, pos2);
-        if (fi === -1) break;
-        if (occ === i) { xmlStr = xmlStr.slice(0, fi) + legNew + xmlStr.slice(fi + legOld.length); break; }
-        occ++; pos2 = fi + 1;
-      }
-    }
+      '<Relationship Id="rId' + rid + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"'
+      + ' Target="media/photo' + rid + '.png"/></Relationships>');
   }
 
-  // 2. Photos supplementaires (5+) : tableau 2 colonnes a la fin du doc
+  // Injecter une image dans une cellule (remplace le <w:p> vide)
+  function injecterImageDansCellule(xml, tcStart, tcEnd, rid, legende) {
+    // Chercher le premier <w:p dans cette cellule
+    var pStart = xml.indexOf('<w:p', tcStart);
+    if (pStart === -1 || pStart > tcEnd) return xml;
+    // Fin du paragraphe : toujours chercher </w:p> en priorite
+    // Ne fallback sur self-closing '/>' que si vraiment pas de </w:p>
+    var pEnd;
+    var normalClose = xml.indexOf('</w:p>', pStart);
+    if (normalClose !== -1 && normalClose < tcEnd) {
+      pEnd = normalClose + 6;
+    } else {
+      // Paragraphe vraiment self-closing : <w:p ... />
+      var pTagEnd = xml.indexOf('>', pStart);
+      if (pTagEnd !== -1 && xml[pTagEnd-1] === '/' && pTagEnd < tcEnd) {
+        pEnd = pTagEnd + 1;
+      } else {
+        return xml;
+      }
+    }
+    var imgXml = '<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r>' + makePhotoXml(rid, 2952756, 2214567) + '</w:r></w:p>';
+    if (legende) {
+      imgXml += '<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'
+        + '<w:i/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr>'
+        + '<w:t xml:space="preserve">' + legende.substring(0,80).replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</w:t></w:r></w:p>';
+    }
+    return xml.slice(0, pStart) + imgXml + xml.slice(pEnd);
+  }
+
+  // === PHOTOS 1-4 dans les cases du template ===
+  // Structure tableau : TR1(titres) TR2(images 1-2) TR3(legendes) TR4(titres) TR5(images 3-4) TR6(legendes)
+  var ancre = 'Photo 1</w:t>';
+  var idxAncre = xmlStr.indexOf(ancre);
+  if (idxAncre !== -1) {
+    var tblStart = xmlStr.lastIndexOf('<w:tbl>', idxAncre);
+    var tblEnd   = xmlStr.indexOf('</w:tbl>', idxAncre) + 8;
+    var tbl      = xmlStr.slice(tblStart, tblEnd);
+
+    // Trouver les 6 TR
+    var trPositions = [];
+    var searchFrom = 0;
+    while (true) {
+      var ti = tbl.indexOf('<w:tr ', searchFrom);
+      if (ti === -1) break;
+      var te = tbl.indexOf('</w:tr>', ti) + 7;
+      trPositions.push({ s: ti, e: te });
+      searchFrom = te;
+    }
+
+    // TR2 (index 1) : cases images Photo 1 (gauche) et Photo 2 (droite)
+    // TR5 (index 4) : cases images Photo 3 (gauche) et Photo 4 (droite)
+    var imgTRs = [
+      { trIdx: 1, photos: [0, 1] },  // TR2 -> photos[0] gauche, photos[1] droite
+      { trIdx: 4, photos: [2, 3] },  // TR5 -> photos[2] gauche, photos[3] droite
+    ];
+
+    // Travailler de la fin vers le debut pour ne pas decaler les index
+    for (var g = imgTRs.length - 1; g >= 0; g--) {
+      var grp = imgTRs[g];
+      if (grp.trIdx >= trPositions.length) continue;
+      var trPos = trPositions[grp.trIdx];
+      var trXml = tbl.slice(trPos.s, trPos.e);
+
+      // Trouver les 2 cellules dans ce TR
+      var tc1s = trXml.indexOf('<w:tc>');
+      var tc1e = trXml.indexOf('</w:tc>') + 7;
+      var tc2s = trXml.indexOf('<w:tc>', tc1e);
+      var tc2e = trXml.indexOf('</w:tc>', tc2s) + 7;
+
+      var newTr = trXml;
+
+      // Cellule droite (photo index 1)
+      var pi2 = grp.photos[1];
+      if (pi2 < photos.length) {
+        var rid2 = 200 + pi2;
+        addImage(rid2, photos[pi2]);
+        // Recalculer tc2 dans newTr
+        var nt2s = newTr.indexOf('<w:tc>', newTr.indexOf('</w:tc>') + 7);
+        var nt2e = newTr.indexOf('</w:tc>', nt2s) + 7;
+        newTr = newTr.slice(0, nt2s) + injecterImageDansCellule(newTr, nt2s, nt2e, rid2, legendes[pi2]).slice(nt2s) ;
+        // Plus simple : injecter directement
+        newTr = injecterImageDansCellule(newTr, nt2s, newTr.indexOf('</w:tc>', nt2s) + 7, rid2, legendes[pi2]);
+      }
+
+      // Cellule gauche (photo index 0)
+      var pi1 = grp.photos[0];
+      if (pi1 < photos.length) {
+        var rid1 = 200 + pi1;
+        addImage(rid1, photos[pi1]);
+        var nt1s = newTr.indexOf('<w:tc>');
+        var nt1e = newTr.indexOf('</w:tc>') + 7;
+        newTr = injecterImageDansCellule(newTr, nt1s, nt1e, rid1, legendes[pi1]);
+      }
+
+      // Remplacer le TR dans le tableau
+      tbl = tbl.slice(0, trPos.s) + newTr + tbl.slice(trPos.e);
+      // Recalculer les positions TR suivantes
+      var diff = newTr.length - (trPos.e - trPos.s);
+      for (var k = 0; k < grp.trIdx; k++) {
+        // pas besoin, on va de la fin vers le debut
+      }
+    }
+
+    // Remplacer l'ancien tableau dans xmlStr
+    xmlStr = xmlStr.slice(0, tblStart) + tbl + xmlStr.slice(tblEnd);
+  }
+
+  // === PHOTOS 5+ : tableau supplementaire apres </w:body> ===
   if (photos.length > 4) {
-    var extrasXml = '<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="1F4E79"/></w:rPr><w:t>Photos complementaires</w:t></w:r></w:p>';
+    var extrasXml = '<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="1F4E79"/>'
+      + '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="20"/></w:rPr>'
+      + '<w:t>Photos compl\u00e9mentaires</w:t></w:r></w:p>';
 
     for (var p = 4; p < photos.length; p += 2) {
-      var rid1 = 200 + p;
-      var rid2 = 200 + p + 1;
+      var rid1x = 200 + p;
+      addImage(rid1x, photos[p]);
+      var leg1 = legendes[p] || ('Photo ' + (p+1));
 
-      // Photo gauche
-      var b641 = photos[p].indexOf(',') >= 0 ? photos[p].split(',')[1] : photos[p];
-      var bytes1 = atob(b641);
-      var arr1 = new Uint8Array(bytes1.length);
-      for (var j1 = 0; j1 < bytes1.length; j1++) arr1[j1] = bytes1.charCodeAt(j1);
-      zip.file('word/media/photo' + rid1 + '.png', arr1);
-      relsStr = relsStr.replace('</Relationships>',
-        '<Relationship Id="rId' + rid1 + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/photo' + rid1 + '.png"/></Relationships>');
+      var cellG = '<w:tc><w:tcPr><w:tcW w:w="4819" w:type="dxa"/></w:tcPr>'
+        + '<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r>' + makePhotoXml(rid1x, 2700000, 2025000) + '</w:r></w:p>'
+        + '<w:p><w:r><w:rPr><w:i/><w:sz w:val="16"/></w:rPr><w:t>' + leg1.substring(0,60).replace(/&/g,'&amp;') + '</w:t></w:r></w:p>'
+        + '</w:tc>';
 
-      // Tableau 2 colonnes
+      var cellD;
+      if (p + 1 < photos.length) {
+        var rid2x = 200 + p + 1;
+        addImage(rid2x, photos[p+1]);
+        var leg2 = legendes[p+1] || ('Photo ' + (p+2));
+        cellD = '<w:tc><w:tcPr><w:tcW w:w="4819" w:type="dxa"/></w:tcPr>'
+          + '<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r>' + makePhotoXml(rid2x, 2700000, 2025000) + '</w:r></w:p>'
+          + '<w:p><w:r><w:rPr><w:i/><w:sz w:val="16"/></w:rPr><w:t>' + leg2.substring(0,60).replace(/&/g,'&amp;') + '</w:t></w:r></w:p>'
+          + '</w:tc>';
+      } else {
+        cellD = '<w:tc><w:tcPr><w:tcW w:w="4819" w:type="dxa"/></w:tcPr><w:p/></w:tc>';
+      }
+
       extrasXml += '<w:tbl><w:tblPr><w:tblW w:w="9638" w:type="dxa"/><w:tblBorders>'
         + '<w:top w:val="single" w:sz="4" w:color="AAAAAA"/>'
         + '<w:left w:val="single" w:sz="4" w:color="AAAAAA"/>'
@@ -1452,33 +1544,7 @@ function injecterPhotos(zip, photos, legendes) {
         + '<w:right w:val="single" w:sz="4" w:color="AAAAAA"/>'
         + '<w:insideH w:val="single" w:sz="4" w:color="AAAAAA"/>'
         + '<w:insideV w:val="single" w:sz="4" w:color="AAAAAA"/>'
-        + '</w:tblBorders></w:tblPr><w:tr>';
-
-      // Cellule photo gauche
-      extrasXml += '<w:tc><w:tcPr><w:tcW w:w="4819" w:type="dxa"/></w:tcPr>'
-        + '<w:p>' + makePhotoXml(rid1, 2700000, 2025000) + '</w:p>'
-        + '<w:p><w:r><w:t>' + (legendes[p] ? legendes[p].substring(0, 60) : 'Photo ' + (p+1)) + '</w:t></w:r></w:p>'
-        + '</w:tc>';
-
-      // Cellule photo droite (si existe)
-      if (p + 1 < photos.length) {
-        var b642 = photos[p+1].indexOf(',') >= 0 ? photos[p+1].split(',')[1] : photos[p+1];
-        var bytes2 = atob(b642);
-        var arr2 = new Uint8Array(bytes2.length);
-        for (var j2 = 0; j2 < bytes2.length; j2++) arr2[j2] = bytes2.charCodeAt(j2);
-        zip.file('word/media/photo' + rid2 + '.png', arr2);
-        relsStr = relsStr.replace('</Relationships>',
-          '<Relationship Id="rId' + rid2 + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/photo' + rid2 + '.png"/></Relationships>');
-
-        extrasXml += '<w:tc><w:tcPr><w:tcW w:w="4819" w:type="dxa"/></w:tcPr>'
-          + '<w:p>' + makePhotoXml(rid2, 2700000, 2025000) + '</w:p>'
-          + '<w:p><w:r><w:t>' + (legendes[p+1] ? legendes[p+1].substring(0, 60) : 'Photo ' + (p+2)) + '</w:t></w:r></w:p>'
-          + '</w:tc>';
-      } else {
-        extrasXml += '<w:tc><w:tcPr><w:tcW w:w="4819" w:type="dxa"/></w:tcPr><w:p></w:p></w:tc>';
-      }
-
-      extrasXml += '</w:tr></w:tbl>';
+        + '</w:tblBorders></w:tblPr><w:tr>' + cellG + cellD + '</w:tr></w:tbl>';
     }
 
     xmlStr = xmlStr.replace('</w:body>', extrasXml + '</w:body>');
@@ -1489,102 +1555,6 @@ function injecterPhotos(zip, photos, legendes) {
   zip.file('[Content_Types].xml', ctStr);
   return zip;
 }
-
-function injecterSignatures(zip, sigCsps, sigEnt, sigEU) {
-  var docFile = zip.file('word/document.xml');
-  if (!docFile) return zip;
-  var xmlStr = docFile.asText();
-  var relsFile = zip.file('word/_rels/document.xml.rels');
-  var relsStr = relsFile ? relsFile.asText() : '';
-  var ctFile = zip.file('[Content_Types].xml');
-  var ctStr = ctFile ? ctFile.asText() : '';
-  var nextRid = 100;
-
-  function makeImgXml(rid) {
-    return '<w:r><w:drawing>'
-      + '<wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" distT="0" distB="0" distL="0" distR="0">'
-      + '<wp:extent cx="1800000" cy="500000"/><wp:effectExtent l="0" t="0" r="0" b="0"/>'
-      + '<wp:docPr id="' + rid + '" name="sig' + rid + '"/>'
-      + '<wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr>'
-      + '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
-      + '<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'
-      + '<pic:nvPicPr><pic:cNvPr id="' + rid + '" name="sig' + rid + '"/><pic:cNvPicPr/></pic:nvPicPr>'
-      + '<pic:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rId' + rid + '"/>'
-      + '<a:stretch><a:fillRect/></a:stretch></pic:blipFill>'
-      + '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1800000" cy="500000"/></a:xfrm>'
-      + '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>'
-      + '</pic:pic></a:graphicData></a:graphic></wp:inline>'
-      + '</w:drawing></w:r>';
-  }
-
-  function addImg(sigDataUrl, rid) {
-    if (!sigDataUrl) return false;
-    var base64 = sigDataUrl.split(',')[1];
-    var imgBytes = atob(base64);
-    var arr = new Uint8Array(imgBytes.length);
-    for (var i = 0; i < imgBytes.length; i++) arr[i] = imgBytes.charCodeAt(i);
-    zip.file('word/media/sig' + rid + '.png', arr);
-    var relXml = '<Relationship Id="rId' + rid + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/sig' + rid + '.png"/>';
-    relsStr = relsStr.replace('</Relationships>', relXml + '</Relationships>');
-    if (ctStr.indexOf('image/png') === -1) {
-      ctStr = ctStr.replace('</Types>', '<Default Extension="png" ContentType="image/png"/></Types>');
-    }
-    return true;
-  }
-
-  // Ordre dans le XML: 1=CSPS, 2=Entreprise, 3=EU
-  var sigTarget = 'Signature :</w:t></w:r>';
-  var sigImgCSPS = null, sigImgEnt = null;
-
-  if (sigCsps && addImg(sigCsps, nextRid)) { sigImgCSPS = makeImgXml(nextRid); nextRid++; }
-  if (sigEnt && addImg(sigEnt, nextRid)) { sigImgEnt = makeImgXml(nextRid); nextRid++; }
-
-  // CSPS = 1ere occurrence de "Signature :"
-  // On doit inserer de la derniere vers la premiere pour ne pas decaler les positions
-  // D'abord ENT (2eme), puis CSPS (1ere)
-
-  var allSigPos = [];
-  var searchFrom = 0;
-  while (true) {
-    var p = xmlStr.indexOf(sigTarget, searchFrom);
-    if (p === -1) break;
-    allSigPos.push(p);
-    searchFrom = p + 1;
-  }
-
-  // allSigPos[0] = CSPS, allSigPos[1] = ENTREPRISE
-  // Inserer de la fin vers le debut pour ne pas decaler les positions
-
-  if (sigImgEnt && allSigPos.length >= 2) {
-    var p2 = allSigPos[1];
-    xmlStr = xmlStr.slice(0, p2 + sigTarget.length) + sigImgEnt + xmlStr.slice(p2 + sigTarget.length);
-  }
-  if (sigImgCSPS && allSigPos.length >= 1) {
-    var p1 = allSigPos[0];
-    xmlStr = xmlStr.slice(0, p1 + sigTarget.length) + sigImgCSPS + xmlStr.slice(p1 + sigTarget.length);
-  }
-
-  // EU : inserer apres "Representant EU"
-  if (sigData.eu && addImg(sigData.eu, nextRid)) {
-    var sigImgEU = makeImgXml(nextRid);
-    nextRid++;
-    var ancreEU = 'Nom : Qualité : Signature :';
-    var idxEU = xmlStr.indexOf(ancreEU);
-    if (idxEU !== -1) {
-      var euTarget = '</w:t></w:r>';
-      var idxSigEU = xmlStr.indexOf(euTarget, idxEU);
-      if (idxSigEU !== -1) {
-        xmlStr = xmlStr.slice(0, idxSigEU + euTarget.length) + sigImgEU + xmlStr.slice(idxSigEU + euTarget.length);
-      }
-    }
-  }
-
-  zip.file('word/document.xml', xmlStr);
-  zip.file('word/_rels/document.xml.rels', relsStr);
-  zip.file('[Content_Types].xml', ctStr);
-  return zip;
-}
-
 function cocherRisques(xmlStr, risques) {
   if (!risques) return xmlStr;
   // Amiante/plomb
