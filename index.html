@@ -1935,7 +1935,7 @@ function genFormulaireFIC() {
   html2 += checkRow('Milieu confine → asphyxie', 'fic-rq-confine', false);
   html2 += '<p style="font-size:12px;color:var(--text-light);margin:8px 0;">Risques exporte par l\'EU :</p>';
   html2 += checkRow('Amiante / plomb (structures a demolir)', 'fic-rq-amiante', risques.amiante || risques.plomb || false);
-  html2 += checkRow('Reseaux actifs dans l\'emprise', 'fic-rq-reseaux', risques.reseaux || false);
+  html2 += checkRow('Reseaux actifs dans la zone de travaux (eau, gaz, elec, telecom)', 'fic-rq-reseaux', risques.reseaux || false);
   html2 += checkRow('Produits dangereux stockes sur site EU', 'fic-rq-produits', false);
   html2 += fieldRow('Observations risques', 'fic-rq-obs', 'textarea', 'Precisions, mesures complementaires...', '');
   html2 += sectionEnd();
@@ -1968,6 +1968,18 @@ function genFormulaireFIC() {
   html2 += checkRow('Harnais antichute (> 2m)', 'fic-epi-harnais', risques.hauteur || false);
   html2 += sectionEnd();
 
+  // Section 10bis - Vigilance meteorologique (accordeon)
+  html2 += '<div class="terrain-section">';
+  html2 += '<div class="terrain-section-header" onclick="toggleMeteo()" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;">&#9928; Vigilance meteorologique <span id="meteo-arrow">&#9660;</span></div>';
+  html2 += '<div id="meteo-section" style="display:none;padding:16px;">';
+  html2 += '<p style="font-size:12px;color:var(--text-light);margin-bottom:10px;">Cochez les mesures mises en place :</p>';
+  html2 += checkRow('Eau fraiche en permanence sur chantier', 'fic-meteo-eau', false);
+  html2 += checkRow('Arret travaux 12h-15h (canicule)', 'fic-meteo-arret', false);
+  html2 += checkRow('Zone ombre / abri frais disponible', 'fic-meteo-ombre', false);
+  html2 += checkRow('Arret immediat orage / alerte rouge', 'fic-meteo-orage', false);
+  html2 += fieldRow('Referent canicule — Nom', 'fic-meteo-referent', 'text', 'Nom du referent canicule', '');
+  html2 += '</div></div>';
+
   // Section 11 - Secours
   html2 += sectionHeader('11', 'Organisation des secours', '&#128657;');
   html2 += fieldRow('SST present(s) — Nom(s)', 'fic-sec-sst', 'text', 'Nom du SST', '');
@@ -1989,11 +2001,16 @@ function genFormulaireFIC() {
   return html2;
 }
 
+var visObsCount = 0;
+
 function genFormulaireVIS() {
   var ent = (terrainAffaire._entCourante) ? terrainAffaire._entCourante : getEntrepriseInfo();
   var today = new Date().toISOString().split('T')[0];
   var nowH = new Date().getHours().toString().padStart(2,'0') + ':' + new Date().getMinutes().toString().padStart(2,'0');
+  visObsCount = 0;
   var html2 = '';
+
+  // Section 1 - Visite
   html2 += sectionHeader('1', 'Identification de la visite', '&#128065;');
   html2 += twoCol(
     fieldRow('Date', 'vis-date', 'date', '', today),
@@ -2005,40 +2022,113 @@ function genFormulaireVIS() {
   );
   html2 += fieldRow('Avancement global', 'vis-avancement', 'text', 'Ex: 30% - Gros oeuvre en cours', '');
   html2 += sectionEnd();
-  html2 += sectionHeader('2', 'Entreprise presente', '&#127970;');
-  html2 += '<div class="field" style="margin-bottom:8px;"><label>Selectionner</label>'
-    + '<select onchange="terrainRemplirEntreprise(this.value)" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;">'
+
+  // Section 2 - Entreprise presente (une seule, deroulant)
+  html2 += sectionHeader('2', 'Entreprise presente sur chantier', '&#127970;');
+  html2 += '<div class="field" style="margin-bottom:10px;"><label>Selectionner l\'entreprise</label>'
+    + '<select id="vis-ent-select" onchange="visSelectEntreprise(this.value)" style="width:100%;padding:12px;font-size:15px;border:2px solid var(--blue-mid);border-radius:var(--radius);font-family:inherit;">'
     + '<option value="">-- Choisir --</option>';
   (terrainAffaire.entreprises || []).forEach(function(e, i) {
-    html2 += '<option value="' + i + '">' + (e.nom || 'Entreprise ' + (i+1)) + '</option>';
+    var selected = (ent && ent.nom === e.nom) ? ' selected' : '';
+    html2 += '<option value="' + i + '"' + selected + '>' + (e.nom || 'Entreprise ' + (i+1)) + ' — ' + (e.lot || '') + '</option>';
   });
   html2 += '</select></div>';
-  html2 += fieldRow('Entreprise', 'vis-ent-nom', 'text', 'Raison sociale', ent.nom || '');
   html2 += twoCol(
-    fieldRow('Representant', 'vis-ent-contact', 'text', 'Nom Prenom', ent.contact || ''),
-    fieldRow('Lot', 'vis-ent-lot', 'text', 'Ex: Gros oeuvre', ent.lot || '')
+    fieldRow('Signataire / Representant', 'vis-ent-contact', 'text', 'Nom + Qualite', ent.contact || ''),
+    fieldRow('Tel', 'vis-ent-tel', 'tel', '06 xx xx xx xx', ent.tel || '')
   );
   html2 += '<div class="field" style="margin-bottom:10px;"><label>Type</label>'
     + '<select id="vis-ent-type" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;">'
     + '<option>EE</option><option>ST</option><option>Prestataire</option></select></div>';
   html2 += sectionEnd();
-  html2 += sectionHeader('3', 'Observations du CSPS', '&#9888;');
-  for (var i = 1; i <= 3; i++) {
-    html2 += '<div style="border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:10px;">';
-    html2 += '<div class="field" style="margin-bottom:8px;"><label>Type observation ' + i + '</label>'
-      + '<select id="vis-obs' + i + '-type" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;">'
-      + '<option value="">-- Aucune --</option>'
-      + '<option>Observation</option><option>Notification</option><option>Danger grave imminent</option>'
-      + '</select></div>';
-    html2 += fieldRow('Description', 'vis-obs' + i + '-desc', 'textarea', 'Decrire...', '');
-    html2 += twoCol(
-      fieldRow('Delai', 'vis-obs' + i + '-delai', 'text', 'Ex: 48h', ''),
-      fieldRow('Entreprise concernee', 'vis-obs' + i + '-ent', 'text', 'Nom entreprise', '')
-    );
-    html2 += '</div>';
-  }
-  html2 += sectionEnd();
+
+  // Section 3 - Observations avec photos
+  html2 += '<div class="terrain-section"><div class="terrain-section-header">&#9888; Observations du CSPS</div>'
+    + '<div class="terrain-section-body">'
+    + '<div id="vis-obs-list"></div>'
+    + '<button class="btn btn-outline btn-sm" onclick="visAjouterObs()" style="width:100%;padding:12px;margin-top:8px;">+ Ajouter une observation</button>'
+    + '</div></div>';
+
   return html2;
+}
+
+function visSelectEntreprise(idx) {
+  if (idx === '' || !terrainAffaire) return;
+  var ent = (terrainAffaire.entreprises || [])[parseInt(idx)];
+  if (!ent) return;
+  var elC = document.getElementById('vis-ent-contact'); if(elC) elC.value = ent.contact || '';
+  var elT = document.getElementById('vis-ent-tel'); if(elT) elT.value = ent.tel || '';
+}
+
+function visAjouterObs() {
+  visObsCount++;
+  var id = 'vis-obs-' + visObsCount;
+  var div = document.createElement('div');
+  div.id = id;
+  div.style.cssText = 'border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px;background:#fafafa;';
+
+  var entOptions = '<option value="">-- Choisir --</option>';
+  (terrainAffaire.entreprises || []).forEach(function(e, i) {
+    entOptions += '<option value="' + (e.nom || '') + '">' + (e.nom || '') + '</option>';
+  });
+
+  var h = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+  h += '<strong style="color:var(--blue-dark);">Observation ' + visObsCount + '</strong>';
+  h += '<button class="vis-obs-del" data-id="' + id + '" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:18px;">&#10005;</button>';
+  h += '</div>';
+  h += '<div class="field" style="margin-bottom:10px;"><label>Type</label>';
+  h += '<select id="' + id + '-type" style="width:100%;padding:10px;border:2px solid var(--blue-mid);border-radius:6px;font-family:inherit;font-size:14px;">';
+  h += '<option value="obs">Observation</option>';
+  h += '<option value="notif">Notification</option>';
+  h += '<option value="dgi">Danger grave imminent</option>';
+  h += '</select></div>';
+  h += '<div class="field" style="margin-bottom:10px;"><label>Description</label>';
+  h += '<textarea id="' + id + '-desc" rows="3" placeholder="Decrire precisement..." style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;resize:vertical;"></textarea></div>';
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">';
+  h += '<div class="field"><label>Delai</label><input type="text" id="' + id + '-delai" placeholder="Ex: 48h" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;"></div>';
+  h += '<div class="field"><label>Ref PGC</label><input type="text" id="' + id + '-ref" placeholder="Ex: art. 4.2" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;"></div>';
+  h += '</div>';
+  h += '<div class="field" style="margin-bottom:10px;"><label>Entreprise concernee</label>';
+  h += '<select id="' + id + '-ent-sel" class="vis-ent-sel" data-target="' + id + '-ent" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;">' + entOptions + '</select>';
+  h += '<input type="text" id="' + id + '-ent" placeholder="Ou saisir manuellement" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;margin-top:6px;"></div>';
+  h += '<div class="field"><label>Photos</label>';
+  h += '<input type="file" id="' + id + '-photos" accept="image/*" multiple capture="environment" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px;">';
+  h += '<div id="' + id + '-preview" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>';
+  h += '</div>';
+
+  div.innerHTML = h;
+
+  // Event listeners
+  div.querySelector('.vis-obs-del').addEventListener('click', function() { div.remove(); });
+  div.querySelector('.vis-ent-sel').addEventListener('change', function() {
+    var target = document.getElementById(this.dataset.target);
+    if (target && this.value) target.value = this.value;
+  });
+  div.querySelector('input[type=file]').addEventListener('change', function() {
+    var preview = document.getElementById(id + '-preview');
+    preview.innerHTML = '';
+    Array.from(this.files).forEach(function(file) {
+      var reader = new FileReader();
+      reader.onload = function(ev) {
+        var img = document.createElement('img');
+        img.src = ev.target.result;
+        img.dataset.b64 = ev.target.result;
+        img.style.cssText = 'width:80px;height:80px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;';
+        preview.appendChild(img);
+      };
+      reader.readAsDataURL(file);
+    });
+  });
+
+  document.getElementById('vis-obs-list').appendChild(div);
+}
+
+
+function visObsEntSelect(id, val) {
+  if (val) {
+    var el = document.getElementById(id + '-ent');
+    if (el) el.value = val;
+  }
 }
 
 function genFormulaireRCO() {
@@ -2117,6 +2207,15 @@ function genFormulaireSimple(ref) {
     + fieldRow('Date', 'gen-date', 'date', '', today)
     + fieldRow('Observations', 'gen-obs', 'textarea', 'Observations...', '')
     + sectionEnd();
+}
+
+function toggleMeteo() {
+  var sec = document.getElementById('meteo-section');
+  var arrow = document.getElementById('meteo-arrow');
+  if (sec) {
+    sec.style.display = sec.style.display === 'none' ? 'block' : 'none';
+    if (arrow) arrow.innerHTML = sec.style.display === 'none' ? '&#9660;' : '&#9650;';
+  }
 }
 
 function terrainRemplirEntreprise(idx) {
