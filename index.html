@@ -2937,6 +2937,40 @@ async function genererDocTerrain() {
     terrainAffaire._photos = photos;
     terrainAffaire._photosLegendes = legendes;
     terrainAffaire._observations = observations;
+
+    // Collecter les entreprises presentes
+    var entreprisesPresentes = [];
+    document.querySelectorAll('#vis-ent-list > div').forEach(function(entDiv) {
+      var nom = entDiv.querySelector('.vis-ent-nom');
+      var contact = entDiv.querySelector('.vis-ent-contact');
+      var tel = entDiv.querySelector('.vis-ent-tel');
+      var type = entDiv.querySelector('.vis-ent-type');
+      var lot = entDiv.querySelector('.vis-ent-lot');
+      if (nom && nom.value.trim()) {
+        entreprisesPresentes.push({
+          nom: nom.value,
+          contact: contact ? contact.value : '',
+          tel: tel ? tel.value : '',
+          type: type ? type.value : 'EE',
+          lot: lot ? lot.value : '',
+          effectif: '',
+        });
+      }
+    });
+    terrainAffaire._entreprisesPresentes = entreprisesPresentes;
+
+    // Participants = CSPS + entreprises presentes
+    var participants = [{ nom: 'Alain SUZANNE — CSPS17', qualite: 'Coordonnateur SPS', present: true }];
+    entreprisesPresentes.forEach(function(e) {
+      if (e.contact || e.nom) {
+        participants.push({
+          nom: e.contact || e.nom,
+          qualite: e.nom + (e.lot ? ' — ' + e.lot : ''),
+          present: true,
+        });
+      }
+    });
+    terrainAffaire._participants = participants;
   }
 
   showToast('Generation ' + (DOC_TITRES[ref] || ref) + ' en cours...');
