@@ -1472,20 +1472,17 @@ function injecterPhotos(zip, photos, legendes) {
 
       var newTr = trXml;
 
-      // Cellule droite (photo index 1)
+      // Cellule droite (photo index 1) - injecter en premier (index plus haut)
       var pi2 = grp.photos[1];
       if (pi2 < photos.length) {
         var rid2 = 200 + pi2;
         addImage(rid2, photos[pi2]);
-        // Recalculer tc2 dans newTr
         var nt2s = newTr.indexOf('<w:tc>', newTr.indexOf('</w:tc>') + 7);
         var nt2e = newTr.indexOf('</w:tc>', nt2s) + 7;
-        newTr = newTr.slice(0, nt2s) + injecterImageDansCellule(newTr, nt2s, nt2e, rid2, legendes[pi2]).slice(nt2s) ;
-        // Plus simple : injecter directement
-        newTr = injecterImageDansCellule(newTr, nt2s, newTr.indexOf('</w:tc>', nt2s) + 7, rid2, legendes[pi2]);
+        newTr = injecterImageDansCellule(newTr, nt2s, nt2e, rid2, legendes[pi2]);
       }
 
-      // Cellule gauche (photo index 0)
+      // Cellule gauche (photo index 0) - injecter apres (index plus bas)
       var pi1 = grp.photos[0];
       if (pi1 < photos.length) {
         var rid1 = 200 + pi1;
