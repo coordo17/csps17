@@ -1071,40 +1071,8 @@ function addEntreprise(type) {
   var div = document.createElement('div');
   div.className = 'entreprise-card';
   div.id = id;
-  div.innerHTML = '<div class="entreprise-card-head" onclick="toggleEntCard(\'' + id + '\')">'
-    + '<span>' + typeLabel + ' ' + entrepriseCount + '</span>'
-    + '<span class="ent-type-badge ' + typeBadgeClass + '">' + typeLabel + '</span>'
-    + '<button class="btn-remove-ent" onclick="removeEntreprise(event,\'' + id + '\')">x</button>'
-    + '</div>'
-    + '<div class="entreprise-card-body" id="body-' + id + '">'
-    + '<input type="hidden" class="ent-type" value="' + type + '">'
-    + '<div class="form-row">'
-    + '<div class="field"><label>Raison sociale *</label><input type="text" class="ent-nom" placeholder="Ex : SAS Maconnerie Bretagne"></div>'
-    + '<div class="field"><label>SIRET</label><input type="text" class="ent-siret" placeholder="000 000 000 00000"></div>'
-    + '</div>'
-    + '<div class="form-row">'
-    + '<div class="field"><label>Lot / Travaux</label><input type="text" class="ent-lot" placeholder="Ex : Gros oeuvre"></div>'
-    + '<div class="field"><label>Representant / Chef chantier</label><input type="text" class="ent-contact" placeholder="Nom Prenom"></div>'
-    + '</div>'
-    + '<div class="form-row">'
-    + '<div class="field"><label>Telephone</label><input type="tel" class="ent-tel" placeholder="06 xx xx xx xx"></div>'
-    + '<div class="field"><label>Email</label><input type="email" class="ent-mail" placeholder="contact@entreprise.fr"></div>'
-    + '</div>'
-    + '<div class="form-row">'
-    + '<div class="field"><label>Adresse</label><input type="text" class="ent-adresse" placeholder="Adresse complete"></div>'
-    + '</div>'
-    + '<div class="form-row">'
-    + '<div class="field"><label>Tel portable</label><input type="tel" class="ent-tel-portable" placeholder="06 xx xx xx xx"></div>'
-    + '<div class="field"><label>Tel fixe</label><input type="tel" class="ent-tel-fixe" placeholder="02 xx xx xx xx"></div>'
-    + '</div>'
-    + '<div class="form-row">'
-    + '<div class="field"><label>Compagnon referent</label><input type="text" class="ent-compagnon" placeholder="Nom du compagnon referent"></div>'
-    + '<div class="field"><label>Representant salarie (CSE)</label><input type="text" class="ent-rs" placeholder="Nom du representant salarie"></div>'
-    + '</div>'
-    + '<div class="form-row">'
-    + '<div class="field"><label>Effectif prevu sur chantier</label><input type="number" class="ent-effectif" placeholder="Ex : 4" min="1"></div>'
-    + '</div>'
-    + '</div>';
+  var h = '<div class="entreprise-card-head" onclick="toggleEntCard(\''+id+'\')">'    + '<span>' + typeLabel + ' ' + entrepriseCount + '</span>'    + '<span class="ent-type-badge ' + typeBadgeClass + '">' + typeLabel + '</span>'    + '<button class="btn-remove-ent" onclick="removeEntreprise(event,\''+id+'\')">x</button>'    + '</div>'    + '<div class="entreprise-card-body" id="body-'+id+'">'    + '<input type="hidden" class="ent-type" value="'+type+'">'    + '<div class="form-row">'    + '<div class="field"><label>Raison sociale *</label><input type="text" class="ent-nom" placeholder="Ex : SAS Maconnerie Bretagne"></div>'    + '<div class="field"><label>Lot / Travaux confies</label><input type="text" class="ent-lot" placeholder="Ex : Gros oeuvre"></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Adresse</label><input type="text" class="ent-adresse" placeholder="Adresse complete"></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Tel portable</label><input type="tel" class="ent-tel" placeholder="06 xx xx xx xx"></div>'    + '<div class="field"><label>Tel fixe</label><input type="tel" class="ent-tel-fixe" placeholder="02 xx xx xx xx"></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Mail</label><input type="email" class="ent-mail" placeholder="contact@entreprise.fr"></div>'    + '<div class="field"><label>SIRET</label><input type="text" class="ent-siret" placeholder="000 000 000 00000"></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Signataire (nom + qualite)</label><input type="text" class="ent-contact" placeholder="Ex : COATMEUR Sebastien - Chef chantier"></div>'    + '<div class="field"><label>Effectif prevu</label><input type="number" class="ent-effectif" placeholder="Ex : 4" min="1"></div>'    + '</div>'    + '</div>';
+  div.innerHTML = h;
   document.getElementById('entreprise-list').appendChild(div);
 }
 
@@ -1122,19 +1090,16 @@ function collectFormData() {
   var entreprises = [];
   document.querySelectorAll('#entreprise-list .entreprise-card').forEach(function(card){
     entreprises.push({
-      type: card.querySelector('.ent-type').value,
-      nom: card.querySelector('.ent-nom').value,
-      siret: card.querySelector('.ent-siret').value,
-      lot: card.querySelector('.ent-lot').value,
-      contact: card.querySelector('.ent-contact').value,
-      tel: card.querySelector('.ent-tel').value,
-      mail: card.querySelector('.ent-mail').value,
-      rs: card.querySelector('.ent-rs') ? card.querySelector('.ent-rs').value : '',
-      effectif: card.querySelector('.ent-effectif').value,
+      type: card.querySelector('.ent-type') ? card.querySelector('.ent-type').value : '',
+      nom: card.querySelector('.ent-nom') ? card.querySelector('.ent-nom').value : '',
+      lot: card.querySelector('.ent-lot') ? card.querySelector('.ent-lot').value : '',
       adresse: card.querySelector('.ent-adresse') ? card.querySelector('.ent-adresse').value : '',
-      telPortable: card.querySelector('.ent-tel-portable') ? card.querySelector('.ent-tel-portable').value : '',
+      tel: card.querySelector('.ent-tel') ? card.querySelector('.ent-tel').value : '',
       telFixe: card.querySelector('.ent-tel-fixe') ? card.querySelector('.ent-tel-fixe').value : '',
-      compagnon: card.querySelector('.ent-compagnon') ? card.querySelector('.ent-compagnon').value : '',
+      mail: card.querySelector('.ent-mail') ? card.querySelector('.ent-mail').value : '',
+      siret: card.querySelector('.ent-siret') ? card.querySelector('.ent-siret').value : '',
+      contact: card.querySelector('.ent-contact') ? card.querySelector('.ent-contact').value : '',
+      effectif: card.querySelector('.ent-effectif') ? card.querySelector('.ent-effectif').value : '',
     });
   });
   return {
@@ -1231,10 +1196,9 @@ function loadAffaire(id) {
     addEntreprise(ent.type);
     var cards = document.querySelectorAll('#entreprise-list .entreprise-card');
     var last = cards[cards.length-1];
-    ['nom','siret','lot','contact','tel','mail','rs','effectif','adresse','compagnon'].forEach(function(f){
+    ['nom','lot','adresse','tel','mail','siret','contact','effectif'].forEach(function(f){
       var el=last.querySelector('.ent-'+f); if(el) el.value=ent[f]||'';
     });
-    var elTP = last.querySelector('.ent-tel-portable'); if(elTP) elTP.value = ent.telPortable||'';
     var elTF = last.querySelector('.ent-tel-fixe'); if(elTF) elTF.value = ent.telFixe||'';
   });
   document.getElementById('gen-progress').classList.remove('show');
