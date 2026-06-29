@@ -1283,87 +1283,85 @@ function injecterObservations(zip, observations) {
     'dgi':   '\u2610 Observation \u2610 Notification \u2611 Danger grave imm\u00e9diat',
   };
 
+  var nbObs = observations ? observations.length : 0;
+
   function escXml(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-  function cellText(s) {
-    return '<w:p><w:r><w:rPr><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>'
+
+  function cellTexte(s, sz) {
+    return '<w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'
+      + '<w:sz w:val="' + (sz||18) + '"/><w:szCs w:val="' + (sz||18) + '"/></w:rPr>'
       + '<w:t xml:space="preserve">' + escXml(s) + '</w:t></w:r></w:p>';
   }
 
-  // Remplacer le premier <w:p .../> self-closing dans une cellule par notre texte
-  function injecterDansCellule(xml, tcStart, tcEnd, valeur) {
-    if (!valeur || tcStart === -1) return xml;
-    // Chercher un self-closing <w:p ... />
-    var pSelf = xml.indexOf('<w:p ', tcStart);
-    if (pSelf !== -1 && pSelf < tcEnd) {
-      var pSelfEnd = xml.indexOf('/>', pSelf) + 2;
-      if (pSelfEnd > 1 && pSelfEnd <= tcEnd) {
-        return xml.slice(0, pSelf) + cellText(valeur) + xml.slice(pSelfEnd);
-      }
+  // Construire une ligne obs en JS (meme style que le template)
+  function buildTrObs(obs, num) {
+    var type = typeLabels[obs.type] || typeLabels['obs'];
+    var desc = obs.description || '';
+    var delai = obs.delai || '';
+    var resp = obs.responsable || '';
+    var bordures = '<w:top w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/>'
+      + '<w:left w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/>'
+      + '<w:bottom w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/>'
+      + '<w:right w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/>';
+    var mar = '<w:top w:w="55" w:type="dxa"/><w:left w:w="110" w:type="dxa"/>'
+      + '<w:bottom w:w="55" w:type="dxa"/><w:right w:w="110" w:type="dxa"/>';
+
+    function tc(width, content, center) {
+      return '<w:tc><w:tcPr><w:tcW w:w="' + width + '" w:type="dxa"/>'
+        + '<w:tcBorders>' + bordures + '</w:tcBorders>'
+        + '<w:shd w:val="clear" w:color="auto" w:fill="FFFFFF"/>'
+        + '<w:tcMar>' + mar + '</w:tcMar>'
+        + '<w:vAlign w:val="center"/></w:tcPr>'
+        + content + '</w:tc>';
     }
-    // Fallback : chercher <w:p> ... </w:p>
-    var pOpen = xml.indexOf('<w:p>', tcStart);
-    if (pOpen !== -1 && pOpen < tcEnd) {
-      var pClose = xml.indexOf('</w:p>', pOpen) + 6;
-      return xml.slice(0, pOpen) + cellText(valeur) + xml.slice(pClose);
-    }
-    return xml;
+
+    // Cellule N°
+    var cNum = tc(500, '<w:p><w:pPr><w:jc w:val="center"/></w:pPr>'
+      + '<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'
+      + '<w:b/><w:bCs/><w:color w:val="000000"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr>'
+      + '<w:t>' + num + '</w:t></w:r></w:p>');
+    // Cellule Type
+    var cType = tc(2200, '<w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'
+      + '<w:sz w:val="15"/><w:szCs w:val="15"/></w:rPr>'
+      + '<w:t>' + escXml(type) + '</w:t></w:r></w:p>');
+    // Cellule Description
+    var cDesc = tc(3940, desc ? cellTexte(desc, 18) : '<w:p/>');
+    // Cellule Delai
+    var cDelai = tc(1400, delai ? cellTexte(delai, 18) : '<w:p/>');
+    // Cellule Responsable
+    var cResp = tc(1600, resp ? cellTexte(resp, 18) : '<w:p/>');
+
+    return '<w:tr>' + cNum + cType + cDesc + cDelai + cResp + '</w:tr>';
   }
 
-  // Trouver les 5 positions des ancres obs
-  var obsPositions = [];
-  var searchFrom = 0;
-  while (obsPositions.length < 5) {
-    var idx = xmlStr.indexOf(obsAncre, searchFrom);
-    if (idx === -1) break;
-    obsPositions.push(idx);
-    searchFrom = idx + 1;
+  // 1. Trouver le tableau des observations (ancre = premiere occurrence)
+  var idx1 = xmlStr.indexOf(obsAncre);
+  if (idx1 === -1) {
+    // Pas d'ancre = pas de tableau obs dans ce doc
+    zip.file('word/document.xml', xmlStr);
+    return zip;
   }
 
-  var nbObs = observations ? observations.length : 0;
+  // 2. Trouver le debut et la fin du tableau complet (<w:tbl> parent)
+  var tblStart = xmlStr.lastIndexOf('<w:tbl>', idx1);
+  var tblEnd   = xmlStr.indexOf('</w:tbl>', idx1) + 8;
 
-  // Traiter de la derniere vers la premiere
-  for (var i = obsPositions.length - 1; i >= 0; i--) {
-    var pos = obsPositions[i];
-    var trStart = xmlStr.lastIndexOf('<w:tr ', pos);
-    var trEnd = xmlStr.indexOf('</w:tr>', pos) + 7;
-    if (trStart === -1 || trEnd < trStart) continue;
+  // 3. Extraire le tableau, garder uniquement les lignes non-obs (en-tete)
+  var tblXml = xmlStr.slice(tblStart, tblEnd);
 
-    if (i >= nbObs) {
-      xmlStr = xmlStr.slice(0, trStart) + xmlStr.slice(trEnd);
-      continue;
-    }
+  // La ligne d'en-tete = premier <w:tr> (avant la premiere ancre obs)
+  var firstTrEnd = tblXml.indexOf('</w:tr>') + 7;
+  var entete = tblXml.slice(0, firstTrEnd); // tblPr + premiere tr (header)
 
-    var obs = observations[i];
-
-    // Remplacer le type (checkbox)
-    var newType = typeLabels[obs.type] || typeLabels['obs'];
-    xmlStr = xmlStr.slice(0, pos) + newType + xmlStr.slice(pos + obsAncre.length);
-    var posApres = pos + newType.length;
-
-    // Naviguer vers cellules description(2) delai(3) responsable(4)
-    // Toujours recalculer depuis posApres pour eviter decalages
-    function getCells(xml, from) {
-      var t1e  = xml.indexOf('</w:tc>', from);
-      var t2s  = xml.indexOf('<w:tc>', t1e);  var t2e = xml.indexOf('</w:tc>', t2s);
-      var t3s  = xml.indexOf('<w:tc>', t2e);  var t3e = xml.indexOf('</w:tc>', t3s);
-      var t4s  = xml.indexOf('<w:tc>', t3e);  var t4e = xml.indexOf('</w:tc>', t4s);
-      return { t2s:t2s, t2e:t2e, t3s:t3s, t3e:t3e, t4s:t4s, t4e:t4e };
-    }
-
-    // Injecter du plus loin au plus proche (evite decalages)
-    var cells = getCells(xmlStr, posApres);
-    if (obs.responsable) {
-      xmlStr = injecterDansCellule(xmlStr, cells.t4s, cells.t4e, obs.responsable);
-      cells = getCells(xmlStr, posApres);
-    }
-    if (obs.delai) {
-      xmlStr = injecterDansCellule(xmlStr, cells.t3s, cells.t3e, obs.delai);
-      cells = getCells(xmlStr, posApres);
-    }
-    if (obs.description) {
-      xmlStr = injecterDansCellule(xmlStr, cells.t2s, cells.t2e, obs.description);
-    }
+  // 4. Construire le nouveau tableau avec autant de lignes que d'obs
+  var newTbl = entete;
+  for (var i = 0; i < nbObs; i++) {
+    newTbl += buildTrObs(observations[i], i + 1);
   }
+  newTbl += '</w:tbl>';
+
+  // 5. Remplacer l'ancien tableau par le nouveau
+  xmlStr = xmlStr.slice(0, tblStart) + newTbl + xmlStr.slice(tblEnd);
 
   zip.file('word/document.xml', xmlStr);
   return zip;
