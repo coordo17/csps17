@@ -1421,7 +1421,7 @@ function injecterPhotos(zip, photos, legendes) {
         return xml;
       }
     }
-    var imgXml = '<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r>' + makePhotoXml(rid, 2952756, 2214567) + '</w:r></w:p>';
+    var imgXml = '<w:p><w:pPr><w:jc w:val="center"/></w:pPr>' + makePhotoXml(rid, 2952756, 2214567) + '</w:p>';
     if (legende) {
       imgXml += '<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'
         + '<w:i/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr>'
@@ -1520,7 +1520,7 @@ function injecterPhotos(zip, photos, legendes) {
       var leg1 = legendes[p] || ('Photo ' + (p+1));
 
       var cellG = '<w:tc><w:tcPr><w:tcW w:w="4819" w:type="dxa"/></w:tcPr>'
-        + '<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r>' + makePhotoXml(rid1x, 2700000, 2025000) + '</w:r></w:p>'
+        + '<w:p><w:pPr><w:jc w:val="center"/></w:pPr>' + makePhotoXml(rid1x, 2700000, 2025000) + '</w:p>'
         + '<w:p><w:r><w:rPr><w:i/><w:sz w:val="16"/></w:rPr><w:t>' + leg1.substring(0,60).replace(/&/g,'&amp;') + '</w:t></w:r></w:p>'
         + '</w:tc>';
 
@@ -1530,7 +1530,7 @@ function injecterPhotos(zip, photos, legendes) {
         addImage(rid2x, photos[p+1]);
         var leg2 = legendes[p+1] || ('Photo ' + (p+2));
         cellD = '<w:tc><w:tcPr><w:tcW w:w="4819" w:type="dxa"/></w:tcPr>'
-          + '<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r>' + makePhotoXml(rid2x, 2700000, 2025000) + '</w:r></w:p>'
+          + '<w:p><w:pPr><w:jc w:val="center"/></w:pPr>' + makePhotoXml(rid2x, 2700000, 2025000) + '</w:p>'
           + '<w:p><w:r><w:rPr><w:i/><w:sz w:val="16"/></w:rPr><w:t>' + leg2.substring(0,60).replace(/&/g,'&amp;') + '</w:t></w:r></w:p>'
           + '</w:tc>';
       } else {
@@ -1555,6 +1555,92 @@ function injecterPhotos(zip, photos, legendes) {
   zip.file('[Content_Types].xml', ctStr);
   return zip;
 }
+function injecterSignatures(zip, sigCsps, sigEnt, sigEU) {
+  var docFile = zip.file('word/document.xml');
+  if (!docFile) return zip;
+  var xmlStr = docFile.asText();
+  var relsFile = zip.file('word/_rels/document.xml.rels');
+  var relsStr = relsFile ? relsFile.asText() : '';
+  var ctFile = zip.file('[Content_Types].xml');
+  var ctStr = ctFile ? ctFile.asText() : '';
+  var nextRid = 100;
+
+  function makeImgXml(rid) {
+    return '<w:r><w:drawing>'
+      + '<wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" distT="0" distB="0" distL="0" distR="0">'
+      + '<wp:extent cx="1800000" cy="500000"/><wp:effectExtent l="0" t="0" r="0" b="0"/>'
+      + '<wp:docPr id="' + rid + '" name="sig' + rid + '"/>'
+      + '<wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr>'
+      + '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+      + '<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+      + '<pic:nvPicPr><pic:cNvPr id="' + rid + '" name="sig' + rid + '"/><pic:cNvPicPr/></pic:nvPicPr>'
+      + '<pic:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rId' + rid + '"/>'
+      + '<a:stretch><a:fillRect/></a:stretch></pic:blipFill>'
+      + '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1800000" cy="500000"/></a:xfrm>'
+      + '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>'
+      + '</pic:pic></a:graphicData></a:graphic></wp:inline>'
+      + '</w:drawing></w:r>';
+  }
+
+  function addImg(sigDataUrl, rid) {
+    if (!sigDataUrl) return false;
+    var base64 = sigDataUrl.split(',')[1];
+    var imgBytes = atob(base64);
+    var arr = new Uint8Array(imgBytes.length);
+    for (var i = 0; i < imgBytes.length; i++) arr[i] = imgBytes.charCodeAt(i);
+    zip.file('word/media/sig' + rid + '.png', arr);
+    var relXml = '<Relationship Id="rId' + rid + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/sig' + rid + '.png"/>';
+    relsStr = relsStr.replace('</Relationships>', relXml + '</Relationships>');
+    if (ctStr.indexOf('image/png') === -1) {
+      ctStr = ctStr.replace('</Types>', '<Default Extension="png" ContentType="image/png"/></Types>');
+    }
+    return true;
+  }
+
+  var sigTarget = 'Signature :</w:t></w:r>';
+  var sigImgCSPS = null, sigImgEnt = null;
+
+  if (sigCsps && addImg(sigCsps, nextRid)) { sigImgCSPS = makeImgXml(nextRid); nextRid++; }
+  if (sigEnt && addImg(sigEnt, nextRid)) { sigImgEnt = makeImgXml(nextRid); nextRid++; }
+
+  var allSigPos = [];
+  var searchFrom = 0;
+  while (true) {
+    var p = xmlStr.indexOf(sigTarget, searchFrom);
+    if (p === -1) break;
+    allSigPos.push(p);
+    searchFrom = p + 1;
+  }
+
+  if (sigImgEnt && allSigPos.length >= 2) {
+    var p2 = allSigPos[1];
+    xmlStr = xmlStr.slice(0, p2 + sigTarget.length) + sigImgEnt + xmlStr.slice(p2 + sigTarget.length);
+  }
+  if (sigImgCSPS && allSigPos.length >= 1) {
+    var p1 = allSigPos[0];
+    xmlStr = xmlStr.slice(0, p1 + sigTarget.length) + sigImgCSPS + xmlStr.slice(p1 + sigTarget.length);
+  }
+
+  if (sigEU && addImg(sigEU, nextRid)) {
+    var sigImgEU = makeImgXml(nextRid);
+    nextRid++;
+    var ancreEU = 'Nom : Qualité : Signature :';
+    var idxEU = xmlStr.indexOf(ancreEU);
+    if (idxEU !== -1) {
+      var euTarget = '</w:t></w:r>';
+      var idxSigEU = xmlStr.indexOf(euTarget, idxEU);
+      if (idxSigEU !== -1) {
+        xmlStr = xmlStr.slice(0, idxSigEU + euTarget.length) + sigImgEU + xmlStr.slice(idxSigEU + euTarget.length);
+      }
+    }
+  }
+
+  zip.file('word/document.xml', xmlStr);
+  zip.file('word/_rels/document.xml.rels', relsStr);
+  zip.file('[Content_Types].xml', ctStr);
+  return zip;
+}
+
 function cocherRisques(xmlStr, risques) {
   if (!risques) return xmlStr;
   // Amiante/plomb
