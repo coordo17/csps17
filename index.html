@@ -1091,7 +1091,17 @@ function addEntreprise(type) {
     + '<div class="field"><label>Email</label><input type="email" class="ent-mail" placeholder="contact@entreprise.fr"></div>'
     + '</div>'
     + '<div class="form-row">'
+    + '<div class="field"><label>Adresse</label><input type="text" class="ent-adresse" placeholder="Adresse complete"></div>'
+    + '</div>'
+    + '<div class="form-row">'
+    + '<div class="field"><label>Tel portable</label><input type="tel" class="ent-tel-portable" placeholder="06 xx xx xx xx"></div>'
+    + '<div class="field"><label>Tel fixe</label><input type="tel" class="ent-tel-fixe" placeholder="02 xx xx xx xx"></div>'
+    + '</div>'
+    + '<div class="form-row">'
+    + '<div class="field"><label>Compagnon referent</label><input type="text" class="ent-compagnon" placeholder="Nom du compagnon referent"></div>'
     + '<div class="field"><label>Representant salarie (CSE)</label><input type="text" class="ent-rs" placeholder="Nom du representant salarie"></div>'
+    + '</div>'
+    + '<div class="form-row">'
     + '<div class="field"><label>Effectif prevu sur chantier</label><input type="number" class="ent-effectif" placeholder="Ex : 4" min="1"></div>'
     + '</div>'
     + '</div>';
@@ -1119,8 +1129,12 @@ function collectFormData() {
       contact: card.querySelector('.ent-contact').value,
       tel: card.querySelector('.ent-tel').value,
       mail: card.querySelector('.ent-mail').value,
-      rs: card.querySelector('.ent-rs').value,
+      rs: card.querySelector('.ent-rs') ? card.querySelector('.ent-rs').value : '',
       effectif: card.querySelector('.ent-effectif').value,
+      adresse: card.querySelector('.ent-adresse') ? card.querySelector('.ent-adresse').value : '',
+      telPortable: card.querySelector('.ent-tel-portable') ? card.querySelector('.ent-tel-portable').value : '',
+      telFixe: card.querySelector('.ent-tel-fixe') ? card.querySelector('.ent-tel-fixe').value : '',
+      compagnon: card.querySelector('.ent-compagnon') ? card.querySelector('.ent-compagnon').value : '',
     });
   });
   return {
@@ -1217,9 +1231,11 @@ function loadAffaire(id) {
     addEntreprise(ent.type);
     var cards = document.querySelectorAll('#entreprise-list .entreprise-card');
     var last = cards[cards.length-1];
-    ['nom','siret','lot','contact','tel','mail','rs','effectif'].forEach(function(f){
+    ['nom','siret','lot','contact','tel','mail','rs','effectif','adresse','compagnon'].forEach(function(f){
       var el=last.querySelector('.ent-'+f); if(el) el.value=ent[f]||'';
     });
+    var elTP = last.querySelector('.ent-tel-portable'); if(elTP) elTP.value = ent.telPortable||'';
+    var elTF = last.querySelector('.ent-tel-fixe'); if(elTF) elTF.value = ent.telFixe||'';
   });
   document.getElementById('gen-progress').classList.remove('show');
   switchTabDirect('chantier');
@@ -1459,6 +1475,8 @@ function buildTagData(data) {
     ent_contact:      (data._entreprise && data._entreprise.contact) ? data._entreprise.contact : '',
     ent_tel:          (data._entreprise && data._entreprise.tel) ? data._entreprise.tel : '',
     ent_lot:          (data._entreprise && data._entreprise.lot) ? data._entreprise.lot : '',
+    ent_compagnon:    (data._entreprise && data._entreprise.compagnon) ? data._entreprise.compagnon : '',
+    ent_adresse:      (data._entreprise && data._entreprise.adresse) ? data._entreprise.adresse : '',
   };
 }
 
