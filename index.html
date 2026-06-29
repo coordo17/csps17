@@ -2201,7 +2201,8 @@ async function generateDoc(ref) {
   }
   // Adapter le template FIC selon la categorie
   var refEffectif = ref;
-  if (ref === 'FIC' && currentCat === 3) refEffectif = 'FIC3';
+  var isCat3 = (currentCat === 3) || (terrainAffaire && terrainAffaire.cat === 3);
+  if (ref === 'FIC' && isCat3) refEffectif = 'FIC3';
   var fname = DOC_FILES[refEffectif] || DOC_FILES[ref];
   if (!fname) { showToast('Document inconnu : ' + ref, 'error'); return; }
   showToast('Generation ' + ref + ' en cours...');
@@ -2226,7 +2227,7 @@ async function generateDoc(ref) {
     if (ref === 'FIC' && typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire._ficData) {
       finalZip = injecterFIC(finalZip, terrainAffaire._ficData);
       // Injecter les risques IMP/EX dynamiques (Cat.3 uniquement)
-      if (terrainAffaire.cat === 3 && terrainAffaire._ficData.risquesIC && terrainAffaire._ficData.risquesIC.length) {
+      if (isCat3 && terrainAffaire._ficData.risquesIC && terrainAffaire._ficData.risquesIC.length) {
         finalZip = injecterRisquesIC(finalZip, terrainAffaire._ficData.risquesIC);
       }
     }
@@ -3244,22 +3245,27 @@ async function genererDocTerrain() {
   if (ref === 'FIC') {
     entData = {
       nom: getVal('fic-ent-nom'), contact: getVal('fic-ent-contact'),
-      tel: getVal('fic-ent-tel'), lot: getVal('fic-ent-lot'), siret: getVal('fic-ent-siret'),
+      tel: getVal('fic-ent-tel'), lot: getVal('fic-ent-lot'),
     };
     visiteData = { noVisite: '1', heure: getVal('fic-heure'), dateIC: getVal('fic-date') };
     // Collecter toutes les donnees FIC pour injection
+    // entNom : priorite champ terrain, sinon fallback entreprise de l'affaire
+    var entNomVal = getVal('fic-ent-nom') || (terrainAffaire._entreprise && terrainAffaire._entreprise.nom) || '';
+    var entTelVal = getVal('fic-ent-tel') || (terrainAffaire._entreprise && terrainAffaire._entreprise.tel) || '';
+    var entMailVal = getVal('fic-ent-mail') || (terrainAffaire._entreprise && terrainAffaire._entreprise.mail) || '';
+    var entTelMail = [entTelVal, entMailVal].filter(Boolean).join(' | ');
     terrainAffaire._ficData = {
       dateIC:        getVal('fic-date'),
       dateFin:       getVal('fic-ent-periode'),
-      effectif:      getVal('fic-ent-effectif'),
+      effectif:      getVal('fic-ent-effectif') || (terrainAffaire._entreprise && terrainAffaire._entreprise.effectif) || '',
       categorie:     terrainAffaire.cat,
       pgcStatut:     'remis',
       // Entreprise
-      entNom:        getVal('fic-ent-nom'),
-      entContact:    getVal('fic-ent-contact'),
-      entTelMailSiret: getVal('fic-ent-tel') + (getVal('fic-ent-siret') ? ' | SIRET ' + getVal('fic-ent-siret') : ''),
+      entNom:        entNomVal,
+      entContact:    getVal('fic-ent-contact') || (terrainAffaire._entreprise && terrainAffaire._entreprise.contact) || '',
+      entTelMailSiret: entTelMail,
       entCompagnon:  getVal('fic-ent-ref'),
-      entLot:        getVal('fic-ent-lot'),
+      entLot:        getVal('fic-ent-lot') || (terrainAffaire._entreprise && terrainAffaire._entreprise.lot) || '',
       entPeriode:    getVal('fic-ent-periode') + (getVal('fic-ent-effectif') ? ' — ' + getVal('fic-ent-effectif') + ' pers.' : ''),
       // EU
       euNom:         getVal('fic-eu-nom'),
