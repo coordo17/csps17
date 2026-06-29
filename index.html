@@ -1127,6 +1127,7 @@ function collectFormData() {
       reseaux: document.getElementById('rp-reseaux').checked,
       hauteur: document.getElementById('rp-hauteur').checked,
     },
+    risques_pgc: window._risquesPGC || null,
     moa: { nom: document.getElementById('moa-nom').value, contact: document.getElementById('moa-contact').value, adresse: document.getElementById('moa-adresse').value, tel: document.getElementById('moa-tel').value, mail: document.getElementById('moa-mail').value },
     moe: { nom: document.getElementById('moe-nom').value, contact: document.getElementById('moe-contact').value, adresse: document.getElementById('moe-adresse').value, tel: document.getElementById('moe-tel').value, mail: document.getElementById('moe-mail').value },
     cspsc: { nom: document.getElementById('cspsc-nom').value, tel: document.getElementById('cspsc-tel').value, mail: document.getElementById('cspsc-mail').value },
@@ -2215,7 +2216,7 @@ async function processPGCFile(file) {
     }
     pdfText = pdfText.slice(0, 12000);
 
-    var prompt = 'Voici le contenu d\'un PGC SPS :\n\n' + pdfText + '\n\nExtrais les informations suivantes et reponds UNIQUEMENT en JSON valide, sans markdown ni backtick :\n{"chantier_nom":"...","chantier_adresse":"...","chantier_nature":"...","chantier_debut":"...","chantier_duree":"...","categorie":1,"moa_nom":"...","moa_contact":"...","moa_adresse":"...","moa_tel":"...","moa_mail":"...","moe_nom":"...","moe_contact":"...","cspsc_nom":"...","cspsc_tel":"...","cspsc_mail":"...","dreets_nom":"...","dreets_adresse":"...","carsat_nom":"...","carsat_adresse":"...","oppbtp_nom":"...","oppbtp_adresse":"...","rp_amiante":false,"rp_plomb":false,"rp_demolition":false,"rp_reseaux":false}\nMet null pour les champs non trouves.';
+    var prompt = 'Voici le contenu d\'un PGC SPS :\n\n' + pdfText + '\n\nExtrais les informations suivantes et reponds UNIQUEMENT en JSON valide, sans markdown ni backtick :\n{"chantier_nom":"...","chantier_adresse":"...","chantier_nature":"...","chantier_debut":"...","chantier_duree":"...","categorie":1,"moa_nom":"...","moa_contact":"...","moa_adresse":"...","moa_tel":"...","moa_mail":"...","moe_nom":"...","moe_contact":"...","cspsc_nom":"...","cspsc_tel":"...","cspsc_mail":"...","dreets_nom":"...","dreets_adresse":"...","carsat_nom":"...","carsat_adresse":"...","oppbtp_nom":"...","oppbtp_adresse":"...","rp_amiante":false,"rp_plomb":false,"rp_demolition":false,"rp_reseaux":false,"risques_pgc":{"r1":false,"r2":false,"r3":false,"r4":false,"r5":false,"r6":false,"r7":false,"r8":false,"r9":false,"r10":false,"r11":false,"r12":false,"r13":false,"r14":false,"r15":false,"r16":false,"r17":false,"r18":false,"r19":false,"r20":false,"r21":false,"r22":false,"r23":false,"r24":false,"r25":false,"r26":false}}\nPour risques_pgc: r1=chute hauteur>3m, r2=ensevelissement, r3=substances chimiques/biologiques, r4=amiante, r5=radiations ionisantes, r6=travaux sous tension/HTB, r7=noyade, r8=puits/souterrains/tunnels, r9=plongee, r10=hyperbare, r11=demolition>200m3, r12=explosifs, r13=prefabriques lourds, r14=levage>60tm, r15=chute plain-pied, r16=projections/chutes materiaux, r17=incendie/points chauds, r18=manutention/TMS, r19=bruit, r20=poussieres, r21=produits dangereux/CMR, r22=engins/vehicules, r23=coupures/outils, r24=coactivite, r25=canicule, r26=autres. Met true si le risque est identifie dans le PGC. Met null pour les champs texte non trouves.';
 
     var response = await fetch('/api/claude', {
       method: 'POST',
@@ -2290,6 +2291,7 @@ function applyExtracted() {
   if (d.rp_plomb) document.getElementById('rp-plomb').checked = true;
   if (d.rp_demolition) document.getElementById('rp-demolition').checked = true;
   if (d.rp_reseaux) document.getElementById('rp-reseaux').checked = true;
+  if (d.risques_pgc) window._risquesPGC = d.risques_pgc;
   showPage('form');
   showToast('Donnees importees depuis le PGC', 'success');
 }
@@ -2409,6 +2411,11 @@ function ouvrirFormulaireDoc(ref) {
   document.getElementById('terrain-step-select').style.display = 'none';
   document.getElementById('terrain-doc-form').style.display = 'block';
   window.scrollTo(0, 0);
+
+  // Init widget risques si FIC
+  if (ref === 'FIC') {
+    setTimeout(function() { initRisquesWidget(); }, 50);
+  }
 
   setTimeout(function() {
     initSigCanvas('sig-canvas-ent', 'ent');
@@ -2559,25 +2566,21 @@ function genFormulaireFIC() {
   html2 += fieldRow('Observations reseaux', 'fic-res-obs', 'textarea', 'Precisions...', '');
   html2 += sectionEnd();
 
-  // Section 7 - Analyse risques
+  // Section 7 - Analyse risques IMP/EX
   html2 += sectionHeader('7', 'Analyse des risques — Interferences', '&#9888;');
-  html2 += '<p style="font-size:12px;color:var(--text-light);margin-bottom:8px;">Co-activite EU/EE :</p>';
-  html2 += checkRow('Interference engins / pietons', 'fic-rq-engins', risques.terrassement || false);
-  html2 += checkRow('Fouille ouverte > 1,30m sans blindage', 'fic-rq-fouille', risques.terrassement || false);
-  html2 += checkRow('Levage en survol zones adjacentes', 'fic-rq-levage', false);
-  html2 += checkRow('Bruit / poussieres affectant les autres', 'fic-rq-bruit', false);
-  html2 += checkRow('Co-activite avec public / commerce', 'fic-rq-public', false);
-  html2 += '<p style="font-size:12px;color:var(--text-light);margin:8px 0;">Risques importes par l\'EE :</p>';
-  html2 += checkRow('Engins → collision / ecrasement', 'fic-rq-collision', risques.terrassement || false);
-  html2 += checkRow('Tranchee → chute / ensevelissement', 'fic-rq-tranchee', risques.terrassement || false);
-  html2 += checkRow('Produits chimiques → incendie / pollution', 'fic-rq-chimie', false);
-  html2 += checkRow('Levage charges lourdes', 'fic-rq-levage2', false);
-  html2 += checkRow('Travail en hauteur > 2m', 'fic-rq-hauteur', risques.hauteur || false);
-  html2 += checkRow('Milieu confine → asphyxie', 'fic-rq-confine', false);
-  html2 += '<p style="font-size:12px;color:var(--text-light);margin:8px 0;">Risques exporte par l\'EU :</p>';
-  html2 += checkRow('Amiante / plomb (structures a demolir)', 'fic-rq-amiante', risques.amiante || risques.plomb || false);
-  html2 += checkRow('Reseaux actifs dans la zone de travaux (eau, gaz, elec, telecom)', 'fic-rq-reseaux', risques.reseaux || false);
-  html2 += checkRow('Produits dangereux stockes sur site EU', 'fic-rq-produits', false);
+  html2 += '<p style="font-size:12px;color:var(--text-light);margin-bottom:10px;">Cochez le risque pour l\'activer, puis qualifiez R.IMP et/ou R.EX. Les risques pre-coches proviennent du PGC.</p>';
+  html2 += '<div id="risques-widget">';
+  html2 += '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+  html2 += '<thead><tr style="background:var(--surface-1);">';
+  html2 += '<th style="width:32px;padding:6px 8px;border:0.5px solid var(--border);">&#9635;</th>';
+  html2 += '<th style="padding:6px 8px;border:0.5px solid var(--border);text-align:left;">Risque identifie</th>';
+  html2 += '<th style="width:64px;padding:6px 8px;border:0.5px solid var(--border);font-size:11px;">Ref.</th>';
+  html2 += '<th style="width:50px;padding:6px 8px;border:0.5px solid var(--border);text-align:center;">R.IMP</th>';
+  html2 += '<th style="width:50px;padding:6px 8px;border:0.5px solid var(--border);text-align:center;">R.EX</th>';
+  html2 += '</tr></thead><tbody id="risques-tbody"></tbody></table>';
+  html2 += '<div style="margin-top:8px;font-size:12px;color:var(--text-secondary);display:flex;gap:12px;">';
+  html2 += '<span>Coches : <b id="cnt-rq">0</b></span><span>R.IMP : <b id="cnt-imp">0</b></span><span>R.EX : <b id="cnt-ex">0</b></span></div>';
+  html2 += '</div>';
   html2 += fieldRow('Observations risques', 'fic-rq-obs', 'textarea', 'Precisions, mesures complementaires...', '');
   html2 += sectionEnd();
 
@@ -2962,6 +2965,102 @@ function terrainRemplirEntreprise(idx) {
 }
 
 // ── CANVAS SIGNATURES ────────────────────────────────────────────
+function initRisquesWidget() {
+  var tbody = document.getElementById('risques-tbody');
+  if (!tbody) return;
+  var pgc = (typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire.risques_pgc) ? terrainAffaire.risques_pgc : (window._risquesPGC || {});
+
+  var RISQUES = [
+    {sep:'Risques particuliers reglementaires — Arrete 25/02/2003'},
+    {id:'r1',  label:'Chute de hauteur > 3 m',                         ref:'Pt.1',  loi:true},
+    {id:'r2',  label:'Ensevelissement / enlisement',                    ref:'Pt.1',  loi:true},
+    {id:'r3',  label:'Substances chimiques / agents biologiques',       ref:'Pt.2',  loi:true},
+    {id:'r4',  label:'Amiante — retrait ou confinement',               ref:'Pt.3',  loi:true},
+    {id:'r5',  label:'Radiations ionisantes',                           ref:'Pt.4',  loi:true},
+    {id:'r6',  label:'Travaux sous tension / HTB (reseaux elec.)',      ref:'Pt.5',  loi:true},
+    {id:'r7',  label:'Risque de noyade',                                ref:'Pt.6',  loi:true},
+    {id:'r8',  label:'Puits / terrassements souterrains / tunnels',     ref:'Pt.7',  loi:true},
+    {id:'r9',  label:'Travaux en plongee appareillee',                  ref:'Pt.8',  loi:true},
+    {id:'r10', label:'Milieu hyperbare',                                ref:'Pt.9',  loi:true},
+    {id:'r11', label:'Demolition / deconstruction > 200 m3',           ref:'Pt.10', loi:true},
+    {id:'r12', label:'Travaux avec explosifs',                          ref:'Pt.11', loi:true},
+    {id:'r13', label:'Montage / demontage elements prefabriques lourds',ref:'Pt.12', loi:true},
+    {id:'r14', label:'Levage lourd > 60 t/m',                          ref:'Pt.13', loi:true},
+    {sep:'Risques courants BTP'},
+    {id:'r15', label:'Chute de plain-pied',                            ref:'BTP',   loi:false},
+    {id:'r16', label:'Projections / Chutes de materiaux',              ref:'BTP',   loi:false},
+    {id:'r17', label:'Points Chauds / Incendie',                       ref:'BTP',   loi:false},
+    {id:'r18', label:'Manutention manuelle / TMS',                     ref:'BTP',   loi:false},
+    {id:'r19', label:'Bruit',                                          ref:'BTP',   loi:false},
+    {id:'r20', label:'Poussieres (hors amiante)',                      ref:'BTP',   loi:false},
+    {id:'r21', label:'Produits dangereux / CMR (hors surv. medicale)', ref:'BTP',   loi:false},
+    {id:'r22', label:'Engins / heurt de vehicules',                    ref:'BTP',   loi:false},
+    {id:'r23', label:'Coupures / blessures outils',                    ref:'BTP',   loi:false},
+    {id:'r24', label:'Coactivite / superposition de taches',           ref:'BTP',   loi:false},
+    {id:'r25', label:'Risque Canicule (decret 2025-482)',              ref:'BTP',   loi:false},
+    {id:'r26', label:'AUTRES — precision entreprise',                  ref:'BTP',   loi:false},
+  ];
+
+  var html = '';
+  RISQUES.forEach(function(r) {
+    if (r.sep) {
+      html += '<tr><td colspan="5" style="font-size:11px;font-weight:500;padding:4px 8px;background:var(--surface-1);color:var(--text-muted);border:0.5px solid var(--border);">— ' + r.sep + '</td></tr>';
+      return;
+    }
+    var pre = pgc[r.id] ? true : false;
+    var badgeStyle = r.loi
+      ? 'background:var(--bg-danger);color:var(--text-danger);'
+      : 'background:var(--bg-success);color:var(--text-success);';
+    html += '<tr id="rqrow-' + r.id + '" style="' + (pre ? 'background:var(--bg-accent);' : '') + '">';
+    html += '<td style="border:0.5px solid var(--border);padding:4px 8px;text-align:center;"><input type="checkbox" id="rq-' + r.id + '" ' + (pre ? 'checked' : '') + ' onchange="toggleRQ(\'' + r.id + '\')" style="width:15px;height:15px;"></td>';
+    html += '<td style="border:0.5px solid var(--border);padding:4px 8px;font-size:13px;" id="rqlbl-' + r.id + '">' + r.label + '</td>';
+    html += '<td style="border:0.5px solid var(--border);padding:4px 8px;"><span style="font-size:10px;padding:1px 5px;border-radius:4px;' + badgeStyle + '">' + r.ref + '</span></td>';
+    html += '<td style="border:0.5px solid var(--border);padding:4px 8px;text-align:center;"><input type="checkbox" id="imp-' + r.id + '" ' + (!pre ? 'disabled' : '') + ' onchange="countRQ()" style="width:15px;height:15px;' + (!pre ? 'opacity:0.25;' : '') + '"></td>';
+    html += '<td style="border:0.5px solid var(--border);padding:4px 8px;text-align:center;"><input type="checkbox" id="ex-' + r.id + '" ' + (!pre ? 'disabled' : '') + ' onchange="countRQ()" style="width:15px;height:15px;' + (!pre ? 'opacity:0.25;' : '') + '"></td>';
+    html += '</tr>';
+  });
+  tbody.innerHTML = html;
+  countRQ();
+}
+
+function toggleRQ(id) {
+  var chk = document.getElementById('rq-' + id);
+  var imp = document.getElementById('imp-' + id);
+  var ex  = document.getElementById('ex-' + id);
+  var row = document.getElementById('rqrow-' + id);
+  var on  = chk.checked;
+  imp.disabled = !on; imp.style.opacity = on ? '1' : '0.25';
+  ex.disabled  = !on; ex.style.opacity  = on ? '1' : '0.25';
+  if (!on) { imp.checked = false; ex.checked = false; }
+  row.style.background = on ? 'var(--bg-accent)' : '';
+  countRQ();
+}
+
+function countRQ() {
+  var RISQUES_IDS = ['r1','r2','r3','r4','r5','r6','r7','r8','r9','r10','r11','r12','r13','r14','r15','r16','r17','r18','r19','r20','r21','r22','r23','r24','r25','r26'];
+  var cr = 0, ci = 0, ce = 0;
+  var data = [];
+  RISQUES_IDS.forEach(function(id) {
+    var chk = document.getElementById('rq-' + id);
+    if (!chk) return;
+    if (chk.checked) {
+      cr++;
+      var imp = document.getElementById('imp-' + id).checked;
+      var ex  = document.getElementById('ex-' + id).checked;
+      if (imp) ci++;
+      if (ex) ce++;
+      data.push({ id: id, imp: imp, ex: ex });
+    }
+  });
+  var elR = document.getElementById('cnt-rq');
+  var elI = document.getElementById('cnt-imp');
+  var elE = document.getElementById('cnt-ex');
+  if (elR) elR.textContent = cr;
+  if (elI) elI.textContent = ci;
+  if (elE) elE.textContent = ce;
+  window._risquesICData = data;
+}
+
 function initSigCanvas(canvasId, key) {
   var canvas = document.getElementById(canvasId);
   if (!canvas) return;
@@ -3061,6 +3160,9 @@ async function genererDocTerrain() {
       cat3_secours:       getVal('fic-cat3-secours'),
       freqVisites:   getVal('fic-obs-freq'),
       freqReunions:  getVal('fic-obs-reunion'),
+      // Risques IMP/EX
+      risquesIC:     window._risquesICData || [],
+      obsRisques:    getVal('fic-rq-obs'),
     };
   } else if (ref === 'VIS') {
     // Recuperer la premiere entreprise de la liste
