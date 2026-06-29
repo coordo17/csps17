@@ -1530,6 +1530,128 @@ function injecterFIC(zip, ficData) {
   return zip;
 }
 
+function injecterRisquesIC(zip, risquesIC) {
+  if (!risquesIC || !risquesIC.length) return zip;
+  var docFile = zip.file('word/document.xml');
+  if (!docFile) return zip;
+  var xmlStr = docFile.asText();
+
+  // Définition complète des risques avec leurs situations et mesures pré-remplies
+  var RISQUES_DEF = {
+    r1:  { label: 'Chute de Hauteur',                   situations: ['☐ Travail sur échafaudage', '☐ Baies ouvertes sur le vide', '☐ Travaux sous plafond (Faux plafond/Réseaux)', '☐ AUTRES'], mesures: ['• Utilisation de PIRL, échafaudage de pieds ou roulants conforme à la réglementation avec personnel formé.', '• L\'utilisation des échelles et escabeaux comme postes de travail est strictement interdite.', '• Habilitations électriques à jour requises pour tout le personnel (si intervention sur réseaux).', '• Mutualisation de l\'échafaudage de l\'ITE validée après contrôle d\'adéquation.'] },
+    r2:  { label: 'Ensevelissement / Enlisement',        situations: ['☐ Fouille > 1,30m', '☐ Tranchée non blindée'], mesures: ['• Blindage ou talutage obligatoire pour toute fouille > 1,30m.', '• Accès interdit à toute personne non autorisée dans les zones de fouille.'] },
+    r3:  { label: 'Substances chimiques / Biologiques',  situations: ['☐ Produits chimiques utilisés', '☐ Agents biologiques'], mesures: ['• FDS disponibles sur le poste de travail.', '• EPI adaptés obligatoires (gants, masque, lunettes).'] },
+    r4:  { label: 'Amiante — retrait / confinement',     situations: ['☐ Retrait amiante friable', '☐ Confinement'], mesures: ['• Rapport SS4 obligatoire avant intervention.', '• Procédure de décontamination stricte.', '• EPI niveau 3 obligatoires.'] },
+    r5:  { label: 'Radiations ionisantes',               situations: ['☐ Zone contrôlée', '☐ Zone surveillée'], mesures: ['• Dosimétrie obligatoire pour tout intervenant.', '• Accès réservé aux personnels habilités.'] },
+    r6:  { label: 'Réseaux & Électricité',               situations: ['☑ Intervention en plénum (Électricité/Plomberie)', '☐ Intervention sur réseau'], mesures: ['• Câbles de chantier provisoires impérativement fixés en hauteur.', '• Consignation stricte des circuits lors des phases d\'essais.', '• Habilitations électriques à jour requises pour tout le personnel.'] },
+    r7:  { label: 'Risque de noyade',                    situations: ['☐ Travaux à proximité eau', '☐ Traversée cours d\'eau'], mesures: ['• Gilet de sauvetage obligatoire.', '• Dispositif de récupération en place.'] },
+    r8:  { label: 'Puits / Souterrains / Tunnels',       situations: ['☐ Puits', '☐ Galerie souterraine', '☐ Tunnel'], mesures: ['• Ventilation obligatoire.', '• Détection gaz avant entrée.', '• Équipier de sécurité en surface.'] },
+    r9:  { label: 'Travaux en plongée appareillée',      situations: ['☐ Plongée en scaphandre'], mesures: ['• Équipe de plongée certifiée.', '• Médecin hyperbariste désigné.'] },
+    r10: { label: 'Milieu hyperbare',                    situations: ['☐ Caisson hyperbare', '☐ Travaux subaquatiques'], mesures: ['• Personnel certifié milieu hyperbare.', '• Protocole de décompression respecté.'] },
+    r11: { label: 'Démolition / Déconstruction > 200 m³', situations: ['☐ Structures porteuses', '☐ Démolition partielle'], mesures: ['• Plan de démolition établi et visé.', '• Zone de chute balisée et interdite.', '• Périmètre de sécurité maintenu.'] },
+    r12: { label: 'Travaux avec explosifs',              situations: ['☐ Tir à l\'explosif', '☐ Démolition pyrotechnique'], mesures: ['• Chef de tir certifié obligatoire.', '• Périmètre de sécurité et évacuation.'] },
+    r13: { label: 'Éléments préfabriqués lourds',        situations: ['☐ Montage', '☐ Démontage'], mesures: ['• Plan de levage validé par bureau de contrôle.', '• Élingage par personnel certifié.'] },
+    r14: { label: 'Levage lourd > 60 t/m',               situations: ['☐ Grue mobile', '☐ Grue à tour'], mesures: ['• Plan de levage obligatoire.', '• Zone de survol balisée et interdite.'] },
+    r15: { label: 'Chute de Plain-pied',                 situations: ['Ensemble des travaux'], mesures: ['• Nettoyage du poste de travail.', '• Respect des zones de stockage. Pas de stockage dans les circulations.'] },
+    r16: { label: 'Projections — Chutes de matériaux',   situations: ['☐ Tous travaux'], mesures: ['• Mise en place d\'écran ou neutralisation des zones pouvant être impactées par les projections ou chutes de matériaux.'] },
+    r17: { label: 'Points Chauds / Incendie',            situations: ['☐ OUI', '☐ NON'], mesures: ['• Permis de feu obligatoire avant démarrage.', '• Présence d\'un système pour combattre le feu (extincteur portatif dédié vérifié sur le poste par exemple ou autre moyen équivalent).'] },
+    r18: { label: 'Manutention manuelle / TMS',          situations: ['☐ Charges > 25 kg', '☐ Gestes répétitifs'], mesures: ['• Aide mécanique obligatoire au-delà de 25 kg.', '• Rotation des postes si gestes répétitifs.'] },
+    r19: { label: 'Bruit',                               situations: ['☐ Outils bruyants', '☐ Engins à proximité'], mesures: ['• Protection auditive obligatoire si exposition > 80 dB.', '• Phasage des travaux bruyants si possible.'] },
+    r20: { label: 'Poussières (hors amiante)',           situations: ['☐ Découpe matériaux', '☐ Terrassement'], mesures: ['• Aspiration à la source obligatoire.', '• Masque FFP2 minimum.', '• Arrosage si poussières de chantier.'] },
+    r21: { label: 'Produits dangereux / CMR',            situations: ['☐ Solvants', '☐ Colles', '☐ Peintures'], mesures: ['• FDS disponibles sur chantier.', '• Ventilation du local de travail.', '• EPI adaptés selon FDS.'] },
+    r22: { label: 'Engins / Heurt de véhicules',         situations: ['☐ Engins de chantier', '☐ Livraisons'], mesures: ['• Séparation engins / piétons obligatoire.', '• Gilet HV obligatoire dans zones de circulation engins.', '• Vitesse limitée à 10 km/h sur chantier.'] },
+    r23: { label: 'Coupures / Blessures outils',         situations: ['☐ Outillage électroportatif', '☐ Outils tranchants'], mesures: ['• Gants anti-coupure obligatoires.', '• Vérification état des outils avant utilisation.'] },
+    r24: { label: 'Coactivité / Superposition tâches',   situations: ['☐ Activités simultanées', '☐ Zones partagées'], mesures: ['• Planning de coactivité établi et affiché.', '• La superposition des tâches est interdite.', '• Les zones de travaux devront être balisées hermétiquement.'] },
+    r25: { label: 'Risque Canicule',                     situations: ['Zone VIGILANCE ROUGE possible'], mesures: ['• Le chef d\'entreprise et le Maître d\'ouvrage doivent adopter des mesures de sauvegarde du personnel conformément décret n°2025-482 du 27 mai 2025.', '• Eau fraîche disponible en permanence.', '• Arrêt des travaux aux heures les plus chaudes si alerte rouge.'] },
+    r26: { label: 'AUTRES — Précision de l\'entreprise', situations: [''], mesures: ['• Les zones de travaux devront être balisées de façon à les rendre hermétiques aux autres corps d\'état.', '• La superposition des tâches est interdite.'] },
+  };
+
+  // Générer une <w:tr> pour chaque risque coché
+  function mkTcPr(w, fill) {
+    return '<w:tcPr><w:tcW w:w="' + w + '" w:type="dxa"/>'
+      + '<w:tcBorders>'
+      + '<w:top w:val="single" w:sz="6" w:space="0" w:color="C4C7C5"/>'
+      + '<w:left w:val="single" w:sz="6" w:space="0" w:color="C4C7C5"/>'
+      + '<w:bottom w:val="single" w:sz="6" w:space="0" w:color="C4C7C5"/>'
+      + '<w:right w:val="single" w:sz="6" w:space="0" w:color="C4C7C5"/>'
+      + '</w:tcBorders>'
+      + '<w:shd w:val="clear" w:color="auto" w:fill="' + fill + '"/>'
+      + '<w:tcMar><w:top w:w="120" w:type="dxa"/><w:left w:w="180" w:type="dxa"/>'
+      + '<w:bottom w:w="120" w:type="dxa"/><w:right w:w="180" w:type="dxa"/></w:tcMar>'
+      + '<w:vAlign w:val="center"/></w:tcPr>';
+  }
+  function mkP(text, sz, bold, italic, align, after) {
+    var pPr = (align || after) ? '<w:pPr>'
+      + (after !== undefined ? '<w:spacing w:after="' + after + '"/>' : '')
+      + (align ? '<w:jc w:val="' + align + '"/>' : '')
+      + '</w:pPr>' : '';
+    return '<w:p>' + pPr + '<w:r><w:rPr>'
+      + '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'
+      + (bold ? '<w:b/><w:bCs/>' : '')
+      + '<w:sz w:val="' + (sz||18) + '"/><w:szCs w:val="' + (sz||18) + '"/>'
+      + '</w:rPr><w:t xml:space="preserve">' + escXml(text) + '</w:t></w:r></w:p>';
+  }
+
+  function buildRow(rq, def, odd) {
+    var imp = rq.imp ? '☑' : '☐';
+    var ex  = rq.ex  ? '☑' : '☐';
+    var fill = odd ? 'FFFFFF' : 'F2F2F2';
+    // Col 1 : label + R.IMP + R.EX
+    var col1 = '<w:tc>' + mkTcPr('2200', fill)
+      + mkP(def.label, 18, true, false, '', 20)
+      + mkP('R.IMP.' + imp, 16, false, false, 'right', 20)
+      + mkP('R.EX.' + ex,  16, false, false, 'right', 20)
+      + '</w:tc>';
+    // Col 2 : situations
+    var col2 = '<w:tc>' + mkTcPr('3940', 'FFFFFF');
+    def.situations.forEach(function(s, i) {
+      col2 += mkP(s, 16, false, false, '', i < def.situations.length-1 ? 60 : 0);
+    });
+    col2 += '</w:tc>';
+    // Col 3 : mesures
+    var col3 = '<w:tc>' + mkTcPr('3500', 'FFFFFF');
+    def.mesures.forEach(function(m, i) {
+      col3 += mkP(m, 16, i===0, false, '', i < def.mesures.length-1 ? 60 : 0);
+    });
+    col3 += '</w:tc>';
+    return '<w:tr>' + col1 + col2 + col3 + '</w:tr>';
+  }
+
+  // Trouver le tableau risques (ancre = "Type de Risque" dans header bleu)
+  var tblStart = xmlStr.indexOf('Type de Risque');
+  if (tblStart === -1) return zip;
+  // Remonter au début du <w:tbl>
+  var tblOpen = xmlStr.lastIndexOf('<w:tbl>', tblStart);
+  // Trouver la fin du tableau (après "Précisions diverses")
+  var precIdx = xmlStr.indexOf('Pr&#xe9;cisions diverses', tblStart);
+  if (precIdx === -1) precIdx = xmlStr.indexOf('Précisions diverses', tblStart);
+  if (precIdx === -1) return zip;
+  var tblClose = xmlStr.indexOf('</w:tbl>', precIdx) + 8;
+
+  // Extraire header + tblPr + tblGrid (tout jusqu'à la fin du 1er <w:tr>)
+  var firstTrEnd = xmlStr.indexOf('</w:tr>', tblStart) + 7;
+  var header = xmlStr.slice(tblOpen, firstTrEnd);
+
+  // Construire les lignes dynamiques
+  var rows = '';
+  risquesIC.forEach(function(rq, i) {
+    var def = RISQUES_DEF[rq.id];
+    if (!def) return;
+    rows += buildRow(rq, def, i % 2 === 0);
+  });
+
+  // Ajouter ligne Précisions diverses (toujours présente)
+  var precTrStart = xmlStr.lastIndexOf('<w:tr>', precIdx);
+  var precTrEnd   = xmlStr.indexOf('</w:tr>', precIdx) + 7;
+  rows += xmlStr.slice(precTrStart, precTrEnd);
+
+  var newTable = header + rows + '</w:tbl>';
+  xmlStr = xmlStr.slice(0, tblOpen) + newTable + xmlStr.slice(tblClose);
+
+  zip.file('word/document.xml', xmlStr);
+  return zip;
+}
+
 
 function injecterObservations(zip, observations) {
   var docFile = zip.file('word/document.xml');
@@ -1988,7 +2110,7 @@ var DOC_FILES = {
   'RJC':         'CSPS17_Registre_Journal_Bordereau_v3_1.docx',
   'DIF':         'CSPS17_Fiche_Diffusion_PGC_v3.docx',
   'FIC':         'Fiche_IC_Vierge_CSPS17_v15.docx',
-  'FIC3':        'Fiche_IC_Cat3_CSPS17_v1.docx',
+  'FIC3':        'Fiche_IC_Cat3_CSPS17_v4.docx',
   'IC':          'CSPS17_Courrier_Transmission_IC_v2_1.docx',
   'PPP':         'CSPS17_Grille_Analyse_PPSPS_v3.docx',
   'VIS':         'CR_Visite_Chantier_CSPS17_v2.docx',
@@ -2103,6 +2225,10 @@ async function generateDoc(ref) {
     // Injecter les donnees FIC
     if (ref === 'FIC' && typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire._ficData) {
       finalZip = injecterFIC(finalZip, terrainAffaire._ficData);
+      // Injecter les risques IMP/EX dynamiques (Cat.3 uniquement)
+      if (terrainAffaire.cat === 3 && terrainAffaire._ficData.risquesIC && terrainAffaire._ficData.risquesIC.length) {
+        finalZip = injecterRisquesIC(finalZip, terrainAffaire._ficData.risquesIC);
+      }
     }
     if (data.cat || (data.risques)) {
       var docXmlFile = finalZip.file('word/document.xml');
