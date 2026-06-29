@@ -1828,7 +1828,7 @@ function genFormulaireFIC() {
   html2 += fieldRow('Categorie', 'fic-cat', 'text', '', cat ? 'Categorie ' + cat : '');
   html2 += '<div class="field" style="margin-bottom:10px;"><label>PGC SPS remis</label>'
     + '<select id="fic-pgc" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;">'
-    + '<option>Remis ce jour (lors de l'ICP)</option>'
+    + '<option>Remis ce jour lors de l\'ICP</option>'
     + '<option>Deja transmis</option>'
     + '<option>Version mise a jour</option>'
     + '</select></div>';
@@ -1870,7 +1870,7 @@ function genFormulaireFIC() {
   html2 += sectionEnd();
 
   // Section 4 - Infos prealables
-  html2 += sectionHeader('4', 'Informations prealables recues de l'EE', '&#128196;');
+  html2 += sectionHeader('4', 'Informations prealables recues de l\'EE', '&#128196;');
   html2 += checkRow('Mode operatoire detaille des travaux', 'fic-info-mo', false);
   html2 += checkRow('Autorisation de conduite / CACES', 'fic-info-caces', false);
   html2 += checkRow('Effectifs, dates et duree previsible', 'fic-info-effectif', false);
@@ -1915,16 +1915,16 @@ function genFormulaireFIC() {
   html2 += checkRow('Levage en survol zones adjacentes', 'fic-rq-levage', false);
   html2 += checkRow('Bruit / poussieres affectant les autres', 'fic-rq-bruit', false);
   html2 += checkRow('Co-activite avec public / commerce', 'fic-rq-public', false);
-  html2 += '<p style="font-size:12px;color:var(--text-light);margin:8px 0;">Risques importes par l'EE :</p>';
+  html2 += '<p style="font-size:12px;color:var(--text-light);margin:8px 0;">Risques importes par l\'EE :</p>';
   html2 += checkRow('Engins → collision / ecrasement', 'fic-rq-collision', risques.terrassement || false);
   html2 += checkRow('Tranchee → chute / ensevelissement', 'fic-rq-tranchee', risques.terrassement || false);
   html2 += checkRow('Produits chimiques → incendie / pollution', 'fic-rq-chimie', false);
   html2 += checkRow('Levage charges lourdes', 'fic-rq-levage2', false);
   html2 += checkRow('Travail en hauteur > 2m', 'fic-rq-hauteur', risques.hauteur || false);
   html2 += checkRow('Milieu confine → asphyxie', 'fic-rq-confine', false);
-  html2 += '<p style="font-size:12px;color:var(--text-light);margin:8px 0;">Risques exporte par l'EU :</p>';
+  html2 += '<p style="font-size:12px;color:var(--text-light);margin:8px 0;">Risques exporte par l\'EU :</p>';
   html2 += checkRow('Amiante / plomb (structures a demolir)', 'fic-rq-amiante', risques.amiante || risques.plomb || false);
-  html2 += checkRow('Reseaux actifs dans l'emprise', 'fic-rq-reseaux', risques.reseaux || false);
+  html2 += checkRow('Reseaux actifs dans l\'emprise', 'fic-rq-reseaux', risques.reseaux || false);
   html2 += checkRow('Produits dangereux stockes sur site EU', 'fic-rq-produits', false);
   html2 += fieldRow('Observations risques', 'fic-rq-obs', 'textarea', 'Precisions, mesures complementaires...', '');
   html2 += sectionEnd();
@@ -1968,7 +1968,7 @@ function genFormulaireFIC() {
 
   // Section 12 - Observations CSPS
   html2 += sectionHeader('12', 'Observations du CSPS', '&#128221;');
-  html2 += fieldRow('Observations / prescriptions', 'fic-obs-csps', 'textarea', 'Observations, prescriptions, points d'attention...', '');
+  html2 += fieldRow('Observations / prescriptions', 'fic-obs-csps', 'textarea', 'Observations, prescriptions...', '');
   html2 += twoCol(
     fieldRow('Frequence visites CSPS', 'fic-obs-freq', 'text', 'Ex: Mensuelle', ''),
     fieldRow('Reunions coordination', 'fic-obs-reunion', 'text', 'Ex: Bimensuelle', '')
@@ -2042,7 +2042,7 @@ function genFormulaireRCO() {
   html2 += fieldRow('Participants (un par ligne)', 'rco-participants', 'textarea', 'Nom - Entreprise - Qualite', '');
   html2 += sectionEnd();
   html2 += sectionHeader('3', 'Ordre du jour / Points abordes', '&#128221;');
-  html2 += fieldRow('Points abordes', 'rco-points', 'textarea', 'Points de l'ordre du jour...', '');
+  html2 += fieldRow('Points abordes', 'rco-points', 'textarea', 'Points de l\'ordre du jour...', '');
   html2 += sectionEnd();
   html2 += sectionHeader('4', 'Decisions et actions', '&#9989;');
   html2 += fieldRow('Decisions prises / Actions', 'rco-decisions', 'textarea', 'Actions, responsables, delais...', '');
@@ -2093,7 +2093,7 @@ function genFormulaireDGI() {
 function genFormulaireIC() {
   var today = new Date().toISOString().split('T')[0];
   var html2 = '';
-  html2 += sectionHeader('1', 'Courrier Transmission IC', '&#9993;');
+  html2 += sectionHeader('1', 'Courrier IC', '&#9993;');
   html2 += fieldRow('Date du courrier', 'ic-date', 'date', '', today);
   html2 += fieldRow('Objet', 'ic-objet', 'text', 'Transmission Fiche IC signee', 'Transmission Fiche IC signee');
   html2 += sectionEnd();
@@ -2102,7 +2102,7 @@ function genFormulaireIC() {
 
 function genFormulaireSimple(ref) {
   var today = new Date().toISOString().split('T')[0];
-  return sectionHeader('1', DOC_TITRES[ref] || ref, '&#128196;')
+  return sectionHeader('1', (DOC_TITRES[ref] || ref), '&#128196;')
     + fieldRow('Date', 'gen-date', 'date', '', today)
     + fieldRow('Observations', 'gen-obs', 'textarea', 'Observations...', '')
     + sectionEnd();
@@ -2218,3 +2218,7 @@ function sauvegarderVisite() { showToast('Visite sauvegardee', 'success'); }
 function addObs() {}
 function removeObs(id) { var el=document.getElementById(id); if(el) el.remove(); }
 function setObsType(id, type, btn) {}
+
+</script>
+</body>
+</html>
