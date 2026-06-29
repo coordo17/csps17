@@ -847,9 +847,9 @@
 
   <!-- PAGE TERRAIN -->
   <div class="page" id="page-terrain">
-    <div style="max-width:680px;">
+    <div style="max-width:720px;">
 
-      <!-- SELECTION AFFAIRE -->
+      <!-- STEP 1 : SELECTION AFFAIRE + DOC -->
       <div id="terrain-step-select">
         <h2 style="color:var(--blue-dark);margin-bottom:6px;">&#128241; Module Terrain</h2>
         <p style="color:var(--text-light);margin-bottom:16px;">Selectionnez votre affaire puis le document a remplir.</p>
@@ -861,10 +861,10 @@
         </div>
         <div id="terrain-doc-buttons" style="display:none;">
           <div id="terrain-affaire-resume" style="background:var(--blue-xl);border-radius:var(--radius);padding:12px 16px;margin-bottom:16px;font-size:13px;"></div>
-          <p style="font-size:13px;font-weight:700;color:var(--blue-dark);margin-bottom:10px;">Quel document voulez-vous remplir ?</p>
+          <p style="font-size:13px;font-weight:700;color:var(--blue-dark);margin-bottom:10px;">Quel document ?</p>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <button class="btn btn-primary" style="padding:16px 10px;font-size:14px;flex-direction:column;gap:4px;" onclick="ouvrirFormulaireDoc('VIS')">&#128065;<br>CR Visite</button>
             <button class="btn btn-primary" style="padding:16px 10px;font-size:14px;flex-direction:column;gap:4px;" onclick="ouvrirFormulaireDoc('FIC')">&#128269;<br>Fiche IC</button>
+            <button class="btn btn-primary" style="padding:16px 10px;font-size:14px;flex-direction:column;gap:4px;" onclick="ouvrirFormulaireDoc('VIS')">&#128065;<br>CR Visite</button>
             <button class="btn btn-primary" style="padding:16px 10px;font-size:14px;flex-direction:column;gap:4px;" onclick="ouvrirFormulaireDoc('IC')">&#9993;<br>Courrier IC</button>
             <button class="btn btn-primary" style="padding:16px 10px;font-size:14px;flex-direction:column;gap:4px;" onclick="ouvrirFormulaireDoc('RCO')">&#129309;<br>CR Reunion</button>
             <button class="btn btn-primary" style="padding:16px 10px;font-size:14px;flex-direction:column;gap:4px;" onclick="ouvrirFormulaireDoc('OBS')">&#9888;<br>Observation</button>
@@ -875,63 +875,37 @@
         </div>
       </div>
 
-      <!-- FORMULAIRE DOCUMENT -->
+      <!-- STEP 2 : FORMULAIRE DOCUMENT -->
       <div id="terrain-doc-form" style="display:none;">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;position:sticky;top:58px;background:#f0f4f9;padding:10px 0;z-index:50;">
           <button class="btn btn-outline btn-sm" onclick="retourTerrainSelect()">&#8592; Retour</button>
-          <h3 id="terrain-doc-title" style="color:var(--blue-dark);margin:0;"></h3>
+          <h3 id="terrain-doc-title" style="color:var(--blue-dark);margin:0;flex:1;"></h3>
+          <button class="btn btn-success btn-sm" onclick="genererDocTerrain()">&#128196; Generer</button>
         </div>
 
-        <!-- INFOS CHANTIER (readonly) -->
-        <div class="terrain-section">
-          <div class="terrain-section-header">&#127959; Chantier (depuis dossier)</div>
-          <div class="terrain-section-body" id="terrain-chantier-resume" style="font-size:13px;color:var(--text-light);line-height:1.8;"></div>
-        </div>
+        <!-- Contenu dynamique injecte par ouvrirFormulaireDoc -->
+        <div id="terrain-form-content"></div>
 
-        <!-- CHAMPS SPECIFIQUES PAR DOC -->
-        <div id="terrain-champs-specifiques"></div>
-
-        <!-- ENTREPRISE -->
-        <div class="terrain-section" id="terrain-section-entreprise" style="display:none;">
-          <div class="terrain-section-header">&#127970; Entreprise intervenante</div>
-          <div class="terrain-section-body">
-            <div class="field" style="margin-bottom:10px;">
-              <label>Selectionner une entreprise du dossier</label>
-              <select id="terrain-ent-select" onchange="terrainSelectEntreprise(this.value)" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;">
-                <option value="">-- Choisir --</option>
-              </select>
-            </div>
-            <div class="form-row">
-              <div class="field"><label>Raison sociale</label><input type="text" id="t-ent-nom" placeholder="Nom entreprise"></div>
-              <div class="field"><label>Representant</label><input type="text" id="t-ent-contact" placeholder="Nom Prenom"></div>
-            </div>
-            <div class="form-row">
-              <div class="field"><label>Lot / Travaux</label><input type="text" id="t-ent-lot" placeholder="Ex : Gros oeuvre"></div>
-              <div class="field"><label>Telephone</label><input type="tel" id="t-ent-tel" placeholder="06 xx xx xx xx"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- SIGNATURE ENTREPRISE -->
+        <!-- SIGNATURES -->
         <div class="terrain-section" id="terrain-section-sig-ent" style="display:none;">
-          <div class="terrain-section-header">&#9997; Signature representant entreprise</div>
+          <div class="terrain-section-header">&#9997; Signature — Representant Entreprise</div>
           <div class="terrain-section-body">
-            <canvas id="sig-canvas-ent" height="140" style="border:2px solid var(--border);border-radius:var(--radius);width:100%;touch-action:none;cursor:crosshair;background:white;"></canvas>
+            <div class="form-row">
+              <div class="field"><label>Nom / Prenom</label><input type="text" id="t-ent-nom-sig" placeholder="Nom Prenom"></div>
+              <div class="field"><label>Qualite / Entreprise</label><input type="text" id="t-ent-qualite-sig" placeholder="Chef chantier - SAS ..."></div>
+            </div>
+            <canvas id="sig-canvas-ent" height="140" style="border:2px solid var(--border);border-radius:var(--radius);width:100%;touch-action:none;cursor:crosshair;background:white;margin-top:8px;"></canvas>
             <div class="sig-actions">
-              <button class="btn btn-outline btn-sm" onclick="clearSig('sig-canvas-ent','sig-data-ent','sig-status-ent')">&#10005; Effacer</button>
+              <button class="btn btn-outline btn-sm" onclick="clearSig('sig-canvas-ent','ent','sig-status-ent')">&#10005; Effacer</button>
               <span id="sig-status-ent" style="font-size:12px;color:var(--text-light);align-self:center;margin-left:8px;"></span>
             </div>
           </div>
         </div>
 
-        <!-- SIGNATURE EU (optionnelle) -->
         <div class="terrain-section" id="terrain-section-sig-eu" style="display:none;">
-          <div class="terrain-section-header">&#9997; Signature Representant EU / Exploitant (si present)</div>
+          <div class="terrain-section-header">&#9997; Signature — Representant EU / Exploitant (si present)</div>
           <div class="terrain-section-body">
-            <div class="field" style="margin-bottom:10px;">
-              <label>Nom du representant EU</label>
-              <input type="text" id="sig-nom-eu" placeholder="Nom Prenom (facultatif)">
-            </div>
+            <div class="field" style="margin-bottom:10px;"><label>Nom / Qualite EU</label><input type="text" id="sig-nom-eu" placeholder="Nom, Qualite (facultatif)"></div>
             <canvas id="sig-canvas-eu" height="140" style="border:2px solid var(--border);border-radius:var(--radius);width:100%;touch-action:none;cursor:crosshair;background:white;"></canvas>
             <div class="sig-actions">
               <button class="btn btn-outline btn-sm" onclick="clearSig('sig-canvas-eu','eu','sig-status-eu')">&#10005; Effacer</button>
@@ -940,7 +914,6 @@
           </div>
         </div>
 
-        <!-- SIGNATURE CSPS -->
         <div class="terrain-section">
           <div class="terrain-section-header">&#9997; Signature CSPS — Alain SUZANNE</div>
           <div class="terrain-section-body">
@@ -952,15 +925,13 @@
           </div>
         </div>
 
-        <!-- BOUTON GENERER -->
-        <div style="margin-bottom:32px;">
-          <button class="btn btn-success" style="width:100%;padding:16px;font-size:16px;" onclick="genererDocTerrain()">&#128196; Generer et telecharger</button>
+        <div style="margin-bottom:40px;">
+          <button class="btn btn-success" style="width:100%;padding:18px;font-size:16px;" onclick="genererDocTerrain()">&#128196; Generer et telecharger le document</button>
         </div>
 
       </div>
     </div>
   </div>
-
   </div>
 </div>
 
@@ -1710,76 +1681,22 @@ renderAffaireList();
 
 // ── MODULE TERRAIN ──────────────────────────────────────────────
 var terrainAffaire = null;
-var obsCount = 0;
 var currentTerrainDoc = null;
 var sigData = { ent: null, csps: null, eu: null };
 
-// Titres des documents terrain
 var DOC_TITRES = {
+  'FIC': 'Fiche IC — Inspection Commune',
   'VIS': 'CR Visite de Chantier',
-  'FIC': 'Fiche IC Vierge',
   'IC':  'Courrier Transmission IC',
   'RCO': 'CR Reunion de Coordination',
-  'OBS': 'Observation / Notification RJC',
+  'OBS': 'Observation / Notification',
   'DGI': 'Mise en Demeure DGI',
   'PPP': 'Grille Analyse PPSPS',
-  'RJC': 'Registre Journal de Coordination',
+  'RJC': 'Registre Journal',
 };
 
-// Champs specifiques par document
-var DOC_CHAMPS = {
-  'VIS': [
-    { id: 'tv-date', label: 'Date de visite', type: 'date' },
-    { id: 'tv-no', label: 'N de visite', type: 'number', placeholder: '1' },
-    { id: 'tv-heure', label: 'Heure', type: 'time' },
-    { id: 'tv-avancement', label: 'Avancement global', type: 'text', placeholder: 'Ex : 30% - Gros oeuvre en cours' },
-    { id: 'tv-meteo', label: 'Conditions meteo', type: 'text', placeholder: 'Ex : Ensoleille, 22C' },
-  ],
-  'FIC': [
-    { id: 'tf-date', label: 'Date de l IC', type: 'date' },
-    { id: 'tf-heure', label: 'Heure', type: 'time' },
-    { id: 'tf-type', label: 'Type ICP', type: 'select', options: ['Entreprise principale','Sous-traitant','Prestataire de service','ICCE (R4532-14)'] },
-    { id: 'tf-debut', label: 'Date debut travaux prevue', type: 'date' },
-  ],
-  'IC': [
-    { id: 'ti-date', label: 'Date du courrier', type: 'date' },
-    { id: 'ti-objet', label: 'Objet', type: 'text', placeholder: 'Transmission Fiche IC signee' },
-  ],
-  'RCO': [
-    { id: 'tr-date', label: 'Date de reunion', type: 'date' },
-    { id: 'tr-no', label: 'N de reunion', type: 'number', placeholder: '1' },
-    { id: 'tr-heure', label: 'Heure', type: 'time' },
-    { id: 'tr-lieu', label: 'Lieu', type: 'text', placeholder: 'Ex : Base de vie chantier' },
-  ],
-  'OBS': [
-    { id: 'to-date', label: 'Date observation', type: 'date' },
-    { id: 'to-type', label: 'Type', type: 'select', options: ['Observation','Notification','Danger grave et imminent'] },
-    { id: 'to-desc', label: 'Description', type: 'textarea', placeholder: 'Decrire precisement...' },
-    { id: 'to-ref', label: 'Ref PGC / PPSPS', type: 'text', placeholder: 'Ex : PGC art. 4.2' },
-    { id: 'to-delai', label: 'Delai de correction', type: 'text', placeholder: 'Ex : 48h' },
-  ],
-  'DGI': [
-    { id: 'td-date', label: 'Date', type: 'date' },
-    { id: 'td-heure', label: 'Heure', type: 'time' },
-    { id: 'td-danger', label: 'Nature du danger grave', type: 'textarea', placeholder: 'Decrire precisement le danger...' },
-    { id: 'td-zone', label: 'Zone / Localisation', type: 'text', placeholder: 'Ex : Zone fouilles nord' },
-    { id: 'td-ref', label: 'Reference reglementaire', type: 'text', placeholder: 'Ex : R4534-1' },
-  ],
-  'PPP': [
-    { id: 'tp-date', label: 'Date analyse', type: 'date' },
-    { id: 'tp-version', label: 'Version PPSPS', type: 'text', placeholder: 'Ex : V1' },
-    { id: 'tp-avis', label: 'Avis CSPS', type: 'select', options: ['Conforme','Non conforme - corrections requises','Complementaire demande'] },
-  ],
-  'RJC': [
-    { id: 'tj-date', label: 'Date ouverture RJC', type: 'date' },
-    { id: 'tj-reception', label: 'Date previsionnelle reception', type: 'date' },
-  ],
-};
-
-// Docs necessitant section entreprise
-var DOCS_AVEC_ENTREPRISE = ['VIS','FIC','IC','RCO','OBS','DGI','PPP'];
-// Docs necessitant signature entreprise
-var DOCS_AVEC_SIG_ENT = ['FIC','VIS','RCO'];
+var DOCS_AVEC_SIG_ENT = ['FIC', 'VIS', 'RCO', 'OBS', 'DGI'];
+var DOCS_AVEC_SIG_EU = ['FIC'];
 
 function populateTerrainSelect() {
   var sel = document.getElementById('terrain-select');
@@ -1794,19 +1711,14 @@ function populateTerrainSelect() {
 }
 
 function terrainSelectAffaire(id) {
-  if (!id) {
-    terrainAffaire = null;
-    document.getElementById('terrain-doc-buttons').style.display = 'none';
-    return;
-  }
+  if (!id) { terrainAffaire = null; document.getElementById('terrain-doc-buttons').style.display = 'none'; return; }
   terrainAffaire = affaires.find(function(a){ return a.id === id; });
   if (!terrainAffaire) return;
   var c = terrainAffaire.chantier || {};
   var moa = terrainAffaire.moa || {};
   document.getElementById('terrain-affaire-resume').innerHTML =
     '<strong>' + (terrainAffaire.num || '') + '</strong> — ' + (c.nom || '') +
-    '<br>' + (c.adresse || '') +
-    '<br>MOA : ' + (moa.nom || 'NC') +
+    '<br>' + (c.adresse || '') + '<br>MOA : ' + (moa.nom || 'NC') +
     (terrainAffaire.cat ? ' &nbsp;|&nbsp; Cat. ' + terrainAffaire.cat : '');
   document.getElementById('terrain-doc-buttons').style.display = 'block';
 }
@@ -1814,94 +1726,32 @@ function terrainSelectAffaire(id) {
 function ouvrirFormulaireDoc(ref) {
   if (!terrainAffaire) return;
   currentTerrainDoc = ref;
-  sigData = { ent: null, csps: null };
-
-  // Titre
+  sigData = { ent: null, csps: null, eu: null };
   document.getElementById('terrain-doc-title').textContent = DOC_TITRES[ref] || ref;
+  document.getElementById('terrain-section-sig-ent').style.display = DOCS_AVEC_SIG_ENT.includes(ref) ? 'block' : 'none';
+  document.getElementById('terrain-section-sig-eu').style.display = DOCS_AVEC_SIG_EU.includes(ref) ? 'block' : 'none';
 
-  // Resume chantier
-  var c = terrainAffaire.chantier || {};
-  var moa = terrainAffaire.moa || {};
-  var moe = terrainAffaire.moe || {};
-  document.getElementById('terrain-chantier-resume').innerHTML =
-    '<strong>Affaire :</strong> ' + (terrainAffaire.num || '') + '<br>' +
-    '<strong>Chantier :</strong> ' + (c.nom || '') + '<br>' +
-    '<strong>Adresse :</strong> ' + (c.adresse || '') + '<br>' +
-    '<strong>Nature :</strong> ' + (c.nature || '') + '<br>' +
-    '<strong>MOA :</strong> ' + (moa.nom || 'NC') + '<br>' +
-    '<strong>MOE :</strong> ' + (moe.nom || 'NC');
+  // Generer le contenu du formulaire
+  var content = '';
+  if (ref === 'FIC') content = genFormulaireFIC();
+  else if (ref === 'VIS') content = genFormulaireVIS();
+  else if (ref === 'RCO') content = genFormulaireRCO();
+  else if (ref === 'OBS') content = genFormulaireOBS();
+  else if (ref === 'DGI') content = genFormulaireDGI();
+  else if (ref === 'IC') content = genFormulaireIC();
+  else content = genFormulaireSimple(ref);
 
-  // Champs specifiques
-  var champs = DOC_CHAMPS[ref] || [];
-  var today = new Date().toISOString().split('T')[0];
-  var nowH = new Date().getHours().toString().padStart(2,'0') + ':' + new Date().getMinutes().toString().padStart(2,'0');
-  var html2 = '';
-  if (champs.length > 0) {
-    html2 += '<div class="terrain-section"><div class="terrain-section-header">&#128221; Informations du document</div><div class="terrain-section-body">';
-    champs.forEach(function(ch) {
-      html2 += '<div class="field" style="margin-bottom:10px;"><label>' + ch.label + '</label>';
-      if (ch.type === 'select') {
-        html2 += '<select id="' + ch.id + '" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;">';
-        (ch.options || []).forEach(function(o){ html2 += '<option>' + o + '</option>'; });
-        html2 += '</select>';
-      } else if (ch.type === 'textarea') {
-        html2 += '<textarea id="' + ch.id + '" rows="4" placeholder="' + (ch.placeholder || '') + '" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;resize:vertical;"></textarea>';
-      } else {
-        var val = '';
-        if (ch.type === 'date') val = today;
-        if (ch.type === 'time') val = nowH;
-        html2 += '<input type="' + ch.type + '" id="' + ch.id + '" value="' + val + '" placeholder="' + (ch.placeholder || '') + '" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;">';
-      }
-      html2 += '</div>';
-    });
-    html2 += '</div></div>';
-  }
+  document.getElementById('terrain-form-content').innerHTML = content;
 
-  // Observations (pour VIS, OBS, DGI)
-  if (ref === 'VIS') {
-    html2 += '<div class="terrain-section"><div class="terrain-section-header">&#9888; Observations du CSPS</div>';
-    html2 += '<div class="terrain-section-body"><div id="obs-list"></div>';
-    html2 += '<button class="btn btn-outline btn-sm" onclick="addObs()">+ Ajouter une observation</button></div></div>';
-    obsCount = 0;
-  }
-
-  document.getElementById('terrain-champs-specifiques').innerHTML = html2;
-
-  // Section entreprise
-  var secEnt = document.getElementById('terrain-section-entreprise');
-  if (DOCS_AVEC_ENTREPRISE.includes(ref)) {
-    secEnt.style.display = 'block';
-    // Remplir le select entreprises
-    var sel = document.getElementById('terrain-ent-select');
-    sel.innerHTML = '<option value="">-- Choisir entreprise --</option>';
-    (terrainAffaire.entreprises || []).forEach(function(e, i) {
-      var opt = document.createElement('option');
-      opt.value = i;
-      opt.textContent = (e.nom || 'Entreprise') + ' (' + (e.lot || e.type || '') + ')';
-      sel.appendChild(opt);
-    });
-  } else {
-    secEnt.style.display = 'none';
-  }
-
-  // Section signature entreprise
-  var secSigEnt = document.getElementById('terrain-section-sig-ent');
-  secSigEnt.style.display = DOCS_AVEC_SIG_ENT.includes(ref) ? 'block' : 'none';
-  // Section signature EU uniquement pour FIC
-  var secSigEU = document.getElementById('terrain-section-sig-eu');
-  if (secSigEU) secSigEU.style.display = (ref === 'FIC') ? 'block' : 'none';
-
-  // Afficher formulaire
   document.getElementById('terrain-step-select').style.display = 'none';
   document.getElementById('terrain-doc-form').style.display = 'block';
   window.scrollTo(0, 0);
 
-  // Init canvas signatures
   setTimeout(function() {
     initSigCanvas('sig-canvas-ent', 'ent');
     initSigCanvas('sig-canvas-eu', 'eu');
     initSigCanvas('sig-canvas-csps', 'csps');
-  }, 100);
+  }, 200);
 }
 
 function retourTerrainSelect() {
@@ -1910,28 +1760,372 @@ function retourTerrainSelect() {
   currentTerrainDoc = null;
 }
 
-function terrainSelectEntreprise(idx) {
+// ── FORMULAIRES PAR DOCUMENT ─────────────────────────────────────
+
+function sectionHeader(num, titre, icon) {
+  return '<div class="terrain-section"><div class="terrain-section-header">' + icon + ' ' + num + '. ' + titre + '</div><div class="terrain-section-body">';
+}
+function sectionEnd() { return '</div></div>'; }
+function fieldRow(label, id, type, placeholder, value) {
+  type = type || 'text'; placeholder = placeholder || ''; value = value || '';
+  return '<div class="field" style="margin-bottom:10px;"><label>' + label + '</label>'
+    + (type === 'textarea'
+      ? '<textarea id="' + id + '" rows="3" placeholder="' + placeholder + '" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;resize:vertical;">' + value + '</textarea>'
+      : '<input type="' + type + '" id="' + id + '" placeholder="' + placeholder + '" value="' + value + '" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;">')
+    + '</div>';
+}
+function checkRow(label, id, checked) {
+  return '<label style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:14px;cursor:pointer;">'
+    + '<input type="checkbox" id="' + id + '"' + (checked ? ' checked' : '') + ' style="width:18px;height:18px;">'
+    + label + '</label>';
+}
+function twoCol(left, right) {
+  return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' + left + right + '</div>';
+}
+
+function getVal(fieldId) {
+  var el = document.getElementById(fieldId);
+  return el ? (el.value || '') : '';
+}
+function getCheck(fieldId) {
+  var el = document.getElementById(fieldId);
+  return el ? el.checked : false;
+}
+
+function getEntrepriseInfo() {
+  if (!terrainAffaire || !terrainAffaire.entreprises || !terrainAffaire.entreprises.length) return {};
+  return terrainAffaire.entreprises[0] || {};
+}
+
+function genFormulaireFIC() {
+  var c = terrainAffaire.chantier || {};
+  var moa = terrainAffaire.moa || {};
+  var moe = terrainAffaire.moe || {};
+  var ent = getEntrepriseInfo();
+  var risques = terrainAffaire.risques || {};
+  var today = new Date().toLocaleDateString('fr-FR');
+  var cat = terrainAffaire.cat || '';
+
+  var html2 = '';
+
+  // Section 1 - Administratif
+  html2 += sectionHeader('1', 'Informations administratives', '&#128203;');
+  html2 += twoCol(
+    fieldRow('Date IC', 'fic-date', 'date', '', new Date().toISOString().split('T')[0]),
+    fieldRow('Heure', 'fic-heure', 'time', '', new Date().getHours().toString().padStart(2,'0') + ':' + new Date().getMinutes().toString().padStart(2,'0'))
+  );
+  html2 += fieldRow('Categorie', 'fic-cat', 'text', '', cat ? 'Categorie ' + cat : '');
+  html2 += '<div class="field" style="margin-bottom:10px;"><label>PGC SPS remis</label>'
+    + '<select id="fic-pgc" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;">'
+    + '<option>Remis ce jour (lors de l'ICP)</option>'
+    + '<option>Deja transmis</option>'
+    + '<option>Version mise a jour</option>'
+    + '</select></div>';
+  html2 += sectionEnd();
+
+  // Section 2 - Entreprise intervenante
+  html2 += sectionHeader('2', 'Entreprise Intervenante (EE)', '&#127970;');
+  html2 += '<div class="field" style="margin-bottom:8px;"><label>Selectionner une entreprise</label>'
+    + '<select onchange="terrainRemplirEntreprise(this.value)" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;">'
+    + '<option value="">-- Choisir --</option>';
+  (terrainAffaire.entreprises || []).forEach(function(e, i) {
+    html2 += '<option value="' + i + '">' + (e.nom || 'Entreprise ' + (i+1)) + ' — ' + (e.lot || e.type || '') + '</option>';
+  });
+  html2 += '</select></div>';
+  html2 += fieldRow('Raison sociale', 'fic-ent-nom', 'text', 'Nom entreprise', ent.nom || '');
+  html2 += twoCol(
+    fieldRow('Representant', 'fic-ent-contact', 'text', 'Nom Prenom', ent.contact || ''),
+    fieldRow('Tel', 'fic-ent-tel', 'tel', '06 xx xx xx xx', ent.tel || '')
+  );
+  html2 += twoCol(
+    fieldRow('Lot / Travaux confies', 'fic-ent-lot', 'text', 'Ex: Gros oeuvre', ent.lot || ''),
+    fieldRow('SIRET', 'fic-ent-siret', 'text', '000 000 000 00000', ent.siret || '')
+  );
+  html2 += fieldRow('Compagnon referent', 'fic-ent-ref', 'text', 'Nom du compagnon referent', '');
+  html2 += twoCol(
+    fieldRow('Periode intervention', 'fic-ent-periode', 'text', 'Ex: 01/07 au 30/08/2026', ''),
+    fieldRow('Effectif max', 'fic-ent-effectif', 'number', 'Ex: 4', ent.effectif || '')
+  );
+  html2 += sectionEnd();
+
+  // Section 3 - EU
+  html2 += sectionHeader('3', 'Entreprise Utilisatrice (EU) / Site', '&#127963;');
+  html2 += fieldRow('Raison sociale EU', 'fic-eu-nom', 'text', 'Nom EU ou N/A', '');
+  html2 += twoCol(
+    fieldRow('Representant EU', 'fic-eu-contact', 'text', 'Nom Prenom', ''),
+    fieldRow('Tel EU', 'fic-eu-tel', 'tel', '06 xx xx xx xx', '')
+  );
+  html2 += fieldRow('Activite site / horaires', 'fic-eu-activite', 'text', 'Ex: Entrepot logistique, 8h-18h', '');
+  html2 += sectionEnd();
+
+  // Section 4 - Infos prealables
+  html2 += sectionHeader('4', 'Informations prealables recues de l'EE', '&#128196;');
+  html2 += checkRow('Mode operatoire detaille des travaux', 'fic-info-mo', false);
+  html2 += checkRow('Autorisation de conduite / CACES', 'fic-info-caces', false);
+  html2 += checkRow('Effectifs, dates et duree previsible', 'fic-info-effectif', false);
+  html2 += checkRow('Coordonnees sous-traitants eventuels', 'fic-info-st', false);
+  html2 += checkRow('PPSPS transmis au CSPS (si requis)', 'fic-info-ppsps', false);
+  html2 += sectionEnd();
+
+  // Section 5 - Organisation du site
+  html2 += sectionHeader('5', 'Organisation du site', '&#127959;');
+  html2 += '<p style="font-size:12px;color:var(--text-light);margin-bottom:8px;">Cochez les elements conformes / en place :</p>';
+  html2 += checkRow('Emprise / cloture', 'fic-org-cloture', false);
+  html2 += checkRow('Base vie / sanitaires', 'fic-org-basevie', false);
+  html2 += checkRow('Stockage materiaux', 'fic-org-stockage', false);
+  html2 += checkRow('Bennes / tri dechets', 'fic-org-bennes', false);
+  html2 += checkRow('Stationnement engins', 'fic-org-engins', false);
+  html2 += checkRow('Plan de circulation etabli / affiche', 'fic-org-circulation', false);
+  html2 += checkRow('Separation engins / pietons', 'fic-org-sep', false);
+  html2 += checkRow('Signalisation voie publique', 'fic-org-signal', false);
+  html2 += checkRow('Coffret elec. normalise 30mA', 'fic-org-elec', false);
+  html2 += checkRow('Eclairage chantier', 'fic-org-eclairage', false);
+  html2 += checkRow('Raccordement eau potable', 'fic-org-eau', false);
+  html2 += fieldRow('Vitesse limitee (km/h)', 'fic-org-vitesse', 'number', 'Ex: 10', '');
+  html2 += sectionEnd();
+
+  // Section 6 - Reseaux
+  html2 += sectionHeader('6', 'Reseaux et environnement', '&#9889;');
+  html2 += checkRow('DT / DICT realisees', 'fic-res-dict', false);
+  html2 += checkRow('Reseaux eau / assainissement', 'fic-res-eau', false);
+  html2 += checkRow('Reseaux gaz', 'fic-res-gaz', false);
+  html2 += checkRow('Reseaux electricite BT / HTA', 'fic-res-elec', false);
+  html2 += checkRow('Telecom / Fibre / EP', 'fic-res-telecom', false);
+  html2 += checkRow('Lignes aeriennes HTA/HTB', 'fic-res-aerien', false);
+  html2 += checkRow('Investigations complementaires (SUP) requises', 'fic-res-sup', false);
+  html2 += fieldRow('Observations reseaux', 'fic-res-obs', 'textarea', 'Precisions...', '');
+  html2 += sectionEnd();
+
+  // Section 7 - Analyse risques
+  html2 += sectionHeader('7', 'Analyse des risques — Interferences', '&#9888;');
+  html2 += '<p style="font-size:12px;color:var(--text-light);margin-bottom:8px;">Co-activite EU/EE :</p>';
+  html2 += checkRow('Interference engins / pietons', 'fic-rq-engins', risques.terrassement || false);
+  html2 += checkRow('Fouille ouverte > 1,30m sans blindage', 'fic-rq-fouille', risques.terrassement || false);
+  html2 += checkRow('Levage en survol zones adjacentes', 'fic-rq-levage', false);
+  html2 += checkRow('Bruit / poussieres affectant les autres', 'fic-rq-bruit', false);
+  html2 += checkRow('Co-activite avec public / commerce', 'fic-rq-public', false);
+  html2 += '<p style="font-size:12px;color:var(--text-light);margin:8px 0;">Risques importes par l'EE :</p>';
+  html2 += checkRow('Engins → collision / ecrasement', 'fic-rq-collision', risques.terrassement || false);
+  html2 += checkRow('Tranchee → chute / ensevelissement', 'fic-rq-tranchee', risques.terrassement || false);
+  html2 += checkRow('Produits chimiques → incendie / pollution', 'fic-rq-chimie', false);
+  html2 += checkRow('Levage charges lourdes', 'fic-rq-levage2', false);
+  html2 += checkRow('Travail en hauteur > 2m', 'fic-rq-hauteur', risques.hauteur || false);
+  html2 += checkRow('Milieu confine → asphyxie', 'fic-rq-confine', false);
+  html2 += '<p style="font-size:12px;color:var(--text-light);margin:8px 0;">Risques exporte par l'EU :</p>';
+  html2 += checkRow('Amiante / plomb (structures a demolir)', 'fic-rq-amiante', risques.amiante || risques.plomb || false);
+  html2 += checkRow('Reseaux actifs dans l'emprise', 'fic-rq-reseaux', risques.reseaux || false);
+  html2 += checkRow('Produits dangereux stockes sur site EU', 'fic-rq-produits', false);
+  html2 += fieldRow('Observations risques', 'fic-rq-obs', 'textarea', 'Precisions, mesures complementaires...', '');
+  html2 += sectionEnd();
+
+  // Section 8 - CMR
+  html2 += sectionHeader('8', 'Risques specifiques (CMR)', '&#128296;');
+  html2 += checkRow('Amiante', 'fic-cmr-amiante', risques.amiante || false);
+  html2 += checkRow('Plomb', 'fic-cmr-plomb', risques.plomb || false);
+  html2 += checkRow('Silice / HAP / sols pollues', 'fic-cmr-silice', false);
+  html2 += checkRow('Risque biologique (egouts)', 'fic-cmr-bio', false);
+  html2 += checkRow('ATEX (gaz / vapeurs)', 'fic-cmr-atex', false);
+  html2 += sectionEnd();
+
+  // Section 9 - Permis
+  html2 += sectionHeader('9', 'Permis et autorisations', '&#128220;');
+  html2 += checkRow('Arrete de voirie', 'fic-perm-voirie', false);
+  html2 += checkRow('DT/DICT completes', 'fic-perm-dict', false);
+  html2 += checkRow('Permis feu', 'fic-perm-feu', false);
+  html2 += checkRow('Habilitation electrique', 'fic-perm-elec', false);
+  html2 += checkRow('Verification engins / levage', 'fic-perm-engins', false);
+  html2 += checkRow('Rapport SS4 amiante', 'fic-perm-ss4', risques.amiante || false);
+  html2 += sectionEnd();
+
+  // Section 10 - EPI
+  html2 += sectionHeader('10', 'EPI minimum obligatoires', '&#9939;');
+  html2 += checkRow('Casque / Chaussures S3', 'fic-epi-casque', true);
+  html2 += checkRow('Gilet HV cl.2 / Gants', 'fic-epi-gilet', true);
+  html2 += checkRow('Lunettes / Protection auditive', 'fic-epi-lunettes', false);
+  html2 += checkRow('Protection respiratoire (CMR)', 'fic-epi-masque', risques.amiante || false);
+  html2 += checkRow('Harnais antichute (> 2m)', 'fic-epi-harnais', risques.hauteur || false);
+  html2 += sectionEnd();
+
+  // Section 11 - Secours
+  html2 += sectionHeader('11', 'Organisation des secours', '&#128657;');
+  html2 += fieldRow('SST present(s) — Nom(s)', 'fic-sec-sst', 'text', 'Nom du SST', '');
+  html2 += fieldRow('Trousse de secours — emplacement', 'fic-sec-trousse', 'text', 'Ex: Base vie', '');
+  html2 += fieldRow('DAE — emplacement', 'fic-sec-dae', 'text', 'Ex: Entree base vie', '');
+  html2 += fieldRow('Moyen alerte (tel / radio / DATI)', 'fic-sec-alerte', 'text', 'Ex: Tel portable', '');
+  html2 += fieldRow('Point de rassemblement / acces pompiers', 'fic-sec-rdv', 'text', 'Ex: Parking nord', '');
+  html2 += sectionEnd();
+
+  // Section 12 - Observations CSPS
+  html2 += sectionHeader('12', 'Observations du CSPS', '&#128221;');
+  html2 += fieldRow('Observations / prescriptions', 'fic-obs-csps', 'textarea', 'Observations, prescriptions, points d'attention...', '');
+  html2 += twoCol(
+    fieldRow('Frequence visites CSPS', 'fic-obs-freq', 'text', 'Ex: Mensuelle', ''),
+    fieldRow('Reunions coordination', 'fic-obs-reunion', 'text', 'Ex: Bimensuelle', '')
+  );
+  html2 += sectionEnd();
+
+  return html2;
+}
+
+function genFormulaireVIS() {
+  var ent = getEntrepriseInfo();
+  var today = new Date().toISOString().split('T')[0];
+  var nowH = new Date().getHours().toString().padStart(2,'0') + ':' + new Date().getMinutes().toString().padStart(2,'0');
+  var html2 = '';
+  html2 += sectionHeader('1', 'Identification de la visite', '&#128065;');
+  html2 += twoCol(
+    fieldRow('Date', 'vis-date', 'date', '', today),
+    fieldRow('N de visite', 'vis-no', 'number', '1', '1')
+  );
+  html2 += twoCol(
+    fieldRow('Heure', 'vis-heure', 'time', '', nowH),
+    fieldRow('Meteo', 'vis-meteo', 'text', 'Ex: Ensoleille 22C', '')
+  );
+  html2 += fieldRow('Avancement global', 'vis-avancement', 'text', 'Ex: 30% - Gros oeuvre en cours', '');
+  html2 += sectionEnd();
+  html2 += sectionHeader('2', 'Entreprise presente', '&#127970;');
+  html2 += '<div class="field" style="margin-bottom:8px;"><label>Selectionner</label>'
+    + '<select onchange="terrainRemplirEntreprise(this.value)" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;">'
+    + '<option value="">-- Choisir --</option>';
+  (terrainAffaire.entreprises || []).forEach(function(e, i) {
+    html2 += '<option value="' + i + '">' + (e.nom || 'Entreprise ' + (i+1)) + '</option>';
+  });
+  html2 += '</select></div>';
+  html2 += fieldRow('Entreprise', 'vis-ent-nom', 'text', 'Raison sociale', ent.nom || '');
+  html2 += twoCol(
+    fieldRow('Representant', 'vis-ent-contact', 'text', 'Nom Prenom', ent.contact || ''),
+    fieldRow('Lot', 'vis-ent-lot', 'text', 'Ex: Gros oeuvre', ent.lot || '')
+  );
+  html2 += '<div class="field" style="margin-bottom:10px;"><label>Type</label>'
+    + '<select id="vis-ent-type" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;">'
+    + '<option>EE</option><option>ST</option><option>Prestataire</option></select></div>';
+  html2 += sectionEnd();
+  html2 += sectionHeader('3', 'Observations du CSPS', '&#9888;');
+  for (var i = 1; i <= 3; i++) {
+    html2 += '<div style="border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:10px;">';
+    html2 += '<div class="field" style="margin-bottom:8px;"><label>Type observation ' + i + '</label>'
+      + '<select id="vis-obs' + i + '-type" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;">'
+      + '<option value="">-- Aucune --</option>'
+      + '<option>Observation</option><option>Notification</option><option>Danger grave imminent</option>'
+      + '</select></div>';
+    html2 += fieldRow('Description', 'vis-obs' + i + '-desc', 'textarea', 'Decrire...', '');
+    html2 += twoCol(
+      fieldRow('Delai', 'vis-obs' + i + '-delai', 'text', 'Ex: 48h', ''),
+      fieldRow('Entreprise concernee', 'vis-obs' + i + '-ent', 'text', 'Nom entreprise', '')
+    );
+    html2 += '</div>';
+  }
+  html2 += sectionEnd();
+  return html2;
+}
+
+function genFormulaireRCO() {
+  var today = new Date().toISOString().split('T')[0];
+  var nowH = new Date().getHours().toString().padStart(2,'0') + ':' + new Date().getMinutes().toString().padStart(2,'0');
+  var html2 = '';
+  html2 += sectionHeader('1', 'Identification de la reunion', '&#129309;');
+  html2 += twoCol(fieldRow('Date', 'rco-date', 'date', '', today), fieldRow('N reunion', 'rco-no', 'number', '1', '1'));
+  html2 += twoCol(fieldRow('Heure', 'rco-heure', 'time', '', nowH), fieldRow('Lieu', 'rco-lieu', 'text', 'Ex: Base vie', ''));
+  html2 += sectionEnd();
+  html2 += sectionHeader('2', 'Participants', '&#128101;');
+  html2 += fieldRow('Participants (un par ligne)', 'rco-participants', 'textarea', 'Nom - Entreprise - Qualite', '');
+  html2 += sectionEnd();
+  html2 += sectionHeader('3', 'Ordre du jour / Points abordes', '&#128221;');
+  html2 += fieldRow('Points abordes', 'rco-points', 'textarea', 'Points de l'ordre du jour...', '');
+  html2 += sectionEnd();
+  html2 += sectionHeader('4', 'Decisions et actions', '&#9989;');
+  html2 += fieldRow('Decisions prises / Actions', 'rco-decisions', 'textarea', 'Actions, responsables, delais...', '');
+  html2 += sectionEnd();
+  return html2;
+}
+
+function genFormulaireOBS() {
+  var today = new Date().toISOString().split('T')[0];
+  var html2 = '';
+  html2 += sectionHeader('1', 'Observation / Notification', '&#9888;');
+  html2 += '<div class="field" style="margin-bottom:10px;"><label>Type</label>'
+    + '<select id="obs-type" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;">'
+    + '<option>Observation</option><option>Notification</option><option>Danger grave et imminent</option>'
+    + '</select></div>';
+  html2 += fieldRow('Date', 'obs-date', 'date', '', today);
+  html2 += fieldRow('Description precise', 'obs-desc', 'textarea', 'Decrire precisement la situation...', '');
+  html2 += fieldRow('Reference PGC / PPSPS', 'obs-ref', 'text', 'Ex: PGC art. 4.2', '');
+  html2 += fieldRow('Delai de correction', 'obs-delai', 'text', 'Ex: 48h, avant reprise', '');
+  html2 += sectionEnd();
+  html2 += sectionHeader('2', 'Entreprise concernee', '&#127970;');
+  html2 += fieldRow('Entreprise', 'obs-ent', 'text', 'Raison sociale', '');
+  html2 += fieldRow('Representant', 'obs-contact', 'text', 'Nom Prenom', '');
+  html2 += sectionEnd();
+  return html2;
+}
+
+function genFormulaireDGI() {
+  var today = new Date().toISOString().split('T')[0];
+  var nowH = new Date().getHours().toString().padStart(2,'0') + ':' + new Date().getMinutes().toString().padStart(2,'0');
+  var html2 = '';
+  html2 += sectionHeader('1', 'Danger Grave et Imminent', '&#128680;');
+  html2 += twoCol(fieldRow('Date', 'dgi-date', 'date', '', today), fieldRow('Heure', 'dgi-heure', 'time', '', nowH));
+  html2 += fieldRow('Nature du danger grave', 'dgi-danger', 'textarea', 'Decrire precisement le danger...', '');
+  html2 += fieldRow('Zone / Localisation', 'dgi-zone', 'text', 'Ex: Zone fouilles nord', '');
+  html2 += fieldRow('Reference reglementaire', 'dgi-ref', 'text', 'Ex: R4534-1', '');
+  html2 += sectionEnd();
+  html2 += sectionHeader('2', 'Entreprise concernee', '&#127970;');
+  html2 += fieldRow('Entreprise', 'dgi-ent', 'text', 'Raison sociale', '');
+  html2 += '<div class="field" style="margin-bottom:10px;"><label>Type</label>'
+    + '<select id="dgi-ent-type" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;">'
+    + '<option>Entreprise principale</option><option>Sous-traitant</option><option>Prestataire</option>'
+    + '</select></div>';
+  html2 += sectionEnd();
+  return html2;
+}
+
+function genFormulaireIC() {
+  var today = new Date().toISOString().split('T')[0];
+  var html2 = '';
+  html2 += sectionHeader('1', 'Courrier Transmission IC', '&#9993;');
+  html2 += fieldRow('Date du courrier', 'ic-date', 'date', '', today);
+  html2 += fieldRow('Objet', 'ic-objet', 'text', 'Transmission Fiche IC signee', 'Transmission Fiche IC signee');
+  html2 += sectionEnd();
+  return html2;
+}
+
+function genFormulaireSimple(ref) {
+  var today = new Date().toISOString().split('T')[0];
+  return sectionHeader('1', DOC_TITRES[ref] || ref, '&#128196;')
+    + fieldRow('Date', 'gen-date', 'date', '', today)
+    + fieldRow('Observations', 'gen-obs', 'textarea', 'Observations...', '')
+    + sectionEnd();
+}
+
+function terrainRemplirEntreprise(idx) {
   if (idx === '' || !terrainAffaire) return;
   var ent = (terrainAffaire.entreprises || [])[parseInt(idx)];
   if (!ent) return;
-  document.getElementById('t-ent-nom').value = ent.nom || '';
-  document.getElementById('t-ent-contact').value = ent.contact || '';
-  document.getElementById('t-ent-lot').value = ent.lot || '';
-  document.getElementById('t-ent-tel').value = ent.tel || '';
+  var ref = currentTerrainDoc;
+  var prefix = ref === 'FIC' ? 'fic' : 'vis';
+  var fields = {'nom': ent.nom, 'contact': ent.contact, 'tel': ent.tel, 'lot': ent.lot, 'siret': ent.siret};
+  Object.keys(fields).forEach(function(f) {
+    var el = document.getElementById(prefix + '-ent-' + f);
+    if (el && fields[f]) el.value = fields[f];
+  });
+  // Aussi remplir les champs de signature
+  var nomSig = document.getElementById('t-ent-nom-sig');
+  if (nomSig && ent.contact) nomSig.value = ent.contact;
+  var qualSig = document.getElementById('t-ent-qualite-sig');
+  if (qualSig && ent.nom) qualSig.value = ent.nom;
 }
 
-// ── CANVAS SIGNATURES ───────────────────────────────────────────
+// ── CANVAS SIGNATURES ────────────────────────────────────────────
 function initSigCanvas(canvasId, key) {
   var canvas = document.getElementById(canvasId);
   if (!canvas) return;
   canvas.width = canvas.offsetWidth || 400;
   var ctx = canvas.getContext('2d');
   var drawing = false;
-
   function getPos(e) {
     var rect = canvas.getBoundingClientRect();
     var src = e.touches ? e.touches[0] : e;
-    return { x: src.clientX - rect.left, y: src.clientY - rect.top };
+    return { x: (src.clientX - rect.left) * (canvas.width / rect.width), y: (src.clientY - rect.top) * (canvas.height / rect.height) };
   }
   function start(e) { e.preventDefault(); drawing = true; var p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); }
   function move(e) {
@@ -1940,12 +2134,11 @@ function initSigCanvas(canvasId, key) {
     ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.strokeStyle = '#1a1a2e';
     ctx.lineTo(p.x, p.y); ctx.stroke(); ctx.beginPath(); ctx.moveTo(p.x, p.y);
   }
-  function stop(e) {
+  function stop() {
     drawing = false;
     sigData[key] = canvas.toDataURL();
-    var statusId = 'sig-status-' + (key === 'ent' ? 'ent' : 'csps');
-    var el = document.getElementById(statusId);
-    if (el) el.textContent = 'Signature enregistree';
+    var el = document.getElementById('sig-status-' + key);
+    if (el) el.textContent = 'Signature OK';
   }
   canvas.addEventListener('mousedown', start);
   canvas.addEventListener('mousemove', move);
@@ -1955,16 +2148,15 @@ function initSigCanvas(canvasId, key) {
   canvas.addEventListener('touchend', stop);
 }
 
-function clearSig(canvasId, dataKey, statusId) {
+function clearSig(canvasId, key, statusId) {
   var canvas = document.getElementById(canvasId);
   if (canvas) canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
-  var key = dataKey === 'sig-data-ent' ? 'ent' : 'csps';
   sigData[key] = null;
   var el = document.getElementById(statusId);
   if (el) el.textContent = '';
 }
 
-// ── GENERATION DOC TERRAIN ──────────────────────────────────────
+// ── GENERATION DOC TERRAIN ────────────────────────────────────────
 async function genererDocTerrain() {
   if (!terrainAffaire || !currentTerrainDoc) return;
   var ref = currentTerrainDoc;
@@ -1972,28 +2164,20 @@ async function genererDocTerrain() {
   var moa = terrainAffaire.moa || {};
   var moe = terrainAffaire.moe || {};
 
-  // Recuperer les champs specifiques remplis
-  var champs = DOC_CHAMPS[ref] || [];
-  var champsValues = {};
-  champs.forEach(function(ch) {
-    var el = document.getElementById(ch.id);
-    if (el) champsValues[ch.id] = el.value;
-  });
-
-  // Recuperer entreprise selectionnee
-  var entData = {
-    nom: document.getElementById('t-ent-nom') ? document.getElementById('t-ent-nom').value : '',
-    contact: document.getElementById('t-ent-contact') ? document.getElementById('t-ent-contact').value : '',
-    tel: document.getElementById('t-ent-tel') ? document.getElementById('t-ent-tel').value : '',
-    lot: document.getElementById('t-ent-lot') ? document.getElementById('t-ent-lot').value : '',
-  };
-
-  // Construire _visite avec les champs du formulaire
-  var visiteData = {
-    noVisite: champsValues['tv-no'] || champsValues['tr-no'] || '1',
-    heure: champsValues['tv-heure'] || champsValues['td-heure'] || champsValues['tf-heure'] || '',
-    lieu: champsValues['tr-lieu'] || '',
-  };
+  // Collecter les champs du formulaire selon le doc
+  var entData = {}, visiteData = {};
+  if (ref === 'FIC') {
+    entData = {
+      nom: getVal('fic-ent-nom'), contact: getVal('fic-ent-contact'),
+      tel: getVal('fic-ent-tel'), lot: getVal('fic-ent-lot'), siret: getVal('fic-ent-siret'),
+    };
+    visiteData = { noVisite: '1', heure: getVal('fic-heure'), dateIC: getVal('fic-date') };
+  } else if (ref === 'VIS') {
+    entData = { nom: getVal('vis-ent-nom'), contact: getVal('vis-ent-contact'), lot: getVal('vis-ent-lot') };
+    visiteData = { noVisite: getVal('vis-no'), heure: getVal('vis-heure') };
+  } else if (ref === 'RCO') {
+    visiteData = { noVisite: getVal('rco-no'), heure: getVal('rco-heure'), lieu: getVal('rco-lieu') };
+  }
 
   // Charger dans le formulaire principal
   currentAffaireId = terrainAffaire.id;
@@ -2010,7 +2194,6 @@ async function genererDocTerrain() {
   document.getElementById('moa-mail').value = moa.mail || '';
   document.getElementById('moe-nom').value = moe.nom || '';
 
-  // Stocker les donnees terrain pour buildTagData
   terrainAffaire._visite = visiteData;
   terrainAffaire._entreprise = entData;
 
@@ -2018,70 +2201,9 @@ async function genererDocTerrain() {
   await generateDoc(ref);
 }
 
-function addObs() {
-  obsCount++;
-  var id = 'obs-' + obsCount;
-  var div = document.createElement('div');
-  div.className = 'obs-item';
-  div.id = id;
-  var h = '<div style="display:flex;justify-content:space-between;">';
-  h += '<strong>Observation ' + obsCount + '</strong>';
-  h += '<button onclick="removeObs(' + JSON.stringify(id) + ')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:16px;">X</button>';
-  h += '</div><div class="obs-type-btns">';
-  h += '<button class="obs-type-btn obs" onclick="setObsType(' + JSON.stringify(id) + ',&quot;obs&quot;,this)">Observation</button>';
-  h += '<button class="obs-type-btn notif" onclick="setObsType(' + JSON.stringify(id) + ',&quot;notif&quot;,this)">Notification</button>';
-  h += '<button class="obs-type-btn dgi" onclick="setObsType(' + JSON.stringify(id) + ',&quot;dgi&quot;,this)">Danger grave</button>';
-  h += '</div>';
-  h += '<input type="hidden" class="obs-type-val" value="obs">';
-  h += '<textarea class="obs-desc" placeholder="Description..." rows="3"></textarea>';
-  h += '<input type="text" class="obs-delai" placeholder="Delai ex 48h">';
-  h += '<input type="text" class="obs-responsable" placeholder="Entreprise responsable">';
-  div.innerHTML = h;
-  document.getElementById('obs-list').appendChild(div);
-}
-
+async function genTerrainDoc(ref) { ouvrirFormulaireDoc(ref); }
+async function genererCRVisite() { await genererDocTerrain(); }
+function sauvegarderVisite() { showToast('Visite sauvegardee', 'success'); }
+function addObs() {}
 function removeObs(id) { var el=document.getElementById(id); if(el) el.remove(); }
-
-function setObsType(id, type, btn) {
-  var item = document.getElementById(id);
-  item.querySelectorAll('.obs-type-btn').forEach(function(b){ b.style.opacity='0.6'; });
-  btn.style.opacity = '1';
-  item.querySelector('.obs-type-val').value = type;
-}
-
-function sauvegarderVisite() {
-  showToast('Visite sauvegardee', 'success');
-}
-
-async function genTerrainDoc(ref) {
-  ouvrirFormulaireDoc(ref);
-}
-
-async function genererCRVisite() {
-  await genererDocTerrain();
-}
-</script>
-<script>
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/sw.js").catch(function(err){ console.log("SW erreur:", err); });
-}
-var deferredPrompt;
-window.addEventListener("beforeinstallprompt", function(e) {
-  e.preventDefault();
-  deferredPrompt = e;
-  var banner = document.getElementById("install-banner");
-  if (banner) banner.style.display = "flex";
-});
-function installPWA() {
-  if (deferredPrompt) {
-    deferredPrompt.prompt();
-    deferredPrompt.userChoice.then(function(){
-      deferredPrompt = null;
-      var banner = document.getElementById("install-banner");
-      if (banner) banner.style.display = "none";
-    });
-  }
-}
-</script>
-</body>
-</html>
+function setObsType(id, type, btn) {}
