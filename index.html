@@ -1400,6 +1400,132 @@ function injecterEntreprises(zip, entreprises) {
 }
 
 
+function injecterFIC(zip, ficData) {
+  var docFile = zip.file('word/document.xml');
+  if (!docFile) return zip;
+  var xmlStr = docFile.asText();
+
+  function escXml(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  // Remplir la cellule a droite d'un label dans un tableau
+  // Cherche le label, va dans la cellule suivante, y injecte la valeur
+  function remplirCellule(xml, label, valeur) {
+    if (!valeur) return xml;
+    var idx = xml.indexOf(label);
+    if (idx === -1) return xml;
+    // Fin de la cellule label
+    var tc1End = xml.indexOf('</w:tc>', idx) + 7;
+    // Debut cellule valeur
+    var tc2Start = xml.indexOf('<w:tc>', tc1End);
+    var tc2End   = xml.indexOf('</w:tc>', tc2Start);
+    if (tc2Start === -1 || tc2End === -1) return xml;
+    // Chercher le premier <w:p dans la cellule valeur
+    var pStart = xml.indexOf('<w:p', tc2Start);
+    if (pStart === -1 || pStart > tc2End) return xml;
+    var pEnd;
+    var normalClose = xml.indexOf('</w:p>', pStart);
+    if (normalClose !== -1 && normalClose < tc2End) {
+      pEnd = normalClose + 6;
+    } else {
+      var pTagEnd = xml.indexOf('>', pStart);
+      if (pTagEnd !== -1 && xml[pTagEnd-1] === '/' && pTagEnd < tc2End) {
+        pEnd = pTagEnd + 1;
+      } else return xml;
+    }
+    var newP = '<w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'
+      + '<w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>'
+      + '<w:t xml:space="preserve">' + escXml(valeur) + '</w:t></w:r></w:p>';
+    return xml.slice(0, pStart) + newP + xml.slice(pEnd);
+  }
+
+  // Cocher une case : remplacer '☐' par '☑' dans un texte contenant le label
+  function cocher(xml, label) {
+    var idx = xml.indexOf(label);
+    if (idx === -1) return xml;
+    // Chercher le '☐' le plus proche avant ce label dans le meme run
+    var pStart = xml.lastIndexOf('<w:p ', idx);
+    var pEnd = xml.indexOf('</w:p>', idx) + 6;
+    var para = xml.slice(pStart, pEnd);
+    // Remplacer le premier ☐ dans ce paragraphe
+    var newPara = para.replace('☐', '☑');
+    return xml.slice(0, pStart) + newPara + xml.slice(pEnd);
+  }
+
+  // Remplir une ligne a 2 colonnes (label sur toute la largeur, valeur dessous dans meme cellule)
+  // Pour les tableaux type "label | vide" sur la meme ligne
+  function remplirChamp(xml, label, valeur) {
+    return remplirCellule(xml, label, valeur);
+  }
+
+  var d = ficData;
+
+  // === SECTION 1 - Dates ===
+  // Tableau 5 : Date IC | Date fin previsionnelle | Nb intervenants
+  xmlStr = remplirCellule(xmlStr, "Date de l'IC", d.dateIC || '');
+  xmlStr = remplirCellule(xmlStr, 'Date fin prévisionnelle', d.dateFin || '');
+  xmlStr = remplirCellule(xmlStr, 'Nb. intervenants prévu', d.effectif || '');
+
+  // Tableau 4 - Categorie
+  if (d.categorie) {
+    var catOld = '☐ Cat. 1 ☐ Cat. 2 ☐ Cat. 3';
+    var cat = parseInt(d.categorie);
+    var catNew = (cat===1?'☑':'☐') + ' Cat. 1 '
+               + (cat===2?'☑':'☐') + ' Cat. 2 '
+               + (cat===3?'☑':'☐') + ' Cat. 3';
+    xmlStr = xmlStr.split(catOld).join(catNew);
+  }
+
+  // Tableau 6 - PGC remis
+  if (d.pgcStatut) {
+    var pgcAncres = {
+      'remis': "Remis ce jour (lors de l'ICP)",
+      'transmis': 'Déjà transmis le',
+      'maj': 'Version mise à jour',
+    };
+    var ancre = pgcAncres[d.pgcStatut];
+    if (ancre) xmlStr = cocher(xmlStr, ancre);
+  }
+
+  // === SECTION 2 - Entreprise intervenante ===
+  xmlStr = remplirCellule(xmlStr, 'Raison sociale', d.entNom || '');
+  xmlStr = remplirCellule(xmlStr, 'Représentant / CDT', d.entContact || '');
+  xmlStr = remplirCellule(xmlStr, 'Tél / Mail / SIRET', d.entTelMailSiret || '');
+  xmlStr = remplirCellule(xmlStr, 'Compagnon référent', d.entCompagnon || '');
+  xmlStr = remplirCellule(xmlStr, 'Travaux confiés', d.entLot || '');
+  xmlStr = remplirCellule(xmlStr, 'Période / Effectif max.', d.entPeriode || '');
+
+  // === SECTION 3 - EU ===
+  xmlStr = remplirCellule(xmlStr, 'Désignation / R. sociale', d.euNom || '');
+  xmlStr = remplirCellule(xmlStr, 'Représentant / Réf. sécu.', d.euContact || '');
+  xmlStr = remplirCellule(xmlStr, 'Tél / Mail', d.euTel || '');
+  xmlStr = remplirCellule(xmlStr, 'Activité site / horaires', d.euActivite || '');
+
+  // === SECTION 4 - Infos prealables ===
+  if (d.infoMO)       xmlStr = cocher(xmlStr, 'Mode opératoire détaillé des travaux confiés');
+  if (d.infoCACES)    xmlStr = cocher(xmlStr, 'Autorisation de conduite des engins / CACES');
+  if (d.infoEffectif) xmlStr = cocher(xmlStr, "Effectif, dates et durée prévisible d'intervention");
+  if (d.infoST)       xmlStr = cocher(xmlStr, 'Coordonnées des sous-traitants éventuels');
+  if (d.infoPPSPS)    xmlStr = cocher(xmlStr, 'PPSPS transmis au CSPS (si requis)');
+
+  // === SECTION 12 - Secours ===
+  xmlStr = remplirCellule(xmlStr, 'SST présent(s) — Nom(s)', d.secSST || '');
+  xmlStr = remplirCellule(xmlStr, 'Trousse de secours — emplacement', d.secTrousse || '');
+  xmlStr = remplirCellule(xmlStr, 'DAE — emplacement', d.secDAE || '');
+  xmlStr = remplirCellule(xmlStr, "Moyen d'alerte (tél / radio / DATI)", d.secAlerte || '');
+  xmlStr = remplirCellule(xmlStr, 'Point de rassemblement / accès pompiers', d.secRDV || '');
+
+  // === SECTION 13 - Observations CSPS ===
+  if (d.obsCSPS) {
+    xmlStr = remplirCellule(xmlStr, 'Observation (sans urgence)', d.obsCSPS);
+  }
+  xmlStr = remplirCellule(xmlStr, 'Fréquence visites CSPS', d.freqVisites || '');
+  xmlStr = remplirCellule(xmlStr, 'Réunions coordination', d.freqReunions || '');
+
+  zip.file('word/document.xml', xmlStr);
+  return zip;
+}
+
+
 function injecterObservations(zip, observations) {
   var docFile = zip.file('word/document.xml');
   if (!docFile) return zip;
@@ -1956,6 +2082,10 @@ async function generateDoc(ref) {
     var finalZip = doc.getZip();
     if (typeof sigData !== 'undefined' && (sigData.csps || sigData.ent)) {
       finalZip = injecterSignatures(finalZip, sigData.csps, sigData.ent, sigData.eu);
+    }
+    // Injecter les donnees FIC
+    if (ref === 'FIC' && typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire._ficData) {
+      finalZip = injecterFIC(finalZip, terrainAffaire._ficData);
     }
     if (data.cat || (data.risques)) {
       var docXmlFile = finalZip.file('word/document.xml');
@@ -2860,6 +2990,42 @@ async function genererDocTerrain() {
       tel: getVal('fic-ent-tel'), lot: getVal('fic-ent-lot'), siret: getVal('fic-ent-siret'),
     };
     visiteData = { noVisite: '1', heure: getVal('fic-heure'), dateIC: getVal('fic-date') };
+    // Collecter toutes les donnees FIC pour injection
+    terrainAffaire._ficData = {
+      dateIC:        getVal('fic-date'),
+      dateFin:       getVal('fic-ent-periode'),
+      effectif:      getVal('fic-ent-effectif'),
+      categorie:     terrainAffaire.cat,
+      pgcStatut:     'remis',
+      // Entreprise
+      entNom:        getVal('fic-ent-nom'),
+      entContact:    getVal('fic-ent-contact'),
+      entTelMailSiret: getVal('fic-ent-tel') + (getVal('fic-ent-siret') ? ' | SIRET ' + getVal('fic-ent-siret') : ''),
+      entCompagnon:  getVal('fic-ent-ref'),
+      entLot:        getVal('fic-ent-lot'),
+      entPeriode:    getVal('fic-ent-periode') + (getVal('fic-ent-effectif') ? ' — ' + getVal('fic-ent-effectif') + ' pers.' : ''),
+      // EU
+      euNom:         getVal('fic-eu-nom'),
+      euContact:     getVal('fic-eu-contact'),
+      euTel:         getVal('fic-eu-tel'),
+      euActivite:    getVal('fic-eu-activite'),
+      // Infos prealables
+      infoMO:        getCheck('fic-info-mo'),
+      infoCACES:     getCheck('fic-info-caces'),
+      infoEffectif:  getCheck('fic-info-effectif'),
+      infoST:        getCheck('fic-info-st'),
+      infoPPSPS:     getCheck('fic-info-ppsps'),
+      // Secours
+      secSST:        getVal('fic-sec-sst'),
+      secTrousse:    getVal('fic-sec-trousse'),
+      secDAE:        getVal('fic-sec-dae'),
+      secAlerte:     getVal('fic-sec-alerte'),
+      secRDV:        getVal('fic-sec-rdv'),
+      // Observations
+      obsCSPS:       getVal('fic-obs-csps'),
+      freqVisites:   getVal('fic-obs-freq'),
+      freqReunions:  getVal('fic-obs-reunion'),
+    };
   } else if (ref === 'VIS') {
     // Recuperer la premiere entreprise de la liste
     var firstEnt = document.querySelector('#vis-ent-list .vis-ent-nom');
