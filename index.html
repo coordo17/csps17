@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- CSPS17 index.html - v2.10 - 29/06/2026 - Photos illimitees CR Visite + Observations injectees + Nettoyage cases vides + PWA offline -->
+<!-- CSPS17 index.html - v2.11 - 29/06/2026 - Photos illimitees CR Visite + Observations injectees + Nettoyage cases vides + PWA offline -->
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
@@ -600,7 +600,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.10</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.11</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" id="btn-import-pgc" onclick="showPage('import')">&#128229; Importer PGC</button>
@@ -1735,10 +1735,10 @@ async function generateDoc(ref) {
         finalZip.file('word/document.xml', xmlStr2);
       }
     }
-    // Injecter les observations du CR Visite
-    if (ref === 'VIS' && typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire._observations) {
-      finalZip = injecterObservations(finalZip, terrainAffaire._observations);
-    }
+    // injecterObservations desactive temporairement
+    // if (ref === 'VIS' && terrainAffaire && terrainAffaire._observations) {
+    //   finalZip = injecterObservations(finalZip, terrainAffaire._observations);
+    // }
     // Injecter les photos dans le docx (avant nettoyage)
     if (typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire._photos && terrainAffaire._photos.length > 0) {
       finalZip = injecterPhotos(finalZip, terrainAffaire._photos, terrainAffaire._photosLegendes);
