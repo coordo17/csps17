@@ -1271,6 +1271,135 @@ function makePhotoXml(rid, cx, cy) {
     + '</w:drawing></w:r>';
 }
 
+function injecterParticipants(zip, participants) {
+  // participants = [{nom, qualite, present}]
+  if (!participants || !participants.length) return zip;
+  var docFile = zip.file('word/document.xml');
+  if (!docFile) return zip;
+  var xmlStr = docFile.asText();
+
+  function escXml(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function cellTexte(s, sz, bold, center) {
+    return '<w:p>' + (center ? '<w:pPr><w:jc w:val="center"/></w:pPr>' : '')
+      + '<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'
+      + (bold ? '<w:b/><w:bCs/>' : '')
+      + '<w:sz w:val="' + (sz||18) + '"/><w:szCs w:val="' + (sz||18) + '"/></w:rPr>'
+      + '<w:t xml:space="preserve">' + escXml(s) + '</w:t></w:r></w:p>';
+  }
+
+  var bord = '<w:top w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/>'
+    + '<w:left w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/>'
+    + '<w:bottom w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/>'
+    + '<w:right w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/>';
+  var mar = '<w:top w:w="55" w:type="dxa"/><w:left w:w="110" w:type="dxa"/>'
+    + '<w:bottom w:w="55" w:type="dxa"/><w:right w:w="110" w:type="dxa"/>';
+
+  function tc(w, content) {
+    return '<w:tc><w:tcPr><w:tcW w:w="' + w + '" w:type="dxa"/>'
+      + '<w:tcBorders>' + bord + '</w:tcBorders>'
+      + '<w:shd w:val="clear" w:color="auto" w:fill="FFFFFF"/>'
+      + '<w:tcMar>' + mar + '</w:tcMar></w:tcPr>' + content + '</w:tc>';
+  }
+
+  function buildTrParticipant(p) {
+    return '<w:tr>'
+      + tc(3200, cellTexte(p.nom || '', 18))
+      + tc(3200, cellTexte(p.qualite || '', 18))
+      + tc(3240, cellTexte(p.present ? '✓' : '', 18, false, true))
+      + '</w:tr>';
+  }
+
+  // Trouver le tableau Participants et remplacer les lignes vides
+  var ancre = 'Participant</w:t>';
+  var idx = xmlStr.indexOf(ancre);
+  if (idx === -1) return zip;
+  var tblStart = xmlStr.lastIndexOf('<w:tbl>', idx);
+  var tblEnd   = xmlStr.indexOf('</w:tbl>', idx) + 8;
+  var tbl = xmlStr.slice(tblStart, tblEnd);
+
+  // Trouver la ligne modele vide (derniere ligne)
+  var lastTrStart = tbl.lastIndexOf('<w:tr ');
+  var lastTrEnd   = tbl.lastIndexOf('</w:tr>') + 7;
+  var tblSansModele = tbl.slice(0, lastTrStart);
+
+  // Reconstruire avec les participants
+  var newTbl = tblSansModele;
+  for (var i = 0; i < participants.length; i++) {
+    newTbl += buildTrParticipant(participants[i]);
+  }
+  newTbl += '</w:tbl>';
+
+  xmlStr = xmlStr.slice(0, tblStart) + newTbl + xmlStr.slice(tblEnd);
+  zip.file('word/document.xml', xmlStr);
+  return zip;
+}
+
+function injecterEntreprises(zip, entreprises) {
+  // entreprises = [{nom, lot, effectif, type}] type = 'EE'|'ST'|'Prest'
+  if (!entreprises || !entreprises.length) return zip;
+  var docFile = zip.file('word/document.xml');
+  if (!docFile) return zip;
+  var xmlStr = docFile.asText();
+
+  function escXml(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function cellTexte(s, sz) {
+    return '<w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'
+      + '<w:sz w:val="' + (sz||18) + '"/><w:szCs w:val="' + (sz||18) + '"/></w:rPr>'
+      + '<w:t xml:space="preserve">' + escXml(s) + '</w:t></w:r></w:p>';
+  }
+
+  var bord = '<w:top w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/>'
+    + '<w:left w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/>'
+    + '<w:bottom w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/>'
+    + '<w:right w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/>';
+  var mar = '<w:top w:w="55" w:type="dxa"/><w:left w:w="110" w:type="dxa"/>'
+    + '<w:bottom w:w="55" w:type="dxa"/><w:right w:w="110" w:type="dxa"/>';
+
+  function tc(w, content) {
+    return '<w:tc><w:tcPr><w:tcW w:w="' + w + '" w:type="dxa"/>'
+      + '<w:tcBorders>' + bord + '</w:tcBorders>'
+      + '<w:shd w:val="clear" w:color="auto" w:fill="FFFFFF"/>'
+      + '<w:tcMar>' + mar + '</w:tcMar></w:tcPr>' + content + '</w:tc>';
+  }
+
+  function buildTrEntreprise(e) {
+    var ee = e.type === 'EE' ? '☑' : '☐';
+    var st = e.type === 'ST' ? '☑' : '☐';
+    var pr = e.type === 'Prest' ? '☑' : '☐';
+    var label = escXml(e.nom||'') + ' — ' + ee + ' EE ' + st + ' ST ' + pr + ' Prestataire';
+    return '<w:tr>'
+      + tc(3200, '<w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'
+        + '<w:sz w:val="15"/><w:szCs w:val="15"/></w:rPr>'
+        + '<w:t xml:space="preserve">' + label + '</w:t></w:r></w:p>')
+      + tc(3200, cellTexte(e.lot || '', 18))
+      + tc(3240, cellTexte(e.effectif ? String(e.effectif) : '', 18))
+      + '</w:tr>';
+  }
+
+  // Trouver le tableau Entreprises présentes
+  var ancre = 'Entreprise présente sur chantier';
+  var idx = xmlStr.indexOf(ancre);
+  if (idx === -1) return zip;
+  var tblStart = xmlStr.lastIndexOf('<w:tbl>', idx);
+  var tblEnd   = xmlStr.indexOf('</w:tbl>', idx) + 8;
+  var tbl = xmlStr.slice(tblStart, tblEnd);
+
+  // Supprimer la ligne modele vide
+  var lastTrStart = tbl.lastIndexOf('<w:tr ');
+  var tblSansModele = tbl.slice(0, lastTrStart);
+
+  var newTbl = tblSansModele;
+  for (var i = 0; i < entreprises.length; i++) {
+    newTbl += buildTrEntreprise(entreprises[i]);
+  }
+  newTbl += '</w:tbl>';
+
+  xmlStr = xmlStr.slice(0, tblStart) + newTbl + xmlStr.slice(tblEnd);
+  zip.file('word/document.xml', xmlStr);
+  return zip;
+}
+
+
 function injecterObservations(zip, observations) {
   var docFile = zip.file('word/document.xml');
   if (!docFile) return zip;
@@ -1516,7 +1645,7 @@ function injecterPhotos(zip, photos, legendes) {
       addImage(rid1x, photos[p]);
       var leg1 = legendes[p] || ('Photo ' + (p+1));
 
-      var cellG = '<w:tc><w:tcPr><w:tcW w:w="4819" w:type="dxa"/></w:tcPr>'
+      var cellG = '<w:tc><w:tcPr><w:tcW w:w="4819" w:type="dxa"/><w:shd w:val="clear" w:color="auto" w:fill="FFFFFF"/></w:tcPr>'
         + '<w:p><w:pPr><w:jc w:val="center"/></w:pPr>' + makePhotoXml(rid1x, 2700000, 2025000) + '</w:p>'
         + '<w:p><w:r><w:rPr><w:i/><w:sz w:val="16"/></w:rPr><w:t>' + leg1.substring(0,60).replace(/&/g,'&amp;') + '</w:t></w:r></w:p>'
         + '</w:tc>';
@@ -1526,12 +1655,12 @@ function injecterPhotos(zip, photos, legendes) {
         var rid2x = 200 + p + 1;
         addImage(rid2x, photos[p+1]);
         var leg2 = legendes[p+1] || ('Photo ' + (p+2));
-        cellD = '<w:tc><w:tcPr><w:tcW w:w="4819" w:type="dxa"/></w:tcPr>'
+        cellD = '<w:tc><w:tcPr><w:tcW w:w="4819" w:type="dxa"/><w:shd w:val="clear" w:color="auto" w:fill="FFFFFF"/></w:tcPr>'
           + '<w:p><w:pPr><w:jc w:val="center"/></w:pPr>' + makePhotoXml(rid2x, 2700000, 2025000) + '</w:p>'
           + '<w:p><w:r><w:rPr><w:i/><w:sz w:val="16"/></w:rPr><w:t>' + leg2.substring(0,60).replace(/&/g,'&amp;') + '</w:t></w:r></w:p>'
           + '</w:tc>';
       } else {
-        cellD = '<w:tc><w:tcPr><w:tcW w:w="4819" w:type="dxa"/></w:tcPr><w:p/></w:tc>';
+        cellD = '<w:tc><w:tcPr><w:tcW w:w="4819" w:type="dxa"/><w:shd w:val="clear" w:color="auto" w:fill="FFFFFF"/></w:tcPr><w:p/></w:tc>';
       }
 
       extrasXml += '<w:tbl><w:tblPr><w:tblW w:w="9638" w:type="dxa"/><w:tblBorders>'
@@ -1835,6 +1964,15 @@ async function generateDoc(ref) {
         if (data.cat) xmlStr2 = cocherCategorie(xmlStr2, data.cat);
         if (data.risques) xmlStr2 = cocherRisques(xmlStr2, data.risques);
         finalZip.file('word/document.xml', xmlStr2);
+      }
+    }
+    // Injecter participants et entreprises (CR Visite)
+    if (ref === 'VIS' && typeof terrainAffaire !== 'undefined' && terrainAffaire) {
+      if (terrainAffaire._participants && terrainAffaire._participants.length) {
+        finalZip = injecterParticipants(finalZip, terrainAffaire._participants);
+      }
+      if (terrainAffaire._entreprisesPresentes && terrainAffaire._entreprisesPresentes.length) {
+        finalZip = injecterEntreprises(finalZip, terrainAffaire._entreprisesPresentes);
       }
     }
     // Injecter les observations (section 4 CR Visite)
