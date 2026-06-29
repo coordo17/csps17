@@ -1410,9 +1410,9 @@ function injecterFIC(zip, ficData) {
 
   // Remplir la cellule a droite d'un label dans un tableau
   // Cherche le label, va dans la cellule suivante, y injecte la valeur
-  function remplirCellule(xml, label, valeur) {
+  function remplirCellule(xml, label, valeur, fromIndex) {
     if (!valeur) return xml;
-    var idx = xml.indexOf(label);
+    var idx = xml.indexOf(label, fromIndex || 0);
     if (idx === -1) return xml;
     // Fin de la cellule label
     var tc1End = xml.indexOf('</w:tc>', idx) + 7;
@@ -1488,12 +1488,16 @@ function injecterFIC(zip, ficData) {
   }
 
   // === SECTION 2 - Entreprise intervenante ===
-  xmlStr = remplirCellule(xmlStr, 'Raison sociale', d.entNom || '');
-  xmlStr = remplirCellule(xmlStr, 'Représentant / CDT', d.entContact || '');
-  xmlStr = remplirCellule(xmlStr, 'Tél / Mail / SIRET', d.entTelMailSiret || '');
-  xmlStr = remplirCellule(xmlStr, 'Compagnon référent', d.entCompagnon || '');
-  xmlStr = remplirCellule(xmlStr, 'Travaux confiés', d.entLot || '');
-  xmlStr = remplirCellule(xmlStr, 'Période / Effectif max.', d.entPeriode || '');
+  // fromIndex : chercher apres l'ancre "Entreprise Intervenante" pour eviter de taper dans MOA
+  var eeAnchor = xmlStr.indexOf('Entreprise Intervenante');
+  if (eeAnchor === -1) eeAnchor = xmlStr.indexOf('ENTREPRISE INTERVENANTE');
+  if (eeAnchor === -1) eeAnchor = 0;
+  xmlStr = remplirCellule(xmlStr, 'Raison sociale', d.entNom || '', eeAnchor);
+  xmlStr = remplirCellule(xmlStr, 'Représentant / CDT', d.entContact || '', eeAnchor);
+  xmlStr = remplirCellule(xmlStr, 'Tél / Mail / SIRET', d.entTelMailSiret || '', eeAnchor);
+  xmlStr = remplirCellule(xmlStr, 'Compagnon référent', d.entCompagnon || '', eeAnchor);
+  xmlStr = remplirCellule(xmlStr, 'Travaux confiés', d.entLot || '', eeAnchor);
+  xmlStr = remplirCellule(xmlStr, 'Période / Effectif max.', d.entPeriode || '', eeAnchor);
 
   // === SECTION 3 - EU ===
   xmlStr = remplirCellule(xmlStr, 'Désignation / R. sociale', d.euNom || '');
