@@ -1252,6 +1252,55 @@ function renderDocsGrid() {
 }
 
 // ── INJECTION SIGNATURES DANS DOCX ─────────────────────────────
+function injecterPhotos(zip, photos) {
+  if (!photos || !photos.length) return zip;
+  var docFile = zip.file('word/document.xml');
+  if (!docFile) return zip;
+  var xmlStr = docFile.asText();
+  var relsFile = zip.file('word/_rels/document.xml.rels');
+  var relsStr = relsFile ? relsFile.asText() : '';
+  var ctFile = zip.file('[Content_Types].xml');
+  var ctStr = ctFile ? ctFile.asText() : '';
+
+  if (ctStr.indexOf('image/png') === -1) {
+    ctStr = ctStr.replace('</Types>', '<Default Extension="png" ContentType="image/png"/></Types>');
+  }
+
+  var photosXml = '';
+  photos.forEach(function(dataUrl, i) {
+    var rid = 200 + i;
+    var base64 = dataUrl.split(',')[1];
+    var imgBytes = atob(base64);
+    var arr = new Uint8Array(imgBytes.length);
+    for (var j = 0; j < imgBytes.length; j++) arr[j] = imgBytes.charCodeAt(j);
+    zip.file('word/media/photo' + rid + '.png', arr);
+    var relXml = '<Relationship Id="rId' + rid + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/photo' + rid + '.png"/>';
+    relsStr = relsStr.replace('</Relationships>', relXml + '</Relationships>');
+    // Image 8cm x 6cm = 2880000 x 2160000 EMU
+    photosXml += '<w:p><w:r><w:drawing>'
+      + '<wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" distT="0" distB="114300" distL="0" distR="0">'
+      + '<wp:extent cx="2880000" cy="2160000"/><wp:effectExtent l="0" t="0" r="0" b="0"/>'
+      + '<wp:docPr id="' + rid + '" name="photo' + rid + '"/>'
+      + '<wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr>'
+      + '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+      + '<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+      + '<pic:nvPicPr><pic:cNvPr id="' + rid + '" name="photo' + rid + '"/><pic:cNvPicPr/></pic:nvPicPr>'
+      + '<pic:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rId' + rid + '"/>'
+      + '<a:stretch><a:fillRect/></a:stretch></pic:blipFill>'
+      + '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="2880000" cy="2160000"/></a:xfrm>'
+      + '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>'
+      + '</pic:pic></a:graphicData></a:graphic></wp:inline>'
+      + '</w:drawing></w:r></w:p>';
+  });
+
+  // Inserer les photos avant </w:body>
+  xmlStr = xmlStr.replace('</w:body>', photosXml + '</w:body>');
+  zip.file('word/document.xml', xmlStr);
+  zip.file('word/_rels/document.xml.rels', relsStr);
+  zip.file('[Content_Types].xml', ctStr);
+  return zip;
+}
+
 function injecterSignatures(zip, sigCsps, sigEnt, sigEU) {
   var docFile = zip.file('word/document.xml');
   if (!docFile) return zip;
@@ -1485,6 +1534,10 @@ async function generateDoc(ref) {
         if (data.risques) xmlStr2 = cocherRisques(xmlStr2, data.risques);
         finalZip.file('word/document.xml', xmlStr2);
       }
+    }
+    // Injecter les photos dans le docx
+    if (typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire._photos && terrainAffaire._photos.length > 0) {
+      finalZip = injecterPhotos(finalZip, terrainAffaire._photos);
     }
     var out = finalZip.generate({
       type: 'blob',
@@ -2023,24 +2076,11 @@ function genFormulaireVIS() {
   html2 += fieldRow('Avancement global', 'vis-avancement', 'text', 'Ex: 30% - Gros oeuvre en cours', '');
   html2 += sectionEnd();
 
-  // Section 2 - Entreprise presente (une seule, deroulant)
-  html2 += sectionHeader('2', 'Entreprise presente sur chantier', '&#127970;');
-  html2 += '<div class="field" style="margin-bottom:10px;"><label>Selectionner l\'entreprise</label>'
-    + '<select id="vis-ent-select" onchange="visSelectEntreprise(this.value)" style="width:100%;padding:12px;font-size:15px;border:2px solid var(--blue-mid);border-radius:var(--radius);font-family:inherit;">'
-    + '<option value="">-- Choisir --</option>';
-  (terrainAffaire.entreprises || []).forEach(function(e, i) {
-    var selected = (ent && ent.nom === e.nom) ? ' selected' : '';
-    html2 += '<option value="' + i + '"' + selected + '>' + (e.nom || 'Entreprise ' + (i+1)) + ' — ' + (e.lot || '') + '</option>';
-  });
-  html2 += '</select></div>';
-  html2 += twoCol(
-    fieldRow('Signataire / Representant', 'vis-ent-contact', 'text', 'Nom + Qualite', ent.contact || ''),
-    fieldRow('Tel', 'vis-ent-tel', 'tel', '06 xx xx xx xx', ent.tel || '')
-  );
-  html2 += '<div class="field" style="margin-bottom:10px;"><label>Type</label>'
-    + '<select id="vis-ent-type" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;">'
-    + '<option>EE</option><option>ST</option><option>Prestataire</option></select></div>';
-  html2 += sectionEnd();
+  // Section 2 - Entreprises presentes (multiples)
+  html2 += '<div class="terrain-section"><div class="terrain-section-header">&#127970; Entreprises presentes sur chantier</div><div class="terrain-section-body">';
+  html2 += '<div id="vis-ent-list"></div>';
+  html2 += '<button class="btn btn-outline btn-sm" onclick="visAjouterEntreprise()" style="width:100%;padding:12px;margin-top:4px;">+ Ajouter une entreprise</button>';
+  html2 += '</div></div>';
 
   // Section 3 - Observations avec photos
   html2 += '<div class="terrain-section"><div class="terrain-section-header">&#9888; Observations du CSPS</div>'
@@ -2050,6 +2090,45 @@ function genFormulaireVIS() {
     + '</div></div>';
 
   return html2;
+}
+
+var visEntCount = 0;
+
+function visAjouterEntreprise() {
+  visEntCount++;
+  var id = 'vis-ent-' + visEntCount;
+  var div = document.createElement('div');
+  div.id = id;
+  div.style.cssText = 'border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:10px;background:#f8fafc;';
+
+  var entOptions = '<option value="">-- Choisir du dossier --</option>';
+  (terrainAffaire.entreprises || []).forEach(function(e, i) {
+    entOptions += '<option value="' + i + '">' + (e.nom || '') + ' — ' + (e.lot || '') + '</option>';
+  });
+
+  var h = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
+  h += '<strong style="color:var(--blue-dark);font-size:13px;">Entreprise ' + visEntCount + '</strong>';
+  h += '<button class="vis-ent-del" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:16px;">&#10005;</button>';
+  h += '</div>';
+  h += '<select class="vis-ent-sel" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;margin-bottom:8px;">' + entOptions + '</select>';
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">';
+  h += '<div class="field"><label style="font-size:11px;">Nom entreprise</label><input type="text" class="vis-ent-nom" placeholder="Raison sociale" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;"></div>';
+  h += '<div class="field"><label style="font-size:11px;">Type</label><select class="vis-ent-type" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;"><option>EE</option><option>ST</option><option>Prestataire</option></select></div>';
+  h += '<div class="field"><label style="font-size:11px;">Representant</label><input type="text" class="vis-ent-contact" placeholder="Nom + Qualite" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;"></div>';
+  h += '<div class="field"><label style="font-size:11px;">Tel</label><input type="tel" class="vis-ent-tel" placeholder="06 xx xx xx xx" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;"></div>';
+  h += '</div>';
+  div.innerHTML = h;
+
+  div.querySelector('.vis-ent-del').addEventListener('click', function() { div.remove(); });
+  div.querySelector('.vis-ent-sel').addEventListener('change', function() {
+    var ent = (terrainAffaire.entreprises || [])[parseInt(this.value)];
+    if (!ent) return;
+    var nomEl = div.querySelector('.vis-ent-nom'); if(nomEl) nomEl.value = ent.nom || '';
+    var cEl = div.querySelector('.vis-ent-contact'); if(cEl) cEl.value = ent.contact || '';
+    var tEl = div.querySelector('.vis-ent-tel'); if(tEl) tEl.value = ent.tel || '';
+  });
+
+  document.getElementById('vis-ent-list').appendChild(div);
 }
 
 function visSelectEntreprise(idx) {
@@ -2317,6 +2396,15 @@ async function genererDocTerrain() {
 
   terrainAffaire._visite = visiteData;
   terrainAffaire._entreprise = entData;
+
+  // Collecter les photos des observations pour le CR Visite
+  if (ref === 'VIS') {
+    var photos = [];
+    document.querySelectorAll('[id^="vis-obs-"][id$="-preview"] img').forEach(function(img) {
+      if (img.src && img.src.startsWith('data:')) photos.push(img.src);
+    });
+    terrainAffaire._photos = photos;
+  }
 
   showToast('Generation ' + (DOC_TITRES[ref] || ref) + ' en cours...');
   await generateDoc(ref);
