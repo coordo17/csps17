@@ -602,7 +602,7 @@
     <span class="logo-name">Alain SUZANNE &middot; Coordination SPS</span>
   </div>
   <div class="header-actions">
-    <button class="btn btn-outline btn-sm btn-import-pgc" onclick="showPage('import')">&#128229; Importer PGC</button>
+    <button class="btn btn-outline btn-sm" id="btn-import-pgc" onclick="showPage('import')">&#128229; Importer PGC</button>
     <button class="btn btn-outline btn-sm" onclick="showPage('terrain');setTimeout(populateTerrainSelect,100);" style="background:#e8f5e9;color:#2e7d52;border-color:#2e7d52;">&#128241; Terrain</button>
   </div>
 </header>
@@ -865,6 +865,7 @@
             <option value="">-- Choisir une affaire --</option>
           </select>
         </div>
+        <div id="terrain-ent-select-div" style="display:none;"></div>
         <div id="terrain-doc-buttons" style="display:none;">
           <div id="terrain-affaire-resume" style="background:var(--blue-xl);border-radius:var(--radius);padding:12px 16px;margin-bottom:16px;font-size:13px;"></div>
           <p style="font-size:13px;font-weight:700;color:var(--blue-dark);margin-bottom:10px;">Quel document ?</p>
@@ -1685,6 +1686,12 @@ function delay(ms) { return new Promise(function(r){ setTimeout(r, ms); }); }
 
 renderAffaireList();
 
+// Cacher Import PGC sur mobile
+if (window.innerWidth <= 680) {
+  var btnPGC = document.getElementById('btn-import-pgc');
+  if (btnPGC) btnPGC.style.display = 'none';
+}
+
 // Init terrain select si deja sur la page terrain
 if (document.getElementById('page-terrain') && document.getElementById('page-terrain').classList.contains('active')) {
   populateTerrainSelect();
@@ -1731,13 +1738,35 @@ function terrainSelectAffaire(id) {
     '<strong>' + (terrainAffaire.num || '') + '</strong> — ' + (c.nom || '') +
     '<br>' + (c.adresse || '') + '<br>MOA : ' + (moa.nom || 'NC') +
     (terrainAffaire.cat ? ' &nbsp;|&nbsp; Cat. ' + terrainAffaire.cat : '');
+  // Déroulant entreprises
+  var entDiv = document.getElementById('terrain-ent-select-div');
+  if (entDiv && terrainAffaire.entreprises && terrainAffaire.entreprises.length > 0) {
+    var sel = '<div class="field" style="margin-bottom:12px;"><label style="font-size:12px;font-weight:700;color:var(--blue-dark);text-transform:uppercase;">Entreprise concernee</label>'
+      + '<select id="terrain-ent-global" onchange="terrainPreselectEntreprise(this.value)" style="width:100%;padding:14px;font-size:16px;border:2px solid var(--border);border-radius:var(--radius);font-family:inherit;margin-top:6px;">'
+      + '<option value="">-- Toutes / Non specifie --</option>';
+    terrainAffaire.entreprises.forEach(function(e, i) {
+      sel += '<option value="' + i + '">' + (e.nom || 'Entreprise ' + (i+1)) + ' — ' + (e.lot || e.type || '') + '</option>';
+    });
+    sel += '</select></div>';
+    entDiv.innerHTML = sel;
+    entDiv.style.display = 'block';
+  }
   document.getElementById('terrain-doc-buttons').style.display = 'block';
+}
+
+function terrainPreselectEntreprise(idx) {
+  if (idx === '' || !terrainAffaire) return;
+  terrainAffaire._entSelectIdx = parseInt(idx);
 }
 
 function ouvrirFormulaireDoc(ref) {
   if (!terrainAffaire) return;
   currentTerrainDoc = ref;
   sigData = { ent: null, csps: null, eu: null };
+  // Pre-selectionner l'entreprise si choisie
+  if (terrainAffaire._entSelectIdx !== undefined && terrainAffaire.entreprises) {
+    terrainAffaire._entCourante = terrainAffaire.entreprises[terrainAffaire._entSelectIdx] || null;
+  }
   document.getElementById('terrain-doc-title').textContent = DOC_TITRES[ref] || ref;
   document.getElementById('terrain-section-sig-ent').style.display = DOCS_AVEC_SIG_ENT.includes(ref) ? 'block' : 'none';
   document.getElementById('terrain-section-sig-eu').style.display = DOCS_AVEC_SIG_EU.includes(ref) ? 'block' : 'none';
@@ -1812,7 +1841,7 @@ function genFormulaireFIC() {
   var c = terrainAffaire.chantier || {};
   var moa = terrainAffaire.moa || {};
   var moe = terrainAffaire.moe || {};
-  var ent = getEntrepriseInfo();
+  var ent = (terrainAffaire._entCourante) ? terrainAffaire._entCourante : getEntrepriseInfo();
   var risques = terrainAffaire.risques || {};
   var today = new Date().toLocaleDateString('fr-FR');
   var cat = terrainAffaire.cat || '';
@@ -1979,7 +2008,7 @@ function genFormulaireFIC() {
 }
 
 function genFormulaireVIS() {
-  var ent = getEntrepriseInfo();
+  var ent = (terrainAffaire._entCourante) ? terrainAffaire._entCourante : getEntrepriseInfo();
   var today = new Date().toISOString().split('T')[0];
   var nowH = new Date().getHours().toString().padStart(2,'0') + ':' + new Date().getMinutes().toString().padStart(2,'0');
   var html2 = '';
