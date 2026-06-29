@@ -1856,12 +1856,12 @@ function genFormulaireFIC() {
   html2 += '</select></div>';
   html2 += fieldRow('Raison sociale', 'fic-ent-nom', 'text', 'Nom entreprise', ent.nom || '');
   html2 += twoCol(
-    fieldRow('Representant', 'fic-ent-contact', 'text', 'Nom Prenom', ent.contact || ''),
-    fieldRow('Tel', 'fic-ent-tel', 'tel', '06 xx xx xx xx', ent.tel || '')
+    fieldRow('Signataire', 'fic-ent-contact', 'text', 'Nom + Qualite', ent.contact || ''),
+    fieldRow('Tel portable', 'fic-ent-tel', 'tel', '06 xx xx xx xx', ent.tel || '')
   );
   html2 += twoCol(
-    fieldRow('Lot / Travaux confies', 'fic-ent-lot', 'text', 'Ex: Gros oeuvre', ent.lot || ''),
-    fieldRow('SIRET', 'fic-ent-siret', 'text', '000 000 000 00000', ent.siret || '')
+    fieldRow('Tel fixe', 'fic-ent-tel-fixe', 'tel', '02 xx xx xx xx', ent.telFixe || ''),
+    fieldRow('Lot / Travaux confies', 'fic-ent-lot', 'text', 'Ex: Gros oeuvre', ent.lot || '')
   );
   html2 += fieldRow('Compagnon referent', 'fic-ent-ref', 'text', 'Nom du compagnon referent', '');
   html2 += twoCol(
