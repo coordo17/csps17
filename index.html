@@ -1983,6 +1983,7 @@ var DOC_FILES = {
   'RJC':         'CSPS17_Registre_Journal_Bordereau_v3_1.docx',
   'DIF':         'CSPS17_Fiche_Diffusion_PGC_v3.docx',
   'FIC':         'Fiche_IC_Vierge_CSPS17_v15.docx',
+  'FIC3':        'Fiche_IC_Cat3_CSPS17_v1.docx',
   'IC':          'CSPS17_Courrier_Transmission_IC_v2_1.docx',
   'PPP':         'CSPS17_Grille_Analyse_PPSPS_v3.docx',
   'VIS':         'CR_Visite_Chantier_CSPS17_v2.docx',
@@ -2047,6 +2048,14 @@ function buildTagData(data) {
     ent_lot:          (data._entreprise && data._entreprise.lot) ? data._entreprise.lot : '',
     ent_compagnon:    (data._entreprise && data._entreprise.compagnon) ? data._entreprise.compagnon : '',
     ent_adresse:      (data._entreprise && data._entreprise.adresse) ? data._entreprise.adresse : '',
+    // Tags Cat.3 FIC
+    cat3_acces:        (data._ficData && data._ficData.cat3_acces) ? data._ficData.cat3_acces : '',
+    cat3_securisation: (data._ficData && data._ficData.cat3_securisation) ? data._ficData.cat3_securisation : '',
+    cat3_hygiene:      (data._ficData && data._ficData.cat3_hygiene) ? data._ficData.cat3_hygiene : '',
+    cat3_energie:      (data._ficData && data._ficData.cat3_energie) ? data._ficData.cat3_energie : '',
+    cat3_stockages:    (data._ficData && data._ficData.cat3_stockages) ? data._ficData.cat3_stockages : '',
+    cat3_dechets:      (data._ficData && data._ficData.cat3_dechets) ? data._ficData.cat3_dechets : '',
+    cat3_secours:      (data._ficData && data._ficData.cat3_secours) ? data._ficData.cat3_secours : '',
   };
 }
 
@@ -2063,7 +2072,10 @@ async function generateDoc(ref) {
     showToast('Renseignez le chantier avant de generer', 'error');
     return;
   }
-  var fname = DOC_FILES[ref];
+  // Adapter le template FIC selon la categorie
+  var refEffectif = ref;
+  if (ref === 'FIC' && currentCat === 3) refEffectif = 'FIC3';
+  var fname = DOC_FILES[refEffectif] || DOC_FILES[ref];
   if (!fname) { showToast('Document inconnu : ' + ref, 'error'); return; }
   showToast('Generation ' + ref + ' en cours...');
   try {
@@ -2609,6 +2621,22 @@ function genFormulaireFIC() {
   html2 += fieldRow('Referent canicule — Nom', 'fic-meteo-referent', 'text', 'Nom du referent canicule', '');
   html2 += '</div></div>';
 
+  // Section I Cat.3 - Explications PGC (visible seulement si cat=3)
+  if (terrainAffaire.cat === 3) {
+    html2 += '<div class="terrain-section" style="border:2px solid #d97706;">';
+    html2 += '<div class="terrain-section-header" style="background:#d97706;">&#128196; Section I — Explications du PGC & Constats in situ (Cat. 3)</div>';
+    html2 += '<div class="terrain-section-body">';
+    html2 += '<p style="font-size:12px;color:var(--text-light);margin-bottom:12px;">Ces textes seront injectés dans la Fiche IC Cat.3. Pré-remplissez depuis le PGC.</p>';
+    html2 += fieldRow('🚗 Accès & Véhicules', 'fic-cat3-acces', 'textarea', 'Ex: Accès depuis la voie communale...', '');
+    html2 += fieldRow('Sécurisation / Clôture', 'fic-cat3-securisation', 'textarea', 'Ex: Site fermé, portail verrouillé...', '');
+    html2 += fieldRow('Hygiène & Base vie', 'fic-cat3-hygiene', 'textarea', 'Ex: Utilisation des installations présentes...', '');
+    html2 += fieldRow('Énergie Provisoire', 'fic-cat3-energie', 'textarea', 'Ex: Points électriques protégés par différentiel...', '');
+    html2 += fieldRow('Stockages', 'fic-cat3-stockages', 'textarea', 'Ex: Stockages dans la cour, pas sur domaine public...', '');
+    html2 += fieldRow('Déchets & Bennes', 'fic-cat3-dechets', 'textarea', 'Ex: Pas de bennes communes, nettoyage fin de journée...', '');
+    html2 += fieldRow('Secours', 'fic-cat3-secours', 'textarea', 'Ex: SST présent, trousse médicale à charge EE...', '');
+    html2 += '</div></div>';
+  }
+
   // Section 11 - Secours
   html2 += sectionHeader('11', 'Organisation des secours', '&#128657;');
   html2 += fieldRow('SST present(s) — Nom(s)', 'fic-sec-sst', 'text', 'Nom du SST', '');
@@ -3023,6 +3051,14 @@ async function genererDocTerrain() {
       secRDV:        getVal('fic-sec-rdv'),
       // Observations
       obsCSPS:       getVal('fic-obs-csps'),
+      // Section I Cat.3 - Explications PGC
+      cat3_acces:         getVal('fic-cat3-acces'),
+      cat3_securisation:  getVal('fic-cat3-securisation'),
+      cat3_hygiene:       getVal('fic-cat3-hygiene'),
+      cat3_energie:       getVal('fic-cat3-energie'),
+      cat3_stockages:     getVal('fic-cat3-stockages'),
+      cat3_dechets:       getVal('fic-cat3-dechets'),
+      cat3_secours:       getVal('fic-cat3-secours'),
       freqVisites:   getVal('fic-obs-freq'),
       freqReunions:  getVal('fic-obs-reunion'),
     };
