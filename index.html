@@ -1252,7 +1252,25 @@ function renderDocsGrid() {
 }
 
 // ── INJECTION SIGNATURES DANS DOCX ─────────────────────────────
-function injecterPhotos(zip, photos) {
+function makePhotoXml(rid, cx, cy) {
+  cx = cx || 2700000; cy = cy || 2025000; // 7.5cm x 5.6cm
+  return '<w:r><w:drawing>'
+    + '<wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" distT="0" distB="0" distL="0" distR="0">'
+    + '<wp:extent cx="' + cx + '" cy="' + cy + '"/><wp:effectExtent l="0" t="0" r="0" b="0"/>'
+    + '<wp:docPr id="' + rid + '" name="photo' + rid + '"/>'
+    + '<wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr>'
+    + '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+    + '<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+    + '<pic:nvPicPr><pic:cNvPr id="' + rid + '" name="photo' + rid + '"/><pic:cNvPicPr/></pic:nvPicPr>'
+    + '<pic:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rId' + rid + '"/>'
+    + '<a:stretch><a:fillRect/></a:stretch></pic:blipFill>'
+    + '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + cx + '" cy="' + cy + '"/></a:xfrm>'
+    + '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>'
+    + '</pic:pic></a:graphicData></a:graphic></wp:inline>'
+    + '</w:drawing></w:r>';
+}
+
+function injecterPhotos(zip, photos, legendes) {
   if (!photos || !photos.length) return zip;
   var docFile = zip.file('word/document.xml');
   if (!docFile) return zip;
@@ -1261,40 +1279,114 @@ function injecterPhotos(zip, photos) {
   var relsStr = relsFile ? relsFile.asText() : '';
   var ctFile = zip.file('[Content_Types].xml');
   var ctStr = ctFile ? ctFile.asText() : '';
+  legendes = legendes || [];
 
   if (ctStr.indexOf('image/png') === -1) {
     ctStr = ctStr.replace('</Types>', '<Default Extension="png" ContentType="image/png"/></Types>');
   }
 
-  var photosXml = '';
-  photos.forEach(function(dataUrl, i) {
+  // 1. Remplir les 4 cases Photo existantes dans le template
+  var photoAncres = ['Photo 1</w:t>', 'Photo 2</w:t>', 'Photo 3</w:t>', 'Photo 4</w:t>'];
+  var legendeAncres = [];
+  // Trouver les 4 legendes
+  var searchFrom = 0;
+  for (var k = 0; k < 4; k++) {
+    var li = xmlStr.indexOf('Légende / localisation :</w:t>', searchFrom);
+    if (li !== -1) { legendeAncres.push(li); searchFrom = li + 1; }
+  }
+
+  // Injecter photos 1-4 dans les cases existantes (de la fin vers le debut)
+  var nbCases = Math.min(photos.length, 4);
+  for (var i = nbCases - 1; i >= 0; i--) {
     var rid = 200 + i;
-    var base64 = dataUrl.split(',')[1];
-    var imgBytes = atob(base64);
+    var b64 = photos[i].indexOf(',') >= 0 ? photos[i].split(',')[1] : photos[i];
+    var imgBytes = atob(b64);
     var arr = new Uint8Array(imgBytes.length);
     for (var j = 0; j < imgBytes.length; j++) arr[j] = imgBytes.charCodeAt(j);
     zip.file('word/media/photo' + rid + '.png', arr);
-    var relXml = '<Relationship Id="rId' + rid + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/photo' + rid + '.png"/>';
-    relsStr = relsStr.replace('</Relationships>', relXml + '</Relationships>');
-    // Image 8cm x 6cm = 2880000 x 2160000 EMU
-    photosXml += '<w:p><w:r><w:drawing>'
-      + '<wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" distT="0" distB="114300" distL="0" distR="0">'
-      + '<wp:extent cx="2880000" cy="2160000"/><wp:effectExtent l="0" t="0" r="0" b="0"/>'
-      + '<wp:docPr id="' + rid + '" name="photo' + rid + '"/>'
-      + '<wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr>'
-      + '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
-      + '<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'
-      + '<pic:nvPicPr><pic:cNvPr id="' + rid + '" name="photo' + rid + '"/><pic:cNvPicPr/></pic:nvPicPr>'
-      + '<pic:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rId' + rid + '"/>'
-      + '<a:stretch><a:fillRect/></a:stretch></pic:blipFill>'
-      + '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="2880000" cy="2160000"/></a:xfrm>'
-      + '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>'
-      + '</pic:pic></a:graphicData></a:graphic></wp:inline>'
-      + '</w:drawing></w:r></w:p>';
-  });
+    relsStr = relsStr.replace('</Relationships>',
+      '<Relationship Id="rId' + rid + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/photo' + rid + '.png"/></Relationships>');
 
-  // Inserer les photos avant </w:body>
-  xmlStr = xmlStr.replace('</w:body>', photosXml + '</w:body>');
+    // Inserer image apres l'ancre Photo X
+    var ancrePos = xmlStr.indexOf(photoAncres[i]);
+    if (ancrePos !== -1) {
+      var endP = xmlStr.indexOf('</w:p>', ancrePos) + 6;
+      xmlStr = xmlStr.slice(0, endP) + '<w:p>' + makePhotoXml(rid, 2700000, 2025000) + '</w:p>' + xmlStr.slice(endP);
+    }
+
+    // Remplacer legende
+    if (legendeAncres[i] !== undefined && legendes[i]) {
+      var legOld = 'Légende / localisation :</w:t>';
+      var legNew = 'Légende : ' + legendes[i].substring(0, 80) + '</w:t>';
+      // Remplacer la i-eme occurrence
+      var occ = 0;
+      var pos2 = 0;
+      while (true) {
+        var fi = xmlStr.indexOf(legOld, pos2);
+        if (fi === -1) break;
+        if (occ === i) { xmlStr = xmlStr.slice(0, fi) + legNew + xmlStr.slice(fi + legOld.length); break; }
+        occ++; pos2 = fi + 1;
+      }
+    }
+  }
+
+  // 2. Photos supplementaires (5+) : tableau 2 colonnes a la fin du doc
+  if (photos.length > 4) {
+    var extrasXml = '<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="1F4E79"/></w:rPr><w:t>Photos complementaires</w:t></w:r></w:p>';
+
+    for (var p = 4; p < photos.length; p += 2) {
+      var rid1 = 200 + p;
+      var rid2 = 200 + p + 1;
+
+      // Photo gauche
+      var b641 = photos[p].indexOf(',') >= 0 ? photos[p].split(',')[1] : photos[p];
+      var bytes1 = atob(b641);
+      var arr1 = new Uint8Array(bytes1.length);
+      for (var j1 = 0; j1 < bytes1.length; j1++) arr1[j1] = bytes1.charCodeAt(j1);
+      zip.file('word/media/photo' + rid1 + '.png', arr1);
+      relsStr = relsStr.replace('</Relationships>',
+        '<Relationship Id="rId' + rid1 + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/photo' + rid1 + '.png"/></Relationships>');
+
+      // Tableau 2 colonnes
+      extrasXml += '<w:tbl><w:tblPr><w:tblW w:w="9638" w:type="dxa"/><w:tblBorders>'
+        + '<w:top w:val="single" w:sz="4" w:color="AAAAAA"/>'
+        + '<w:left w:val="single" w:sz="4" w:color="AAAAAA"/>'
+        + '<w:bottom w:val="single" w:sz="4" w:color="AAAAAA"/>'
+        + '<w:right w:val="single" w:sz="4" w:color="AAAAAA"/>'
+        + '<w:insideH w:val="single" w:sz="4" w:color="AAAAAA"/>'
+        + '<w:insideV w:val="single" w:sz="4" w:color="AAAAAA"/>'
+        + '</w:tblBorders></w:tblPr><w:tr>';
+
+      // Cellule photo gauche
+      extrasXml += '<w:tc><w:tcPr><w:tcW w:w="4819" w:type="dxa"/></w:tcPr>'
+        + '<w:p><w:r>' + makePhotoXml(rid1, 2700000, 2025000).replace('<w:r>', '').replace('</w:r>', '') + '</w:r></w:p>'
+        + '<w:p><w:r><w:t>' + (legendes[p] ? legendes[p].substring(0, 60) : 'Photo ' + (p+1)) + '</w:t></w:r></w:p>'
+        + '</w:tc>';
+
+      // Cellule photo droite (si existe)
+      if (p + 1 < photos.length) {
+        var b642 = photos[p+1].indexOf(',') >= 0 ? photos[p+1].split(',')[1] : photos[p+1];
+        var bytes2 = atob(b642);
+        var arr2 = new Uint8Array(bytes2.length);
+        for (var j2 = 0; j2 < bytes2.length; j2++) arr2[j2] = bytes2.charCodeAt(j2);
+        zip.file('word/media/photo' + rid2 + '.png', arr2);
+        relsStr = relsStr.replace('</Relationships>',
+          '<Relationship Id="rId' + rid2 + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/photo' + rid2 + '.png"/></Relationships>');
+
+        extrasXml += '<w:tc><w:tcPr><w:tcW w:w="4819" w:type="dxa"/></w:tcPr>'
+          + '<w:p><w:r>' + makePhotoXml(rid2, 2700000, 2025000).replace('<w:r>', '').replace('</w:r>', '') + '</w:r></w:p>'
+          + '<w:p><w:r><w:t>' + (legendes[p+1] ? legendes[p+1].substring(0, 60) : 'Photo ' + (p+2)) + '</w:t></w:r></w:p>'
+          + '</w:tc>';
+      } else {
+        extrasXml += '<w:tc><w:tcPr><w:tcW w:w="4819" w:type="dxa"/></w:tcPr><w:p></w:p></w:tc>';
+      }
+
+      extrasXml += '</w:tr></w:tbl>';
+    }
+
+    xmlStr = xmlStr.replace('</w:body>', extrasXml + '</w:body>');
+  }
+
   zip.file('word/document.xml', xmlStr);
   zip.file('word/_rels/document.xml.rels', relsStr);
   zip.file('[Content_Types].xml', ctStr);
@@ -1417,6 +1509,36 @@ function cocherRisques(xmlStr, risques) {
   return xmlStr;
 }
 
+function nettoyerDocx(zip, data) {
+  var docFile = zip.file('word/document.xml');
+  if (!docFile) return zip;
+  var xmlStr = docFile.asText();
+
+  // 1. Supprimer les lignes de tableau entierement vides
+  // Une ligne est vide si tous ses w:t sont vides ou contiennent seulement des espaces/tirets
+  xmlStr = xmlStr.replace(/<w:tr[ >][\s\S]*?<\/w:tr>/g, function(row) {
+    var texts = [];
+    var matches = row.match(/<w:t[^>]*>([^<]*)<\/w:t>/g) || [];
+    matches.forEach(function(m) {
+      var t = m.replace(/<[^>]+>/g, '').trim();
+      if (t && t !== '_____' && t !== '___' && t !== '____' && t !== '/' && t !== ':' && t.replace(/[_\/\s:]/g,'').length > 0) {
+        texts.push(t);
+      }
+    });
+    // Si la ligne ne contient que des separateurs ou est vide -> supprimer
+    if (texts.length === 0) return '';
+    return row;
+  });
+
+  // 2. Supprimer les paragraphes vides consecutifs (max 1)
+  xmlStr = xmlStr.replace(/(<w:p[^>]*><w:pPr>[\s\S]*?<\/w:pPr><\/w:p>){2,}/g, function(match) {
+    return match.match(/<w:p[^>]*><w:pPr>[\s\S]*?<\/w:pPr><\/w:p>/)[0];
+  });
+
+  zip.file('word/document.xml', xmlStr);
+  return zip;
+}
+
 function cocherCategorie(xmlStr, cat) {
   if (!cat) return xmlStr;
   var old = '☐ Cat. 1 ☐ Cat. 2 ☐ Cat. 3';
@@ -1535,9 +1657,11 @@ async function generateDoc(ref) {
         finalZip.file('word/document.xml', xmlStr2);
       }
     }
+    // Nettoyer les lignes vides
+    finalZip = nettoyerDocx(finalZip, data);
     // Injecter les photos dans le docx
     if (typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire._photos && terrainAffaire._photos.length > 0) {
-      finalZip = injecterPhotos(finalZip, terrainAffaire._photos);
+      finalZip = injecterPhotos(finalZip, terrainAffaire._photos, terrainAffaire._photosLegendes);
     }
     var out = finalZip.generate({
       type: 'blob',
@@ -2153,8 +2277,13 @@ function visAjouterObs() {
 
   var h = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
   h += '<strong style="color:var(--blue-dark);">Observation ' + visObsCount + '</strong>';
-  h += '<button class="vis-obs-del" data-id="' + id + '" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:18px;">&#10005;</button>';
+  h += '<div style="display:flex;gap:6px;">';
+  h += '<button class="vis-obs-edit btn btn-outline btn-sm" style="display:none;">&#9998; Modifier</button>';
+  h += '<button class="vis-obs-del" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:18px;">&#10005;</button>';
   h += '</div>';
+  h += '</div>';
+  h += '<div class="obs-resume" style="display:none;padding:8px;background:#f0fdf4;border-radius:6px;margin-bottom:8px;"></div>';
+  h += '<div class="obs-fields">';
   h += '<div class="field" style="margin-bottom:10px;"><label>Type</label>';
   h += '<select id="' + id + '-type" style="width:100%;padding:10px;border:2px solid var(--blue-mid);border-radius:6px;font-family:inherit;font-size:14px;">';
   h += '<option value="obs">Observation</option>';
@@ -2174,10 +2303,47 @@ function visAjouterObs() {
   h += '<input type="file" id="' + id + '-photos" accept="image/*" multiple capture="environment" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px;">';
   h += '<div id="' + id + '-preview" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>';
   h += '</div>';
+  h += '</div>'; // ferme obs-fields
+  h += '<button class="vis-obs-val btn btn-success" style="width:100%;padding:12px;margin-top:10px;font-size:14px;">&#10003; Valider cette observation</button>';
 
   div.innerHTML = h;
 
   // Event listeners
+  // Bouton Valider observation
+  div.querySelector('.vis-obs-val').addEventListener('click', function() {
+    var desc = div.querySelector('textarea');
+    var type = div.querySelector('select');
+    if (!desc || !desc.value.trim()) {
+      div.style.border = '2px solid #dc2626';
+      setTimeout(function(){ div.style.border = '1px solid var(--border)'; }, 1500);
+      return;
+    }
+    // Marquer comme valide
+    div.style.border = '2px solid #22c55e';
+    div.style.background = '#f0fdf4';
+    // Afficher resume et masquer les champs
+    var resume = div.querySelector('.obs-resume');
+    var fields = div.querySelector('.obs-fields');
+    if (resume && fields) {
+      var typeVal = type ? type.options[type.selectedIndex].text : '';
+      resume.innerHTML = '<strong style="color:var(--success);">&#10003; ' + typeVal + '</strong><br>'
+        + '<span style="font-size:13px;">' + desc.value.substring(0, 100) + (desc.value.length > 100 ? '...' : '') + '</span>';
+      resume.style.display = 'block';
+      fields.style.display = 'none';
+      this.style.display = 'none';
+      div.querySelector('.vis-obs-edit').style.display = 'inline-flex';
+    }
+  });
+
+  div.querySelector('.vis-obs-edit').addEventListener('click', function() {
+    div.style.border = '1px solid var(--border)';
+    div.style.background = '#fafafa';
+    div.querySelector('.obs-resume').style.display = 'none';
+    div.querySelector('.obs-fields').style.display = 'block';
+    this.style.display = 'none';
+    div.querySelector('.vis-obs-val').style.display = 'inline-flex';
+  });
+
   div.querySelector('.vis-obs-del').addEventListener('click', function() { div.remove(); });
   div.querySelector('.vis-ent-sel').addEventListener('change', function() {
     var target = document.getElementById(this.dataset.target);
@@ -2400,10 +2566,25 @@ async function genererDocTerrain() {
   // Collecter les photos des observations pour le CR Visite
   if (ref === 'VIS') {
     var photos = [];
-    document.querySelectorAll('[id^="vis-obs-"][id$="-preview"] img').forEach(function(img) {
-      if (img.src && img.src.startsWith('data:')) photos.push(img.src);
+    var legendes = [];
+    // Parcourir les observations dans l'ordre
+    document.querySelectorAll('[id^="vis-obs-"]').forEach(function(obsDiv) {
+      if (!obsDiv.id.match(/^vis-obs-\d+$/)) return;
+      var id = obsDiv.id;
+      var preview = document.getElementById(id + '-preview');
+      var desc = document.getElementById(id + '-desc');
+      if (preview) {
+        var imgs = preview.querySelectorAll('img');
+        imgs.forEach(function(img) {
+          if (img.src && img.src.startsWith('data:') && photos.length < 4) {
+            photos.push(img.src);
+            legendes.push(desc ? (desc.value || '') : '');
+          }
+        });
+      }
     });
     terrainAffaire._photos = photos;
+    terrainAffaire._photosLegendes = legendes;
   }
 
   showToast('Generation ' + (DOC_TITRES[ref] || ref) + ' en cours...');
