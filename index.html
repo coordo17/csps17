@@ -1544,7 +1544,20 @@ function injecterPhotos(zip, photos, legendes) {
         + '</w:tblBorders></w:tblPr><w:tr>' + cellG + cellD + '</w:tr></w:tbl>';
     }
 
-    xmlStr = xmlStr.replace('</w:body>', extrasXml + '</w:body>');
+    // Injecter les photos extras AVANT la section signatures (pas apres </w:body>)
+    var ancreSignatures = '7. DIFFUSION ET SIGNATURES';
+    var idxSig = xmlStr.indexOf(ancreSignatures);
+    if (idxSig !== -1) {
+      // Remonter au debut du <w:p> parent
+      var pSig = xmlStr.lastIndexOf('<w:p ', idxSig);
+      if (pSig !== -1) {
+        xmlStr = xmlStr.slice(0, pSig) + extrasXml + xmlStr.slice(pSig);
+      } else {
+        xmlStr = xmlStr.replace('</w:body>', extrasXml + '</w:body>');
+      }
+    } else {
+      xmlStr = xmlStr.replace('</w:body>', extrasXml + '</w:body>');
+    }
   }
 
   zip.file('word/document.xml', xmlStr);
