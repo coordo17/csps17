@@ -434,10 +434,16 @@
       box-shadow: 4px 0 16px rgba(0,0,0,0.15);
     }
     .main { padding: 16px; }
-    .btn-menu { display: flex !important; }
+    @media (max-width: 680px) {
+    .btn-import-pgc { display: none !important; }
+  }
+  .btn-menu { display: flex !important; }
     .docs-grid { grid-template-columns: 1fr; }
     .cat-selector { flex-direction: column; }
     .form-row { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 680px) {
+    .btn-import-pgc { display: none !important; }
   }
   .btn-menu {
     display: none;
@@ -596,8 +602,8 @@
     <span class="logo-name">Alain SUZANNE &middot; Coordination SPS</span>
   </div>
   <div class="header-actions">
-    <button class="btn btn-outline btn-sm" onclick="showPage('import')">&#128229; Importer PGC</button>
-    <button class="btn btn-outline btn-sm" onclick="showPage('terrain');populateTerrainSelect();" style="background:#e8f5e9;color:#2e7d52;border-color:#2e7d52;">&#128241; Terrain</button>
+    <button class="btn btn-outline btn-sm btn-import-pgc" onclick="showPage('import')">&#128229; Importer PGC</button>
+    <button class="btn btn-outline btn-sm" onclick="showPage('terrain');setTimeout(populateTerrainSelect,100);" style="background:#e8f5e9;color:#2e7d52;border-color:#2e7d52;">&#128241; Terrain</button>
   </div>
 </header>
 
@@ -1678,6 +1684,11 @@ function showToast(msg, type) {
 function delay(ms) { return new Promise(function(r){ setTimeout(r, ms); }); }
 
 renderAffaireList();
+
+// Init terrain select si deja sur la page terrain
+if (document.getElementById('page-terrain') && document.getElementById('page-terrain').classList.contains('active')) {
+  populateTerrainSelect();
+}
 
 // ── MODULE TERRAIN ──────────────────────────────────────────────
 var terrainAffaire = null;
