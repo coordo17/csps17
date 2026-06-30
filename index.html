@@ -774,6 +774,8 @@
               <button class="btn btn-outline btn-sm" onclick="addEntreprise('principale')">+ Entreprise principale</button>
               <button class="btn btn-outline btn-sm" onclick="addEntreprise('sous-traitant')">+ Sous-traitant</button>
               <button class="btn btn-outline btn-sm" onclick="addEntreprise('prestataire')">+ Prestataire de service</button>
+              <button class="btn btn-outline btn-sm" onclick="document.getElementById('ent-mail-file-input').click()">&#128231; Importer (mail)</button>
+              <input type="file" id="ent-mail-file-input" accept=".pdf,.docx,.txt,.eml" style="display:none;" onchange="handleEntMailSelect(event)">
             </div>
           </div>
         </div>
@@ -2178,7 +2180,7 @@ function buildTagData(data) {
     chantier_dp:      c.dp || '',
     chantier_pc:      c.pc || '',
     chantier_hj:      c.hj || '',
-    categorie:        data.cat ? 'Categorie ' + data.cat : '',
+    categorie:        data.cat || '',
     moa_nom:          moa.nom || '',
     moa_contact:      moa.contact || '',
     moa_adresse:      moa.adresse || '',
@@ -2229,6 +2231,9 @@ async function generateDoc(ref) {
   }
   if (typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire._entreprise) {
     data._entreprise = terrainAffaire._entreprise;
+  }
+  if (typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire._ficData) {
+    data._ficData = terrainAffaire._ficData;
   }
   if (!data.chantier || !data.chantier.nom) {
     showToast('Renseignez le chantier avant de generer', 'error');
@@ -2357,6 +2362,99 @@ function handleDrop(e) {
   var file = e.dataTransfer.files[0];
   if (file) processPGCFile(file);
 }
+function handleEntMailSelect(e) {
+  var file = e.target.files[0];
+  if (file) processEntMailFile(file);
+  e.target.value = '';
+}
+
+async function processEntMailFile(file) {
+  showToast('Lecture du mail en cours...');
+  try {
+    var mailText = '';
+    if (file.name.endsWith('.pdf')) {
+      var arrayBuffer = await file.arrayBuffer();
+      var pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      var maxPages = Math.min(pdf.numPages, 10);
+      for (var i = 1; i <= maxPages; i++) {
+        var page = await pdf.getPage(i);
+        var tc = await page.getTextContent();
+        mailText += tc.items.map(function(it){ return it.str; }).join(' ') + '\n';
+      }
+    } else if (file.name.endsWith('.docx')) {
+      if (typeof mammoth === 'undefined') {
+        throw new Error('Lecture DOCX indisponible (mammoth.js non chargé). Rechargez la page.');
+      }
+      var docxBuffer = await file.arrayBuffer();
+      var mammothResult = await mammoth.extractRawText({ arrayBuffer: docxBuffer });
+      mailText = mammothResult.value || '';
+    } else {
+      // .txt ou .eml : texte brut (MIME simple, suffisant pour mails non-encodes)
+      mailText = await file.text();
+    }
+    mailText = mailText.slice(0, 8000);
+
+    var ratioInvalide = (mailText.match(/\uFFFD/g) || []).length / Math.max(mailText.length, 1);
+    if (ratioInvalide > 0.05 || mailText.trim().length < 20) {
+      throw new Error('Le texte du mail est illisible. Copiez le texte dans un fichier .txt si besoin.');
+    }
+
+    var prompt = 'Voici le contenu d\'un mail envoye par une entreprise intervenant sur un chantier BTP :\n\n' + mailText + '\n\nExtrais UNIQUEMENT les informations utiles pour une fiche entreprise et reponds en JSON valide, sans markdown ni backtick :\n{"nom":null,"lot":null,"adresse":null,"contact":null,"tel":null,"mail":null,"effectif":null,"siret":null,"compagnon":null}\nnom=raison sociale de l\'entreprise expeditrice (pas le destinataire), lot=corps de metier ou lot concerne si mentionne, adresse=adresse de l\'entreprise, contact=nom de la personne signataire du mail, tel=telephone, mail=adresse email de contact, effectif=effectif annonce pour le chantier, siret=numero SIRET si present, compagnon=nom du compagnon/chef d\'equipe qui interviendra sur site si mentionne. Met null pour tout champ non trouve. Ignore le contenu hors-sujet (signatures publicitaires, disclaimers).';
+
+    var response = await fetch('/api/claude', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        max_tokens: 800,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    var result = await response.json();
+    if (!response.ok) {
+      throw new Error('Serveur (' + response.status + ') : ' + (result.error && result.error.message ? result.error.message : JSON.stringify(result)));
+    }
+    var text = '{}';
+    if (result.choices && result.choices[0] && result.choices[0].message && result.choices[0].message.content) {
+      text = result.choices[0].message.content;
+    } else if (result.content && result.content[0] && result.content[0].text) {
+      text = result.content[0].text;
+    } else if (result.error) {
+      throw new Error(result.error.message || JSON.stringify(result.error));
+    }
+    var jsonStr = text.replace(/```json|```/g,'').trim();
+    var ei;
+    try {
+      ei = JSON.parse(jsonStr);
+    } catch (parseErr) {
+      var apercu = jsonStr.replace(/\uFFFD/g, '?').slice(0, 80);
+      throw new Error('Reponse IA illisible (' + parseErr.message + '). Debut recu : "' + apercu + '"');
+    }
+
+    if (!ei.nom) {
+      showToast('Aucune entreprise identifiee dans ce mail', 'error');
+      return;
+    }
+    addEntreprise('principale');
+    var cards = document.querySelectorAll('#entreprise-list .entreprise-card');
+    var lastCard = cards[cards.length - 1];
+    if (lastCard) {
+      if (lastCard.querySelector('.ent-nom')) lastCard.querySelector('.ent-nom').value = ei.nom || '';
+      if (lastCard.querySelector('.ent-lot')) lastCard.querySelector('.ent-lot').value = ei.lot || '';
+      if (lastCard.querySelector('.ent-adresse')) lastCard.querySelector('.ent-adresse').value = ei.adresse || '';
+      if (lastCard.querySelector('.ent-tel')) lastCard.querySelector('.ent-tel').value = ei.tel || '';
+      if (lastCard.querySelector('.ent-contact')) lastCard.querySelector('.ent-contact').value = ei.contact || '';
+      if (lastCard.querySelector('.ent-effectif')) lastCard.querySelector('.ent-effectif').value = ei.effectif || '';
+      if (lastCard.querySelector('.ent-mail') && ei.mail) lastCard.querySelector('.ent-mail').value = ei.mail;
+      if (lastCard.querySelector('.ent-siret') && ei.siret) lastCard.querySelector('.ent-siret').value = ei.siret;
+      if (lastCard.querySelector('.ent-compagnon') && ei.compagnon) lastCard.querySelector('.ent-compagnon').value = ei.compagnon;
+    }
+    showToast('Entreprise "' + ei.nom + '" importee depuis le mail', 'success');
+  } catch (err) {
+    showToast('Erreur import mail : ' + err.message, 'error');
+  }
+}
+
 function handleFileSelect(e) {
   var file = e.target.files[0];
   if (file) processPGCFile(file);
@@ -2433,7 +2531,7 @@ async function processPGCFile(file) {
       ['Chantier', parsed.chantier_nom],
       ['Adresse', parsed.chantier_adresse],
       ['Nature travaux', parsed.chantier_nature],
-      ['Categorie', parsed.categorie ? 'Categorie ' + parsed.categorie : null],
+      ['Categorie', parsed.categorie || null],
       ['MOA', parsed.moa_nom],
       ['MOE', parsed.moe_nom],
       ['CSPS Conception', parsed.cspsc_nom],
