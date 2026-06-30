@@ -1535,6 +1535,8 @@ function injecterRisquesIC(zip, risquesIC) {
   if (!docFile) return zip;
   var xmlStr = docFile.asText();
 
+  function escXml(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
   // Définition complète des risques avec leurs situations et mesures pré-remplies
   var RISQUES_DEF = {
     r1:  { label: 'Chute de Hauteur',                   situations: ['☐ Travail sur échafaudage', '☐ Baies ouvertes sur le vide', '☐ Travaux sous plafond (Faux plafond/Réseaux)', '☐ AUTRES'], mesures: ['• Utilisation de PIRL, échafaudage de pieds ou roulants conforme à la réglementation avec personnel formé.', '• L\'utilisation des échelles et escabeaux comme postes de travail est strictement interdite.', '• Habilitations électriques à jour requises pour tout le personnel (si intervention sur réseaux).', '• Mutualisation de l\'échafaudage de l\'ITE validée après contrôle d\'adéquation.'] },
@@ -2671,6 +2673,7 @@ function genFormulaireFIC() {
     fieldRow('Tel fixe', 'fic-ent-tel-fixe', 'tel', '02 xx xx xx xx', ent.telFixe || ''),
     fieldRow('Lot / Travaux confies', 'fic-ent-lot', 'text', 'Ex: Gros oeuvre', ent.lot || '')
   );
+  html2 += '<button type="button" onclick="recroiserRisquesLot()" style="margin:4px 0 8px;padding:5px 10px;font-size:11px;border:1px solid var(--blue-mid);background:var(--bg-accent);color:var(--blue-mid);border-radius:6px;cursor:pointer;">&#128260; Re-croiser les risques avec ce lot</button>';
   html2 += fieldRow('Compagnon referent', 'fic-ent-ref', 'text', 'Nom du compagnon referent', '');
   html2 += twoCol(
     fieldRow('Periode intervention', 'fic-ent-periode', 'text', 'Ex: 01/07 au 30/08/2026', ''),
@@ -3125,10 +3128,81 @@ function terrainRemplirEntreprise(idx) {
 }
 
 // ── CANVAS SIGNATURES ────────────────────────────────────────────
+// === Croisement Lot / Corps de metier -> risques typiques (global, reutilise par initRisquesWidget et recroiserRisquesLot) ===
+var METIERS_RISQUES = [
+  { mots: ['electric','elec'],                          risques: ['r6','r18','r24'] },
+  { mots: ['gros oeuvre','gros-oeuvre','macon','beton'], risques: ['r1','r2','r11','r16','r18','r20','r24'] },
+  { mots: ['charpent','couvr','toiture','zingu'],        risques: ['r1','r4','r16','r24'] },
+  { mots: ['plomb','cvc','chauffag','sanitaire'],        risques: ['r3','r6','r17','r24'] },
+  { mots: ['peintur','revetement','sol'],                risques: ['r3','r21','r20','r24'] },
+  { mots: ['terrassement','vrd','reseaux'],              risques: ['r2','r8','r14','r22','r24'] },
+  { mots: ['demoli','deconstruct'],                      risques: ['r1','r2','r4','r11','r16','r20','r24'] },
+  { mots: ['etancheit','bitume'],                        risques: ['r1','r16','r17','r24'] },
+  { mots: ['menuiser'],                                  risques: ['r1','r18','r23','r24'] },
+  { mots: ['platr','cloison','isolation'],                risques: ['r18','r20','r23','r24'] },
+  { mots: ['carrelag','faiencag'],                       risques: ['r18','r20','r23','r24'] },
+  { mots: ['serrur','metallerie','soudure'],             risques: ['r1','r17','r23','r24'] },
+  { mots: ['ascenseur','levage','grue'],                 risques: ['r13','r14','r24'] },
+  { mots: ['amiante','desamiantage'],                    risques: ['r3','r4'] },
+];
+
+function normaliserTexte(s) {
+  return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function risquesDuLot(lotTexte) {
+  var lotNorm = normaliserTexte(lotTexte);
+  if (!lotNorm) return [];
+  var trouve = [];
+  METIERS_RISQUES.forEach(function(m) {
+    var matchMot = m.mots.some(function(mot) { return lotNorm.indexOf(normaliserTexte(mot)) !== -1; });
+    if (matchMot) {
+      m.risques.forEach(function(rid) { if (trouve.indexOf(rid) === -1) trouve.push(rid); });
+    }
+  });
+  return trouve;
+}
+
+// Bouton "Re-croiser les risques avec ce lot" : ajoute (sans jamais decocher)
+// les risques typiques du lot tape/modifie manuellement par le CSPS sur le terrain
+function recroiserRisquesLot() {
+  var lotInput = document.getElementById('fic-ent-lot');
+  var lotTexte = lotInput ? lotInput.value : '';
+  var risques = risquesDuLot(lotTexte);
+  if (!risques.length) {
+    showToast('Aucun risque type reconnu pour ce lot — verifiez l\'orthographe ou cochez manuellement.', 'error');
+    return;
+  }
+  var nbAjoutes = 0;
+  risques.forEach(function(rid) {
+    var cb = document.getElementById('rq-' + rid);
+    if (cb && !cb.checked) {
+      cb.checked = true;
+      toggleRQ(rid);
+      nbAjoutes++;
+    }
+    // Marquer/rafraichir le badge d'origine meme si deja coche
+    var lbl = document.getElementById('rqlbl-' + rid);
+    if (lbl && lbl.innerHTML.indexOf('LOT') === -1 && lbl.innerHTML.indexOf('PGC') === -1) {
+      lbl.innerHTML += ' <span style="font-size:8px;font-weight:700;padding:0 4px;border-radius:3px;background:var(--bg-accent);color:var(--blue-mid);margin-left:4px;">LOT</span>';
+    }
+  });
+  showToast(nbAjoutes > 0 ? (nbAjoutes + ' risque(s) ajoute(s) suivant le lot "' + lotTexte + '"') : 'Risques du lot deja tous coches.', 'success');
+}
+
 function initRisquesWidget() {
   var tbody = document.getElementById('risques-tbody');
   if (!tbody) return;
   var pgc = (typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire.risques_pgc) ? terrainAffaire.risques_pgc : (window._risquesPGC || {});
+
+  // Recuperer le lot de l'entreprise courante (terrain) pour le croisement initial
+  var lotCourant = '';
+  if (typeof terrainAffaire !== 'undefined' && terrainAffaire) {
+    if (terrainAffaire._entCourante && terrainAffaire._entCourante.lot) lotCourant = terrainAffaire._entCourante.lot;
+    else if (terrainAffaire._entreprise && terrainAffaire._entreprise.lot) lotCourant = terrainAffaire._entreprise.lot;
+  }
+  var risquesMetier = risquesDuLot(lotCourant);
+  window._risquesMetierActifs = risquesMetier;
 
   var RISQUES = [
     {sep:'Risques particuliers reglementaires — Arrete 25/02/2003'},
@@ -3167,13 +3241,19 @@ function initRisquesWidget() {
       html += '<tr><td colspan="5" style="font-size:11px;font-weight:500;padding:4px 8px;background:var(--surface-1);color:var(--text-muted);border:0.5px solid var(--border);">— ' + r.sep + '</td></tr>';
       return;
     }
-    var pre = pgc[r.id] ? true : false;
+    var dePGC = pgc[r.id] ? true : false;
+    var deMetier = risquesMetier.indexOf(r.id) !== -1;
+    var pre = dePGC || deMetier;
+    var origine = '';
+    if (dePGC && deMetier) origine = '<span title="Detecte PGC + typique du lot" style="font-size:8px;font-weight:700;padding:0 4px;border-radius:3px;background:var(--bg-warning);color:var(--text-warning);margin-left:4px;">PGC+LOT</span>';
+    else if (dePGC) origine = '<span title="Detecte dans le PGC" style="font-size:8px;font-weight:700;padding:0 4px;border-radius:3px;background:var(--bg-danger);color:var(--text-danger);margin-left:4px;">PGC</span>';
+    else if (deMetier) origine = '<span title="Typique du lot/corps de metier" style="font-size:8px;font-weight:700;padding:0 4px;border-radius:3px;background:var(--bg-accent);color:var(--blue-mid);margin-left:4px;">LOT</span>';
     var badgeStyle = r.loi
       ? 'background:var(--bg-danger);color:var(--text-danger);'
       : 'background:var(--bg-success);color:var(--text-success);';
     html += '<tr id="rqrow-' + r.id + '" style="' + (pre ? 'background:var(--bg-accent);' : '') + '">';
     html += '<td style="border:0.5px solid var(--border);padding:4px 8px;text-align:center;"><input type="checkbox" id="rq-' + r.id + '" ' + (pre ? 'checked' : '') + ' onchange="toggleRQ(\'' + r.id + '\')" style="width:15px;height:15px;"></td>';
-    html += '<td style="border:0.5px solid var(--border);padding:4px 8px;font-size:13px;" id="rqlbl-' + r.id + '">' + r.label + '</td>';
+    html += '<td style="border:0.5px solid var(--border);padding:4px 8px;font-size:13px;" id="rqlbl-' + r.id + '">' + r.label + origine + '</td>';
     html += '<td style="border:0.5px solid var(--border);padding:4px 8px;"><span style="font-size:10px;padding:1px 5px;border-radius:4px;' + badgeStyle + '">' + r.ref + '</span></td>';
     html += '<td style="border:0.5px solid var(--border);padding:4px 8px;text-align:center;"><input type="checkbox" id="imp-' + r.id + '" ' + (!pre ? 'disabled' : '') + ' onchange="countRQ()" style="width:15px;height:15px;' + (!pre ? 'opacity:0.25;' : '') + '"></td>';
     html += '<td style="border:0.5px solid var(--border);padding:4px 8px;text-align:center;"><input type="checkbox" id="ex-' + r.id + '" ' + (!pre ? 'disabled' : '') + ' onchange="countRQ()" style="width:15px;height:15px;' + (!pre ? 'opacity:0.25;' : '') + '"></td>';
