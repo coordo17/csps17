@@ -1127,6 +1127,7 @@ function collectFormData() {
       hauteur: document.getElementById('rp-hauteur').checked,
     },
     risques_pgc: window._risquesPGC || null,
+    cat3_pgc: window._cat3PGC || null,
     moa: { nom: document.getElementById('moa-nom').value, contact: document.getElementById('moa-contact').value, adresse: document.getElementById('moa-adresse').value, tel: document.getElementById('moa-tel').value, mail: document.getElementById('moa-mail').value },
     moe: { nom: document.getElementById('moe-nom').value, contact: document.getElementById('moe-contact').value, adresse: document.getElementById('moe-adresse').value, tel: document.getElementById('moe-tel').value, mail: document.getElementById('moe-mail').value },
     cspsc: { nom: document.getElementById('cspsc-nom').value, tel: document.getElementById('cspsc-tel').value, mail: document.getElementById('cspsc-mail').value },
@@ -2378,7 +2379,7 @@ async function processPGCFile(file) {
       throw new Error('Le texte extrait du PDF est illisible (PDF scanné/image, ou police non standard). Convertissez en .docx ou copiez le texte dans un fichier .txt.');
     }
 
-    var prompt = 'Voici le contenu d\'un PGC SPS :\n\n' + pdfText + '\n\nExtrais les informations suivantes et reponds UNIQUEMENT en JSON valide, sans markdown ni backtick :\n{"chantier_nom":"...","chantier_adresse":"...","chantier_nature":"...","chantier_debut":"...","chantier_duree":"...","categorie":1,"moa_nom":"...","moa_contact":"...","moa_adresse":"...","moa_tel":"...","moa_mail":"...","moe_nom":"...","moe_contact":"...","cspsc_nom":"...","cspsc_tel":"...","cspsc_mail":"...","dreets_nom":"...","dreets_adresse":"...","carsat_nom":"...","carsat_adresse":"...","oppbtp_nom":"...","oppbtp_adresse":"...","rp_amiante":false,"rp_plomb":false,"rp_demolition":false,"rp_reseaux":false,"risques_pgc":{"r1":false,"r2":false,"r3":false,"r4":false,"r5":false,"r6":false,"r7":false,"r8":false,"r9":false,"r10":false,"r11":false,"r12":false,"r13":false,"r14":false,"r15":false,"r16":false,"r17":false,"r18":false,"r19":false,"r20":false,"r21":false,"r22":false,"r23":false,"r24":false,"r25":false,"r26":false}}\nPour risques_pgc: r1=chute hauteur>3m, r2=ensevelissement, r3=substances chimiques/biologiques, r4=amiante, r5=radiations ionisantes, r6=travaux sous tension/HTB, r7=noyade, r8=puits/souterrains/tunnels, r9=plongee, r10=hyperbare, r11=demolition>200m3, r12=explosifs, r13=prefabriques lourds, r14=levage>60tm, r15=chute plain-pied, r16=projections/chutes materiaux, r17=incendie/points chauds, r18=manutention/TMS, r19=bruit, r20=poussieres, r21=produits dangereux/CMR, r22=engins/vehicules, r23=coupures/outils, r24=coactivite, r25=canicule, r26=autres. Met true si le risque est identifie dans le PGC. Met null pour les champs texte non trouves.';
+    var prompt = 'Voici le contenu d\'un PGC SPS :\n\n' + pdfText + '\n\nExtrais les informations suivantes et reponds UNIQUEMENT en JSON valide, sans markdown ni backtick :\n{"chantier_nom":"...","chantier_adresse":"...","chantier_nature":"...","chantier_debut":"...","chantier_duree":"...","categorie":1,"moa_nom":"...","moa_contact":"...","moa_adresse":"...","moa_tel":"...","moa_mail":"...","moe_nom":"...","moe_contact":"...","cspsc_nom":"...","cspsc_tel":"...","cspsc_mail":"...","dreets_nom":"...","dreets_adresse":"...","carsat_nom":"...","carsat_adresse":"...","oppbtp_nom":"...","oppbtp_adresse":"...","rp_amiante":false,"rp_plomb":false,"rp_demolition":false,"rp_reseaux":false,"risques_pgc":{"r1":false,"r2":false,"r3":false,"r4":false,"r5":false,"r6":false,"r7":false,"r8":false,"r9":false,"r10":false,"r11":false,"r12":false,"r13":false,"r14":false,"r15":false,"r16":false,"r17":false,"r18":false,"r19":false,"r20":false,"r21":false,"r22":false,"r23":false,"r24":false,"r25":false,"r26":false},"cat3":{"acces":null,"securisation":null,"hygiene":null,"energie":null,"stockages":null,"dechets":null,"secours":null}}\nPour risques_pgc: r1=chute hauteur>3m, r2=ensevelissement, r3=substances chimiques/biologiques, r4=amiante, r5=radiations ionisantes, r6=travaux sous tension/HTB, r7=noyade, r8=puits/souterrains/tunnels, r9=plongee, r10=hyperbare, r11=demolition>200m3, r12=explosifs, r13=prefabriques lourds, r14=levage>60tm, r15=chute plain-pied, r16=projections/chutes materiaux, r17=incendie/points chauds, r18=manutention/TMS, r19=bruit, r20=poussieres, r21=produits dangereux/CMR, r22=engins/vehicules, r23=coupures/outils, r24=coactivite, r25=canicule, r26=autres. Met true si le risque est identifie dans le PGC. Pour cat3 (uniquement si le PGC mentionne ces points, sinon laisser null) : acces=acces et circulation au chantier, securisation=cloture/portail/gardiennage, hygiene=base vie/sanitaires/refectoire, energie=raccordement electrique provisoire, stockages=zones de stockage materiaux, dechets=gestion et evacuation des dechets, secours=hopital/numeros urgence/procedure. Resume chaque point en 1-2 phrases concretes tirees du PGC, en francais. Met null pour les champs texte non trouves.';
 
     var response = await fetch('/api/claude', {
       method: 'POST',
@@ -2471,6 +2472,7 @@ function applyExtracted() {
   if (d.rp_demolition) document.getElementById('rp-demolition').checked = true;
   if (d.rp_reseaux) document.getElementById('rp-reseaux').checked = true;
   if (d.risques_pgc) window._risquesPGC = d.risques_pgc;
+  if (d.cat3) window._cat3PGC = d.cat3;
   showPage('form');
   showToast('Donnees importees depuis le PGC', 'success');
 }
@@ -2808,17 +2810,18 @@ function genFormulaireFIC() {
 
   // Section I Cat.3 - Explications PGC (visible seulement si cat=3)
   if (terrainAffaire.cat === 3) {
+    var cat3pgc = terrainAffaire.cat3_pgc || window._cat3PGC || {};
     html2 += '<div class="terrain-section" style="border:2px solid #d97706;">';
     html2 += '<div class="terrain-section-header" style="background:#d97706;">&#128196; Section I — Explications du PGC & Constats in situ (Cat. 3)</div>';
     html2 += '<div class="terrain-section-body">';
-    html2 += '<p style="font-size:12px;color:var(--text-light);margin-bottom:12px;">Ces textes seront injectés dans la Fiche IC Cat.3. Pré-remplissez depuis le PGC.</p>';
-    html2 += fieldRow('🚗 Accès & Véhicules', 'fic-cat3-acces', 'textarea', 'Ex: Accès depuis la voie communale...', '');
-    html2 += fieldRow('Sécurisation / Clôture', 'fic-cat3-securisation', 'textarea', 'Ex: Site fermé, portail verrouillé...', '');
-    html2 += fieldRow('Hygiène & Base vie', 'fic-cat3-hygiene', 'textarea', 'Ex: Utilisation des installations présentes...', '');
-    html2 += fieldRow('Énergie Provisoire', 'fic-cat3-energie', 'textarea', 'Ex: Points électriques protégés par différentiel...', '');
-    html2 += fieldRow('Stockages', 'fic-cat3-stockages', 'textarea', 'Ex: Stockages dans la cour, pas sur domaine public...', '');
-    html2 += fieldRow('Déchets & Bennes', 'fic-cat3-dechets', 'textarea', 'Ex: Pas de bennes communes, nettoyage fin de journée...', '');
-    html2 += fieldRow('Secours', 'fic-cat3-secours', 'textarea', 'Ex: SST présent, trousse médicale à charge EE...', '');
+    html2 += '<p style="font-size:12px;color:var(--text-light);margin-bottom:12px;">Ces textes seront injectés dans la Fiche IC Cat.3. ' + (cat3pgc.acces || cat3pgc.securisation || cat3pgc.hygiene ? 'Pré-rempli depuis le PGC — verifiez et completez.' : 'Pré-remplissez depuis le PGC.') + '</p>';
+    html2 += fieldRow('🚗 Accès & Véhicules', 'fic-cat3-acces', 'textarea', 'Ex: Accès depuis la voie communale...', cat3pgc.acces || '');
+    html2 += fieldRow('Sécurisation / Clôture', 'fic-cat3-securisation', 'textarea', 'Ex: Site fermé, portail verrouillé...', cat3pgc.securisation || '');
+    html2 += fieldRow('Hygiène & Base vie', 'fic-cat3-hygiene', 'textarea', 'Ex: Utilisation des installations présentes...', cat3pgc.hygiene || '');
+    html2 += fieldRow('Énergie Provisoire', 'fic-cat3-energie', 'textarea', 'Ex: Points électriques protégés par différentiel...', cat3pgc.energie || '');
+    html2 += fieldRow('Stockages', 'fic-cat3-stockages', 'textarea', 'Ex: Stockages dans la cour, pas sur domaine public...', cat3pgc.stockages || '');
+    html2 += fieldRow('Déchets & Bennes', 'fic-cat3-dechets', 'textarea', 'Ex: Pas de bennes communes, nettoyage fin de journée...', cat3pgc.dechets || '');
+    html2 += fieldRow('Secours', 'fic-cat3-secours', 'textarea', 'Ex: SST présent, trousse médicale à charge EE...', cat3pgc.secours || '');
     html2 += '</div></div>';
   }
 
