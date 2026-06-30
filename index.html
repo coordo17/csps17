@@ -1649,23 +1649,41 @@ function injecterRisquesIC(zip, risquesIC, ficData) {
     var imp = rq.imp ? '☑' : '☐';
     var ex  = rq.ex  ? '☑' : '☐';
     var fill = odd ? 'FFFFFF' : 'F2F2F2';
+    var isCanicule = rq.id === 'r25';
+    var isAutres   = rq.id === 'r26';
+
+    // Canicule et AUTRES : cellule pleine largeur (label + mesures fusionnés)
+    if (isCanicule || isAutres) {
+      var fullTcPr = '<w:tcPr><w:tcW w:w="9640" w:type="dxa"/><w:gridSpan w:val="3"/>'
+        + '<w:tcBorders><w:top w:val="single" w:sz="6" w:color="C4C7C5"/>'
+        + '<w:left w:val="single" w:sz="6" w:color="C4C7C5"/>'
+        + '<w:bottom w:val="single" w:sz="6" w:color="C4C7C5"/>'
+        + '<w:right w:val="single" w:sz="6" w:color="C4C7C5"/></w:tcBorders>'
+        + '<w:shd w:val="clear" w:color="auto" w:fill="' + (isCanicule ? 'FFF3CD' : 'FFFFFF') + '"/>'
+        + '</w:tcPr>';
+      var content = mkP(def.label, 18, true, false, '', 20, isCanicule ? 'FF0000' : null);
+      def.mesures.forEach(function(m, i) {
+        content += mkP(m, 16, isCanicule ? true : (i===0), false, '', i < def.mesures.length-1 ? 60 : 0, isCanicule ? 'FF0000' : null);
+      });
+      return '<w:tr><w:trPr><w:cantSplit/></w:trPr><w:tc>' + fullTcPr + content + '</w:tc></w:tr>';
+    }
+
     // Col 1 : label + R.IMP + R.EX — 18%
     var col1 = '<w:tc>' + mkTcPr('1730', fill)
       + mkP(def.label, 18, true, false, '', 20)
       + mkP('R.IMP.' + imp, 16, false, false, 'right', 20)
       + mkP('R.EX.' + ex,  16, false, false, 'right', 20)
       + '</w:tc>';
-    // Col 2 : situations — 25%
+    // Col 2 : situations — 20%
     var col2 = '<w:tc>' + mkTcPr('1900', 'FFFFFF');
     def.situations.forEach(function(s, i) {
       col2 += mkP(s, 16, false, false, '', i < def.situations.length-1 ? 60 : 0);
     });
     col2 += '</w:tc>';
-    // Col 3 : mesures — 57%
-    var isCanicule = rq.id === 'r25';
+    // Col 3 : mesures — 62%
     var col3 = '<w:tc>' + mkTcPr('6010', 'FFFFFF');
     def.mesures.forEach(function(m, i) {
-      col3 += mkP(m, 16, isCanicule ? true : (i===0), false, '', i < def.mesures.length-1 ? 60 : 0, isCanicule ? 'FF0000' : null);
+      col3 += mkP(m, 16, i===0, false, '', i < def.mesures.length-1 ? 60 : 0);
     });
     col3 += '</w:tc>';
     return '<w:tr><w:trPr><w:cantSplit/></w:trPr>' + col1 + col2 + col3 + '</w:tr>';
