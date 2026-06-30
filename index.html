@@ -1225,8 +1225,20 @@ function renderAffaireList() {
       + '<div><div class="affaire-num">' + (a.num || '-') + '</div>'
       + '<div class="affaire-name">' + ((a.chantier && a.chantier.nom) ? a.chantier.nom : 'Sans nom') + '</div></div>'
       + (a.cat ? '<span class="cat-badge cat-' + a.cat + '">Cat.' + a.cat + '</span>' : '')
+      + '<button class="btn-remove-ent" title="Supprimer cette affaire" onclick="deleteAffaire(event,\'' + a.id + '\')" style="margin-left:8px;">x</button>'
       + '</div>';
   }).join('');
+}
+
+function deleteAffaire(e, id) {
+  e.stopPropagation();
+  var a = affaires.find(function(x){ return x.id === id; });
+  var label = (a && a.chantier && a.chantier.nom) ? a.chantier.nom : (a && a.num) || 'cette affaire';
+  if (!confirm('Supprimer definitivement "' + label + '" ? Cette action est irreversible.')) return;
+  affaires = affaires.filter(function(x){ return x.id !== id; });
+  localStorage.setItem('csps17_affaires', JSON.stringify(affaires));
+  renderAffaireList();
+  showToast('Affaire supprimee', 'success');
 }
 
 function renderDocsGrid() {
@@ -1601,8 +1613,8 @@ function injecterRisquesIC(zip, risquesIC) {
     var imp = rq.imp ? '☑' : '☐';
     var ex  = rq.ex  ? '☑' : '☐';
     var fill = odd ? 'FFFFFF' : 'F2F2F2';
-    // Col 1 : label + R.IMP + R.EX — 25%
-    var col1 = '<w:tc>' + mkTcPr('2410', fill)
+    // Col 1 : label + R.IMP + R.EX — 18%
+    var col1 = '<w:tc>' + mkTcPr('1730', fill)
       + mkP(def.label, 18, true, false, '', 20)
       + mkP('R.IMP.' + imp, 16, false, false, 'right', 20)
       + mkP('R.EX.' + ex,  16, false, false, 'right', 20)
@@ -1613,8 +1625,8 @@ function injecterRisquesIC(zip, risquesIC) {
       col2 += mkP(s, 16, false, false, '', i < def.situations.length-1 ? 60 : 0);
     });
     col2 += '</w:tc>';
-    // Col 3 : mesures — 50%
-    var col3 = '<w:tc>' + mkTcPr('4820', 'FFFFFF');
+    // Col 3 : mesures — 57%
+    var col3 = '<w:tc>' + mkTcPr('5500', 'FFFFFF');
     def.mesures.forEach(function(m, i) {
       col3 += mkP(m, 16, i===0, false, '', i < def.mesures.length-1 ? 60 : 0);
     });
@@ -1639,7 +1651,7 @@ function injecterRisquesIC(zip, risquesIC) {
 
   // Forcer les largeurs du tblGrid (en-tete) sur les memes proportions que les
   // lignes generees (25% / 25% / 50%) pour eviter tout decalage visuel avec le corps
-  var nouvellesLargeurs = ['2410', '2410', '4820'];
+  var nouvellesLargeurs = ['1730', '2410', '5500'];
   var gridColIdx = 0;
   header = header.replace(/<w:gridCol w:w="\d+"\/>/g, function() {
     var w = nouvellesLargeurs[gridColIdx] || nouvellesLargeurs[nouvellesLargeurs.length - 1];
@@ -2382,7 +2394,7 @@ async function processPGCFile(file) {
       throw new Error('Le texte extrait du PDF est illisible (PDF scanné/image, ou police non standard). Convertissez en .docx ou copiez le texte dans un fichier .txt.');
     }
 
-    var prompt = 'Voici le contenu d\'un PGC SPS :\n\n' + pdfText + '\n\nExtrais les informations suivantes et reponds UNIQUEMENT en JSON valide, sans markdown ni backtick :\n{"chantier_nom":"...","chantier_adresse":"...","chantier_nature":"...","chantier_debut":"...","chantier_duree":"...","categorie":1,"moa_nom":"...","moa_contact":"...","moa_adresse":"...","moa_tel":"...","moa_mail":"...","moe_nom":"...","moe_contact":"...","cspsc_nom":"...","cspsc_tel":"...","cspsc_mail":"...","dreets_nom":"...","dreets_adresse":"...","carsat_nom":"...","carsat_adresse":"...","oppbtp_nom":"...","oppbtp_adresse":"...","rp_amiante":false,"rp_plomb":false,"rp_demolition":false,"rp_reseaux":false,"risques_pgc":{"r1":false,"r2":false,"r3":false,"r4":false,"r5":false,"r6":false,"r7":false,"r8":false,"r9":false,"r10":false,"r11":false,"r12":false,"r13":false,"r14":false,"r15":false,"r16":false,"r17":false,"r18":false,"r19":false,"r20":false,"r21":false,"r22":false,"r23":false,"r24":false,"r25":false,"r26":false},"cat3":{"acces":null,"securisation":null,"hygiene":null,"energie":null,"stockages":null,"dechets":null,"secours":null},"secours_pgc":{"hopital":null,"distance":null,"urgences":null,"trousse":null,"dae":null},"inspection_commune":{"entreprise":null,"delai_ppsps_jours":null,"article":null},"amiante_note":{"raat_date":null,"bureau":null,"ss4_obligatoire":null}}\nPour risques_pgc: r1=chute hauteur>3m, r2=ensevelissement, r3=substances chimiques/biologiques, r4=amiante, r5=radiations ionisantes, r6=travaux sous tension/HTB, r7=noyade, r8=puits/souterrains/tunnels, r9=plongee, r10=hyperbare, r11=demolition>200m3, r12=explosifs, r13=prefabriques lourds, r14=levage>60tm, r15=chute plain-pied, r16=projections/chutes materiaux, r17=incendie/points chauds, r18=manutention/TMS, r19=bruit, r20=poussieres, r21=produits dangereux/CMR, r22=engins/vehicules, r23=coupures/outils, r24=coactivite, r25=canicule, r26=autres. Met true si le risque est identifie dans le PGC. Pour cat3 (uniquement si le PGC mentionne ces points, sinon laisser null) : acces=acces et circulation au chantier, securisation=cloture/portail/gardiennage, hygiene=base vie/sanitaires/refectoire, energie=raccordement electrique provisoire, stockages=zones de stockage materiaux, dechets=gestion et evacuation des dechets, secours=hopital/numeros urgence/procedure. Pour secours_pgc (extrait granulaire, utilise meme si cat3.secours est deja rempli) : hopital=nom etablissement le plus proche, distance=temps ou distance indique, urgences=numeros cites (SAMU/Pompiers/police), trousse=emplacement ou obligation de trousse de secours mentionnee, dae=emplacement DAE si mentionne sinon null. Pour inspection_commune : entreprise=nom entreprise concernee par l\'inspection commune prealable, delai_ppsps_jours=delai en jours pour remise du PPSPS si indique, article=reference reglementaire citee (ex R.4532-10). Pour amiante_note (uniquement si amiante mentionnee) : raat_date=date du Reperage Amiante Avant Travaux, bureau=nom du bureau ayant realise le diagnostic, ss4_obligatoire=true si une entreprise certifiee SS4 est exigee. Resume chaque point en 1-2 phrases concretes tirees du PGC, en francais. Met null pour les champs texte non trouves.';
+    var prompt = 'Voici le contenu d\'un PGC SPS :\n\n' + pdfText + '\n\nExtrais les informations suivantes et reponds UNIQUEMENT en JSON valide, sans markdown ni backtick :\n{"chantier_nom":"...","chantier_adresse":"...","chantier_nature":"...","chantier_debut":"...","chantier_duree":"...","categorie":1,"moa_nom":"...","moa_contact":"...","moa_adresse":"...","moa_tel":"...","moa_mail":"...","moe_nom":"...","moe_contact":"...","cspsc_nom":"...","cspsc_tel":"...","cspsc_mail":"...","dreets_nom":"...","dreets_adresse":"...","carsat_nom":"...","carsat_adresse":"...","oppbtp_nom":"...","oppbtp_adresse":"...","rp_amiante":false,"rp_plomb":false,"rp_demolition":false,"rp_reseaux":false,"risques_pgc":{"r1":false,"r2":false,"r3":false,"r4":false,"r5":false,"r6":false,"r7":false,"r8":false,"r9":false,"r10":false,"r11":false,"r12":false,"r13":false,"r14":false,"r15":false,"r16":false,"r17":false,"r18":false,"r19":false,"r20":false,"r21":false,"r22":false,"r23":false,"r24":false,"r25":false,"r26":false},"cat3":{"acces":null,"securisation":null,"hygiene":null,"energie":null,"stockages":null,"dechets":null,"secours":null},"secours_pgc":{"hopital":null,"distance":null,"urgences":null,"trousse":null,"dae":null},"inspection_commune":{"entreprise":null,"delai_ppsps_jours":null,"article":null},"amiante_note":{"raat_date":null,"bureau":null,"ss4_obligatoire":null},"entreprise_intervenante":{"nom":null,"lot":null,"adresse":null,"contact":null,"tel":null,"effectif":null}}\nPour risques_pgc: r1=chute hauteur>3m, r2=ensevelissement, r3=substances chimiques/biologiques, r4=amiante, r5=radiations ionisantes, r6=travaux sous tension/HTB, r7=noyade, r8=puits/souterrains/tunnels, r9=plongee, r10=hyperbare, r11=demolition>200m3, r12=explosifs, r13=prefabriques lourds, r14=levage>60tm, r15=chute plain-pied, r16=projections/chutes materiaux, r17=incendie/points chauds, r18=manutention/TMS, r19=bruit, r20=poussieres, r21=produits dangereux/CMR, r22=engins/vehicules, r23=coupures/outils, r24=coactivite, r25=canicule, r26=autres. Met true si le risque est identifie dans le PGC. Pour cat3 (uniquement si le PGC mentionne ces points, sinon laisser null) : acces=acces et circulation au chantier, securisation=cloture/portail/gardiennage, hygiene=base vie/sanitaires/refectoire, energie=raccordement electrique provisoire, stockages=zones de stockage materiaux, dechets=gestion et evacuation des dechets, secours=hopital/numeros urgence/procedure. Pour secours_pgc (extrait granulaire, utilise meme si cat3.secours est deja rempli) : hopital=nom etablissement le plus proche, distance=temps ou distance indique, urgences=numeros cites (SAMU/Pompiers/police), trousse=emplacement ou obligation de trousse de secours mentionnee, dae=emplacement DAE si mentionne sinon null. Pour inspection_commune : entreprise=nom entreprise concernee par l\'inspection commune prealable, delai_ppsps_jours=delai en jours pour remise du PPSPS si indique, article=reference reglementaire citee (ex R.4532-10). Pour amiante_note (uniquement si amiante mentionnee) : raat_date=date du Reperage Amiante Avant Travaux, bureau=nom du bureau ayant realise le diagnostic, ss4_obligatoire=true si une entreprise certifiee SS4 est exigee. Pour entreprise_intervenante (si une entreprise est nommee dans le PGC, ex section "Entreprise Intervenante") : nom=raison sociale, lot=lot ou corps d\'etat, adresse=adresse de l\'entreprise, contact=nom de la personne contact chantier, tel=telephone, effectif=effectif sur chantier (ex "3 compagnons + 1 chef d\'equipe"). Resume chaque point en 1-2 phrases concretes tirees du PGC, en francais. Met null pour les champs texte non trouves.';
 
     var response = await fetch('/api/claude', {
       method: 'POST',
@@ -2479,6 +2491,20 @@ function applyExtracted() {
   if (d.secours_pgc) window._secoursPGC = d.secours_pgc;
   if (d.inspection_commune) window._inspectionPGC = d.inspection_commune;
   if (d.amiante_note) window._amiantePGC = d.amiante_note;
+  if (d.entreprise_intervenante && d.entreprise_intervenante.nom) {
+    var ei = d.entreprise_intervenante;
+    addEntreprise('principale');
+    var cards = document.querySelectorAll('#entreprise-list .entreprise-card');
+    var lastCard = cards[cards.length - 1];
+    if (lastCard) {
+      if (lastCard.querySelector('.ent-nom')) lastCard.querySelector('.ent-nom').value = ei.nom || '';
+      if (lastCard.querySelector('.ent-lot')) lastCard.querySelector('.ent-lot').value = ei.lot || '';
+      if (lastCard.querySelector('.ent-adresse')) lastCard.querySelector('.ent-adresse').value = ei.adresse || '';
+      if (lastCard.querySelector('.ent-tel')) lastCard.querySelector('.ent-tel').value = ei.tel || '';
+      if (lastCard.querySelector('.ent-contact')) lastCard.querySelector('.ent-contact').value = ei.contact || '';
+      if (lastCard.querySelector('.ent-effectif')) lastCard.querySelector('.ent-effectif').value = ei.effectif || '';
+    }
+  }
   showPage('form');
   showToast('Donnees importees depuis le PGC', 'success');
 }
