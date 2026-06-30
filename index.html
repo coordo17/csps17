@@ -2360,7 +2360,17 @@ async function processPGCFile(file) {
     });
 
     var result = await response.json();
-    var text = (result.content && result.content[0] && result.content[0].text) ? result.content[0].text : '{}';
+    if (!response.ok) {
+      throw new Error('Serveur (' + response.status + ') : ' + (result.error && result.error.message ? result.error.message : JSON.stringify(result)));
+    }
+    var text = '{}';
+    if (result.choices && result.choices[0] && result.choices[0].message && result.choices[0].message.content) {
+      text = result.choices[0].message.content;
+    } else if (result.content && result.content[0] && result.content[0].text) {
+      text = result.content[0].text;
+    } else if (result.error) {
+      throw new Error(result.error.message || JSON.stringify(result.error));
+    }
     var parsed = JSON.parse(text.replace(/```json|```/g,'').trim());
     extractedData = parsed;
 
