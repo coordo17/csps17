@@ -13,6 +13,7 @@
 <title>CSPS17 — Gestion de dossiers</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.5/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pizzip@3.1.4/dist/pizzip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/docxtemplater@3.44.0/build/docxtemplater.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mammoth@1.7.2/mammoth.browser.min.js"></script>
@@ -2380,6 +2381,38 @@ async function processEntMailFile(file) {
         var page = await pdf.getPage(i);
         var tc = await page.getTextContent();
         mailText += tc.items.map(function(it){ return it.str; }).join(' ') + '\n';
+      }
+      // Fallback OCR si le PDF est une image scannee (pas de couche texte)
+      if (mailText.trim().length < 30) {
+        showToast('PDF scanne detecte, OCR en-tete/pied de page (5-10s)...');
+        if (typeof Tesseract === 'undefined') {
+          throw new Error('OCR indisponible (Tesseract.js non chargé). Rechargez la page.');
+        }
+        var ocrPages = Math.min(pdf.numPages, 2); // limite pour le temps de calcul
+        var ocrText = '';
+        for (var p = 1; p <= ocrPages; p++) {
+          var ocrPage = await pdf.getPage(p);
+          var viewport = ocrPage.getViewport({ scale: 2.5 });
+          var fullCanvas = document.createElement('canvas');
+          fullCanvas.width = viewport.width;
+          fullCanvas.height = viewport.height;
+          await ocrPage.render({ canvasContext: fullCanvas.getContext('2d'), viewport: viewport }).promise;
+          // Decoupe : en-tete (haut 22%) + pied de page (bas 15%), zones ou se trouvent
+          // raison sociale / adresse / SIRET / tel / mail sur la plupart des courriers/devis pro
+          var zones = [
+            { y: 0, h: Math.round(viewport.height * 0.22) },
+            { y: Math.round(viewport.height * 0.85), h: Math.round(viewport.height * 0.15) }
+          ];
+          for (var z = 0; z < zones.length; z++) {
+            var zoneCanvas = document.createElement('canvas');
+            zoneCanvas.width = viewport.width;
+            zoneCanvas.height = zones[z].h;
+            zoneCanvas.getContext('2d').drawImage(fullCanvas, 0, zones[z].y, viewport.width, zones[z].h, 0, 0, viewport.width, zones[z].h);
+            var ocrResult = await Tesseract.recognize(zoneCanvas, 'fra');
+            ocrText += (ocrResult.data && ocrResult.data.text ? ocrResult.data.text : '') + '\n';
+          }
+        }
+        mailText = ocrText;
       }
     } else if (file.name.endsWith('.docx')) {
       if (typeof mammoth === 'undefined') {
