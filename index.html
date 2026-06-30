@@ -1597,20 +1597,20 @@ function injecterRisquesIC(zip, risquesIC) {
     var imp = rq.imp ? '☑' : '☐';
     var ex  = rq.ex  ? '☑' : '☐';
     var fill = odd ? 'FFFFFF' : 'F2F2F2';
-    // Col 1 : label + R.IMP + R.EX
-    var col1 = '<w:tc>' + mkTcPr('2200', fill)
+    // Col 1 : label + R.IMP + R.EX — 25%
+    var col1 = '<w:tc>' + mkTcPr('2410', fill)
       + mkP(def.label, 18, true, false, '', 20)
       + mkP('R.IMP.' + imp, 16, false, false, 'right', 20)
       + mkP('R.EX.' + ex,  16, false, false, 'right', 20)
       + '</w:tc>';
-    // Col 2 : situations
-    var col2 = '<w:tc>' + mkTcPr('3940', 'FFFFFF');
+    // Col 2 : situations — 25%
+    var col2 = '<w:tc>' + mkTcPr('2410', 'FFFFFF');
     def.situations.forEach(function(s, i) {
       col2 += mkP(s, 16, false, false, '', i < def.situations.length-1 ? 60 : 0);
     });
     col2 += '</w:tc>';
-    // Col 3 : mesures
-    var col3 = '<w:tc>' + mkTcPr('3500', 'FFFFFF');
+    // Col 3 : mesures — 50%
+    var col3 = '<w:tc>' + mkTcPr('4820', 'FFFFFF');
     def.mesures.forEach(function(m, i) {
       col3 += mkP(m, 16, i===0, false, '', i < def.mesures.length-1 ? 60 : 0);
     });
@@ -1632,6 +1632,23 @@ function injecterRisquesIC(zip, risquesIC) {
   // Extraire header + tblPr + tblGrid (tout jusqu'à la fin du 1er <w:tr>)
   var firstTrEnd = xmlStr.indexOf('</w:tr>', tblStart) + 7;
   var header = xmlStr.slice(tblOpen, firstTrEnd);
+
+  // Forcer les largeurs du tblGrid (en-tete) sur les memes proportions que les
+  // lignes generees (25% / 25% / 50%) pour eviter tout decalage visuel avec le corps
+  var nouvellesLargeurs = ['2410', '2410', '4820'];
+  var gridColIdx = 0;
+  header = header.replace(/<w:gridCol w:w="\d+"\/>/g, function() {
+    var w = nouvellesLargeurs[gridColIdx] || nouvellesLargeurs[nouvellesLargeurs.length - 1];
+    gridColIdx++;
+    return '<w:gridCol w:w="' + w + '"/>';
+  });
+  // Forcer aussi les largeurs des cellules du header (3 premieres <w:tcW> du <w:tr>)
+  var tcwIdx = 0;
+  header = header.replace(/<w:tcW w:w="\d+" w:type="dxa"\/>/g, function() {
+    var w = nouvellesLargeurs[tcwIdx] || nouvellesLargeurs[nouvellesLargeurs.length - 1];
+    tcwIdx++;
+    return '<w:tcW w:w="' + w + '" w:type="dxa"/>';
+  });
 
   // Construire les lignes dynamiques
   var rows = '';
@@ -2556,7 +2573,9 @@ function ouvrirFormulaireDoc(ref) {
   }
   document.getElementById('terrain-doc-title').textContent = DOC_TITRES[ref] || ref;
   document.getElementById('terrain-section-sig-ent').style.display = DOCS_AVEC_SIG_ENT.includes(ref) ? 'block' : 'none';
-  document.getElementById('terrain-section-sig-eu').style.display = DOCS_AVEC_SIG_EU.includes(ref) ? 'block' : 'none';
+  // Pavé signature EU : sans objet pour la FIC Cat.3 (template sans zone EU — concept R.4512, hors coordination SPS)
+  var afficherSigEU = DOCS_AVEC_SIG_EU.includes(ref) && terrainAffaire.cat !== 3;
+  document.getElementById('terrain-section-sig-eu').style.display = afficherSigEU ? 'block' : 'none';
 
   // Generer le contenu du formulaire
   var content = '';
