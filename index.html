@@ -2171,6 +2171,12 @@ function cocherCategorie(xmlStr, cat) {
   return xmlStr.split(old).join(nw);
 }
 
+function cocherSousTraitance(xmlStr, stOui) {
+  var old = '☐ Oui  ☑ Non';
+  var nw = stOui ? '☑ Oui  ☐ Non' : '☐ Oui  ☑ Non';
+  return xmlStr.split(old).join(nw);
+}
+
 var DOC_FILES = {
   'DP':          'CSPS17_Suivi_Declaration_Prealable_v3.docx',
   'RJC':         'CSPS17_Registre_Journal_Bordereau_v3_1.docx',
@@ -2249,6 +2255,12 @@ function buildTagData(data) {
     cat3_stockages:    (data._ficData && data._ficData.cat3_stockages) ? data._ficData.cat3_stockages : '',
     cat3_dechets:      (data._ficData && data._ficData.cat3_dechets) ? data._ficData.cat3_dechets : '',
     cat3_secours:      (data._ficData && data._ficData.cat3_secours) ? data._ficData.cat3_secours : '',
+    st_liste:          (function(){
+      if (!data._ficData || !data._ficData.stOui || !data._ficData.stEntreprises || !data._ficData.stEntreprises.length) return '';
+      return 'Sous-traitant(s) declare(s) : ' + data._ficData.stEntreprises.map(function(e){
+        return e.nom + (e.lot ? ' (' + e.lot + ')' : '');
+      }).join(' ; ') + '.';
+    })(),
   };
 }
 
@@ -2305,6 +2317,7 @@ async function generateDoc(ref) {
       if (docXmlFile) {
         var xmlStr2 = docXmlFile.asText();
         if (data.cat) xmlStr2 = cocherCategorie(xmlStr2, data.cat);
+        if (data._ficData) xmlStr2 = cocherSousTraitance(xmlStr2, data._ficData.stOui);
         if (data.risques && !isCat3) xmlStr2 = cocherRisques(xmlStr2, data.risques);
         finalZip.file('word/document.xml', xmlStr2);
       }
@@ -2918,6 +2931,20 @@ function genFormulaireFIC() {
   html2 += checkRow('PPSPS transmis au CSPS (si requis)', 'fic-info-ppsps', false);
   html2 += sectionEnd();
 
+  // Section 4bis - Sous-traitance
+  html2 += sectionHeader('4bis', 'Sous-traitance', '&#129309;');
+  html2 += '<div class="field" style="margin-bottom:10px;"><label>Travaux en sous-traitance envisages ?</label>';
+  html2 += '<div style="display:flex;gap:16px;margin-top:6px;">';
+  html2 += '<label style="display:flex;align-items:center;gap:6px;font-weight:400;"><input type="radio" name="fic-st-radio" id="fic-st-oui" value="oui" onchange="toggleSousTraitance()"> Oui</label>';
+  html2 += '<label style="display:flex;align-items:center;gap:6px;font-weight:400;"><input type="radio" name="fic-st-radio" id="fic-st-non" value="non" checked onchange="toggleSousTraitance()"> Non</label>';
+  html2 += '</div></div>';
+  html2 += '<div id="fic-st-liste-wrap" style="display:none;">';
+  html2 += '<label style="font-size:12px;font-weight:600;color:var(--blue-dark);">Entreprises sous-traitantes</label>';
+  html2 += '<div id="fic-st-liste" style="margin:8px 0;"></div>';
+  html2 += '<button type="button" class="btn btn-outline btn-sm" onclick="addSousTraitant()">+ Ajouter une entreprise sous-traitante</button>';
+  html2 += '</div>';
+  html2 += sectionEnd();
+
   // Section 5 - Organisation du site
   html2 += sectionHeader('5', 'Organisation du site', '&#127959;');
   html2 += '<p style="font-size:12px;color:var(--text-light);margin-bottom:8px;">Cochez les elements conformes / en place :</p>';
@@ -3346,6 +3373,31 @@ function toggleMeteo() {
   }
 }
 
+var sousTraitantCount = 0;
+function toggleSousTraitance() {
+  var oui = document.getElementById('fic-st-oui');
+  var wrap = document.getElementById('fic-st-liste-wrap');
+  if (!wrap) return;
+  wrap.style.display = (oui && oui.checked) ? 'block' : 'none';
+  if (oui && oui.checked) {
+    var liste = document.getElementById('fic-st-liste');
+    if (liste && liste.children.length === 0) addSousTraitant();
+  }
+}
+function addSousTraitant() {
+  sousTraitantCount++;
+  var id = 'st-' + sousTraitantCount;
+  var liste = document.getElementById('fic-st-liste');
+  if (!liste) return;
+  var row = document.createElement('div');
+  row.id = id;
+  row.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:8px;';
+  row.innerHTML = '<input type="text" class="st-ent-nom" placeholder="Raison sociale" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;">'
+    + '<input type="text" class="st-ent-lot" placeholder="Lot / corps de metier" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;">'
+    + '<button type="button" class="btn-remove-ent" onclick="document.getElementById(\'' + id + '\').remove()">x</button>';
+  liste.appendChild(row);
+}
+
 function terrainRemplirEntreprise(idx) {
   if (idx === '' || !terrainAffaire) return;
   var ent = (terrainAffaire.entreprises || [])[parseInt(idx)];
@@ -3657,6 +3709,17 @@ async function genererDocTerrain() {
       meteoVigilance:  getCheck('fic-meteo-vigilance'),
       meteoFroid:      getCheck('fic-meteo-froid'),
       meteoReferentHiver: getVal('fic-meteo-referent-hiver'),
+      // Sous-traitance
+      stOui: document.getElementById('fic-st-oui') ? document.getElementById('fic-st-oui').checked : false,
+      stEntreprises: (function(){
+        var arr = [];
+        document.querySelectorAll('#fic-st-liste > div').forEach(function(row){
+          var nom = row.querySelector('.st-ent-nom') ? row.querySelector('.st-ent-nom').value.trim() : '';
+          var lot = row.querySelector('.st-ent-lot') ? row.querySelector('.st-ent-lot').value.trim() : '';
+          if (nom) arr.push({nom: nom, lot: lot});
+        });
+        return arr;
+      })(),
     };
   } else if (ref === 'VIS') {
     // Recuperer la premiere entreprise de la liste
