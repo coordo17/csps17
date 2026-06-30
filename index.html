@@ -2482,7 +2482,8 @@ async function processEntMailFile(file) {
       if (lastCard.querySelector('.ent-siret') && ei.siret) lastCard.querySelector('.ent-siret').value = ei.siret;
       if (lastCard.querySelector('.ent-compagnon') && ei.compagnon) lastCard.querySelector('.ent-compagnon').value = ei.compagnon;
     }
-    showToast('Entreprise "' + ei.nom + '" importee depuis le mail', 'success');
+    saveAffaire();
+    showToast('Entreprise "' + ei.nom + '" importee et affaire sauvegardee', 'success');
   } catch (err) {
     showToast('Erreur import mail : ' + err.message, 'error');
   }
@@ -2636,6 +2637,7 @@ function applyExtracted() {
       if (lastCard.querySelector('.ent-contact')) lastCard.querySelector('.ent-contact').value = ei.contact || '';
       if (lastCard.querySelector('.ent-effectif')) lastCard.querySelector('.ent-effectif').value = ei.effectif || '';
     }
+    saveAffaire();
   }
   showPage('form');
   showToast('Donnees importees depuis le PGC', 'success');
