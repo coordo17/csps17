@@ -15,8 +15,7 @@
 <script>pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 <script src="https://cdn.jsdelivr.net/npm/pizzip@3.1.4/dist/pizzip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/docxtemplater@3.44.0/build/docxtemplater.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/pizzip@3.1.4/dist/pizzip.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/docxtemplater@3.44.0/build/docxtemplater.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mammoth@1.7.2/mammoth.browser.min.js"></script>
 <style>
   :root {
     --blue-dark: #1F4E79;
@@ -2342,10 +2341,23 @@ async function processPGCFile(file) {
         var tc = await page.getTextContent();
         pdfText += tc.items.map(function(it){ return it.str; }).join(' ') + '\n';
       }
+    } else if (file.name.endsWith('.docx')) {
+      if (typeof mammoth === 'undefined') {
+        throw new Error('Lecture DOCX indisponible (mammoth.js non chargé). Rechargez la page.');
+      }
+      var docxBuffer = await file.arrayBuffer();
+      var mammothResult = await mammoth.extractRawText({ arrayBuffer: docxBuffer });
+      pdfText = mammothResult.value || '';
     } else {
       pdfText = await file.text();
     }
     pdfText = pdfText.slice(0, 12000);
+
+    // Diagnostic : vérifier que le texte extrait n'est pas corrompu
+    var ratioInvalide = (pdfText.match(/\uFFFD/g) || []).length / Math.max(pdfText.length, 1);
+    if (ratioInvalide > 0.05 || pdfText.trim().length < 30) {
+      throw new Error('Le texte extrait du PDF est illisible (PDF scanné/image, ou police non standard). Convertissez en .docx ou copiez le texte dans un fichier .txt.');
+    }
 
     var prompt = 'Voici le contenu d\'un PGC SPS :\n\n' + pdfText + '\n\nExtrais les informations suivantes et reponds UNIQUEMENT en JSON valide, sans markdown ni backtick :\n{"chantier_nom":"...","chantier_adresse":"...","chantier_nature":"...","chantier_debut":"...","chantier_duree":"...","categorie":1,"moa_nom":"...","moa_contact":"...","moa_adresse":"...","moa_tel":"...","moa_mail":"...","moe_nom":"...","moe_contact":"...","cspsc_nom":"...","cspsc_tel":"...","cspsc_mail":"...","dreets_nom":"...","dreets_adresse":"...","carsat_nom":"...","carsat_adresse":"...","oppbtp_nom":"...","oppbtp_adresse":"...","rp_amiante":false,"rp_plomb":false,"rp_demolition":false,"rp_reseaux":false,"risques_pgc":{"r1":false,"r2":false,"r3":false,"r4":false,"r5":false,"r6":false,"r7":false,"r8":false,"r9":false,"r10":false,"r11":false,"r12":false,"r13":false,"r14":false,"r15":false,"r16":false,"r17":false,"r18":false,"r19":false,"r20":false,"r21":false,"r22":false,"r23":false,"r24":false,"r25":false,"r26":false}}\nPour risques_pgc: r1=chute hauteur>3m, r2=ensevelissement, r3=substances chimiques/biologiques, r4=amiante, r5=radiations ionisantes, r6=travaux sous tension/HTB, r7=noyade, r8=puits/souterrains/tunnels, r9=plongee, r10=hyperbare, r11=demolition>200m3, r12=explosifs, r13=prefabriques lourds, r14=levage>60tm, r15=chute plain-pied, r16=projections/chutes materiaux, r17=incendie/points chauds, r18=manutention/TMS, r19=bruit, r20=poussieres, r21=produits dangereux/CMR, r22=engins/vehicules, r23=coupures/outils, r24=coactivite, r25=canicule, r26=autres. Met true si le risque est identifie dans le PGC. Met null pour les champs texte non trouves.';
 
@@ -2371,7 +2383,14 @@ async function processPGCFile(file) {
     } else if (result.error) {
       throw new Error(result.error.message || JSON.stringify(result.error));
     }
-    var parsed = JSON.parse(text.replace(/```json|```/g,'').trim());
+    var jsonStr = text.replace(/```json|```/g,'').trim();
+    var parsed;
+    try {
+      parsed = JSON.parse(jsonStr);
+    } catch (parseErr) {
+      var apercu = jsonStr.replace(/\uFFFD/g, '?').slice(0, 80);
+      throw new Error('Reponse IA illisible (' + parseErr.message + '). Debut recu : "' + apercu + '"');
+    }
     extractedData = parsed;
 
     var fields = [
