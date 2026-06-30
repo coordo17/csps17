@@ -1458,6 +1458,36 @@ function injecterFIC(zip, ficData) {
     return xml.slice(0, pStart) + newP + xml.slice(pEnd);
   }
 
+  // Pour les cellules ou label + valeur sont empiles DANS LA MEME cellule
+  // (ex: "Date de l'IC" dans le template Cat.3), contrairement a remplirCellule
+  // qui cible la cellule SUIVANTE.
+  function remplirCelluleInterne(xml, label, valeur) {
+    if (!valeur) return xml;
+    var idx = xml.indexOf(label);
+    if (idx === -1) return xml;
+    var tcEnd = xml.indexOf('</w:tc>', idx);
+    if (tcEnd === -1) return xml;
+    // Paragraphe du label : on s'arrete juste apres
+    var labelPEnd = xml.indexOf('</w:p>', idx) + 6;
+    // Chercher le paragraphe suivant (vide, pour la valeur) AVANT la fin de cellule
+    var pStart = xml.indexOf('<w:p', labelPEnd);
+    if (pStart === -1 || pStart > tcEnd) return xml;
+    var pEnd;
+    var normalClose = xml.indexOf('</w:p>', pStart);
+    if (normalClose !== -1 && normalClose < tcEnd) {
+      pEnd = normalClose + 6;
+    } else {
+      var pTagEnd = xml.indexOf('>', pStart);
+      if (pTagEnd !== -1 && xml[pTagEnd-1] === '/' && pTagEnd < tcEnd) {
+        pEnd = pTagEnd + 1;
+      } else return xml;
+    }
+    var newP = '<w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'
+      + '<w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>'
+      + '<w:t xml:space="preserve">' + escXml(valeur) + '</w:t></w:r></w:p>';
+    return xml.slice(0, pStart) + newP + xml.slice(pEnd);
+  }
+
   // Cocher une case : remplacer '☐' par '☑' dans un texte contenant le label
   function cocher(xml, label) {
     var idx = xml.indexOf(label);
@@ -1481,7 +1511,7 @@ function injecterFIC(zip, ficData) {
 
   // === SECTION 1 - Dates ===
   // Tableau 5 : Date IC | Date fin previsionnelle | Nb intervenants
-  xmlStr = remplirCellule(xmlStr, "Date de l'IC", d.dateIC || '');
+  xmlStr = remplirCelluleInterne(xmlStr, "Date de l'IC", d.dateIC || '');
   xmlStr = remplirCellule(xmlStr, 'Date fin prévisionnelle', d.dateFin || '');
   xmlStr = remplirCellule(xmlStr, 'Nb. intervenants prévu', d.effectif || '');
 
