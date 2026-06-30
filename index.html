@@ -1549,7 +1549,7 @@ function injecterFIC(zip, ficData) {
   return zip;
 }
 
-function injecterRisquesIC(zip, risquesIC) {
+function injecterRisquesIC(zip, risquesIC, ficData) {
   if (!risquesIC || !risquesIC.length) return zip;
   var docFile = zip.file('word/document.xml');
   if (!docFile) return zip;
@@ -1681,10 +1681,35 @@ function injecterRisquesIC(zip, risquesIC) {
     rows += buildRow(rq, def, i % 2 === 0);
   });
 
-  // Ajouter ligne Précisions diverses (toujours présente)
+  // Ajouter ligne Précisions diverses (toujours présente), remplie si obsRisques/meteo renseignes
   var precTrStart = xmlStr.lastIndexOf('<w:tr>', precIdx);
   var precTrEnd   = xmlStr.indexOf('</w:tr>', precIdx) + 7;
-  rows += xmlStr.slice(precTrStart, precTrEnd);
+  var precRowXml  = xmlStr.slice(precTrStart, precTrEnd);
+
+  var diversText = [];
+  if (ficData && ficData.obsRisques) diversText.push(ficData.obsRisques);
+  if (ficData) {
+    var canicule = [];
+    if (ficData.meteoEau) canicule.push('eau fraiche');
+    if (ficData.meteoArret) canicule.push('arret travaux 12h-15h');
+    if (ficData.meteoOmbre) canicule.push('zone ombre/abri frais');
+    if (ficData.meteoOrage) canicule.push('arret immediat orage/alerte rouge');
+    if (canicule.length) diversText.push('Canicule : ' + canicule.join(', ') + (ficData.meteoReferent ? ' (referent : ' + ficData.meteoReferent + ')' : '') + '.');
+    var hiver = [];
+    if (ficData.meteoVent) hiver.push('arret hauteur/levage si vent fort');
+    if (ficData.meteoVerglas) hiver.push('report si verglas/neige');
+    if (ficData.meteoVigilance) hiver.push('suivi vigilance Meteo-France');
+    if (ficData.meteoFroid) hiver.push('equipements froid');
+    if (hiver.length) diversText.push('Intemperies : ' + hiver.join(', ') + (ficData.meteoReferentHiver ? ' (referent : ' + ficData.meteoReferentHiver + ')' : '') + '.');
+  }
+  if (diversText.length) {
+    var firstTcPrEnd = precRowXml.indexOf('</w:tcPr>') + '</w:tcPr>'.length;
+    var valueTcPrEnd = precRowXml.indexOf('</w:tcPr>', firstTcPrEnd) + '</w:tcPr>'.length;
+    var rowTail = '</w:tc></w:tr>';
+    var contentXml = diversText.map(function(t, i){ return mkP(t, 16, false, false, '', i < diversText.length-1 ? 60 : 0); }).join('');
+    precRowXml = precRowXml.slice(0, valueTcPrEnd) + contentXml + rowTail;
+  }
+  rows += precRowXml;
 
   var newTable = header + rows + '</w:tbl>';
   xmlStr = xmlStr.slice(0, tblOpen) + newTable + xmlStr.slice(tblClose);
@@ -2272,7 +2297,7 @@ async function generateDoc(ref) {
       finalZip = injecterFIC(finalZip, terrainAffaire._ficData);
       // Injecter les risques IMP/EX dynamiques (Cat.3 uniquement)
       if (isCat3 && terrainAffaire._ficData.risquesIC && terrainAffaire._ficData.risquesIC.length) {
-        finalZip = injecterRisquesIC(finalZip, terrainAffaire._ficData.risquesIC);
+        finalZip = injecterRisquesIC(finalZip, terrainAffaire._ficData.risquesIC, terrainAffaire._ficData);
       }
     }
     if (data.cat || (data.risques && !isCat3)) {
@@ -2973,11 +2998,18 @@ function genFormulaireFIC() {
   html2 += '<div class="terrain-section-header" onclick="toggleMeteo()" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;">&#9928; Vigilance meteorologique <span id="meteo-arrow">&#9660;</span></div>';
   html2 += '<div id="meteo-section" style="display:none;padding:16px;">';
   html2 += '<p style="font-size:12px;color:var(--text-light);margin-bottom:10px;">Cochez les mesures mises en place :</p>';
+  html2 += '<p style="font-size:11px;font-weight:600;color:var(--blue-dark);margin:10px 0 6px;">&#9728; Canicule</p>';
   html2 += checkRow('Eau fraiche en permanence sur chantier', 'fic-meteo-eau', false);
   html2 += checkRow('Arret travaux 12h-15h (canicule)', 'fic-meteo-arret', false);
   html2 += checkRow('Zone ombre / abri frais disponible', 'fic-meteo-ombre', false);
   html2 += checkRow('Arret immediat orage / alerte rouge', 'fic-meteo-orage', false);
   html2 += fieldRow('Referent canicule — Nom', 'fic-meteo-referent', 'text', 'Nom du referent canicule', '');
+  html2 += '<p style="font-size:11px;font-weight:600;color:var(--blue-dark);margin:14px 0 6px;">&#10052; Conditions hivernales / Intemperies</p>';
+  html2 += checkRow('Arret travaux hauteur/levage si vent fort (>50-60 km/h)', 'fic-meteo-vent', false);
+  html2 += checkRow('Report travaux exterieurs si verglas / neige', 'fic-meteo-verglas', false);
+  html2 += checkRow('Suivi vigilance Meteo-France avant intervention', 'fic-meteo-vigilance', false);
+  html2 += checkRow('Equipements froid (gants, vetements adaptes)', 'fic-meteo-froid', false);
+  html2 += fieldRow('Referent intemperies — Nom', 'fic-meteo-referent-hiver', 'text', 'Nom du referent intemperies', '');
   html2 += '</div></div>';
 
   // Section I Cat.3 - Explications PGC (visible seulement si cat=3)
@@ -3614,6 +3646,17 @@ async function genererDocTerrain() {
       // Risques IMP/EX
       risquesIC:     window._risquesICData || [],
       obsRisques:    getVal('fic-rq-obs'),
+      // Vigilance meteorologique
+      meteoEau:        getCheck('fic-meteo-eau'),
+      meteoArret:      getCheck('fic-meteo-arret'),
+      meteoOmbre:      getCheck('fic-meteo-ombre'),
+      meteoOrage:      getCheck('fic-meteo-orage'),
+      meteoReferent:   getVal('fic-meteo-referent'),
+      meteoVent:       getCheck('fic-meteo-vent'),
+      meteoVerglas:    getCheck('fic-meteo-verglas'),
+      meteoVigilance:  getCheck('fic-meteo-vigilance'),
+      meteoFroid:      getCheck('fic-meteo-froid'),
+      meteoReferentHiver: getVal('fic-meteo-referent-hiver'),
     };
   } else if (ref === 'VIS') {
     // Recuperer la premiere entreprise de la liste
