@@ -1635,7 +1635,7 @@ function injecterRisquesIC(zip, risquesIC) {
       col3 += mkP(m, 16, i===0, false, '', i < def.mesures.length-1 ? 60 : 0);
     });
     col3 += '</w:tc>';
-    return '<w:tr>' + col1 + col2 + col3 + '</w:tr>';
+    return '<w:tr><w:trPr><w:cantSplit/></w:trPr>' + col1 + col2 + col3 + '</w:tr>';
   }
 
   // Trouver le tableau risques (ancre = "Type de Risque" dans header bleu)
