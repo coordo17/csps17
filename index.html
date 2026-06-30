@@ -1601,7 +1601,7 @@ function injecterRisquesIC(zip, risquesIC) {
       + '<w:bottom w:w="120" w:type="dxa"/><w:right w:w="180" w:type="dxa"/></w:tcMar>'
       + '<w:vAlign w:val="center"/></w:tcPr>';
   }
-  function mkP(text, sz, bold, italic, align, after) {
+  function mkP(text, sz, bold, italic, align, after, color) {
     var pPr = (align || after) ? '<w:pPr>'
       + (after !== undefined ? '<w:spacing w:after="' + after + '"/>' : '')
       + (align ? '<w:jc w:val="' + align + '"/>' : '')
@@ -1609,6 +1609,7 @@ function injecterRisquesIC(zip, risquesIC) {
     return '<w:p>' + pPr + '<w:r><w:rPr>'
       + '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'
       + (bold ? '<w:b/><w:bCs/>' : '')
+      + (color ? '<w:color w:val="' + color + '"/>' : '')
       + '<w:sz w:val="' + (sz||18) + '"/><w:szCs w:val="' + (sz||18) + '"/>'
       + '</w:rPr><w:t xml:space="preserve">' + escXml(text) + '</w:t></w:r></w:p>';
   }
@@ -1624,15 +1625,16 @@ function injecterRisquesIC(zip, risquesIC) {
       + mkP('R.EX.' + ex,  16, false, false, 'right', 20)
       + '</w:tc>';
     // Col 2 : situations — 25%
-    var col2 = '<w:tc>' + mkTcPr('2410', 'FFFFFF');
+    var col2 = '<w:tc>' + mkTcPr('1900', 'FFFFFF');
     def.situations.forEach(function(s, i) {
       col2 += mkP(s, 16, false, false, '', i < def.situations.length-1 ? 60 : 0);
     });
     col2 += '</w:tc>';
     // Col 3 : mesures — 57%
-    var col3 = '<w:tc>' + mkTcPr('5500', 'FFFFFF');
+    var isCanicule = rq.id === 'r25';
+    var col3 = '<w:tc>' + mkTcPr('6010', 'FFFFFF');
     def.mesures.forEach(function(m, i) {
-      col3 += mkP(m, 16, i===0, false, '', i < def.mesures.length-1 ? 60 : 0);
+      col3 += mkP(m, 16, isCanicule ? true : (i===0), false, '', i < def.mesures.length-1 ? 60 : 0, isCanicule ? 'FF0000' : null);
     });
     col3 += '</w:tc>';
     return '<w:tr><w:trPr><w:cantSplit/></w:trPr>' + col1 + col2 + col3 + '</w:tr>';
@@ -1655,7 +1657,7 @@ function injecterRisquesIC(zip, risquesIC) {
 
   // Forcer les largeurs du tblGrid (en-tete) sur les memes proportions que les
   // lignes generees (25% / 25% / 50%) pour eviter tout decalage visuel avec le corps
-  var nouvellesLargeurs = ['1730', '2410', '5500'];
+  var nouvellesLargeurs = ['1730', '1900', '6010'];
   var gridColIdx = 0;
   header = header.replace(/<w:gridCol w:w="\d+"\/>/g, function() {
     var w = nouvellesLargeurs[gridColIdx] || nouvellesLargeurs[nouvellesLargeurs.length - 1];
@@ -2272,12 +2274,12 @@ async function generateDoc(ref) {
         finalZip = injecterRisquesIC(finalZip, terrainAffaire._ficData.risquesIC);
       }
     }
-    if (data.cat || (data.risques)) {
+    if (data.cat || (data.risques && !isCat3)) {
       var docXmlFile = finalZip.file('word/document.xml');
       if (docXmlFile) {
         var xmlStr2 = docXmlFile.asText();
         if (data.cat) xmlStr2 = cocherCategorie(xmlStr2, data.cat);
-        if (data.risques) xmlStr2 = cocherRisques(xmlStr2, data.risques);
+        if (data.risques && !isCat3) xmlStr2 = cocherRisques(xmlStr2, data.risques);
         finalZip.file('word/document.xml', xmlStr2);
       }
     }
