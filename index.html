@@ -1221,11 +1221,12 @@ function renderAffaireList() {
     return;
   }
   list.innerHTML = affaires.slice().reverse().map(function(a){
-    return '<div class="affaire-item" data-id="' + a.id + '" onclick="loadAffaire(\'' + a.id + '\')">'
-      + '<div><div class="affaire-num">' + (a.num || '-') + '</div>'
+    return '<div class="affaire-item" data-id="' + a.id + '">'
+      + '<button class="btn-remove-ent" title="Supprimer cette affaire" onclick="deleteAffaire(event,\'' + a.id + '\')" style="flex:0 0 auto;">x</button>'
+      + '<div style="flex:1;min-width:0;cursor:pointer;" onclick="loadAffaire(\'' + a.id + '\')">'
+      + '<div class="affaire-num">' + (a.num || '-') + '</div>'
       + '<div class="affaire-name">' + ((a.chantier && a.chantier.nom) ? a.chantier.nom : 'Sans nom') + '</div></div>'
       + (a.cat ? '<span class="cat-badge cat-' + a.cat + '">Cat.' + a.cat + '</span>' : '')
-      + '<button class="btn-remove-ent" title="Supprimer cette affaire" onclick="deleteAffaire(event,\'' + a.id + '\')" style="margin-left:8px;">x</button>'
       + '</div>';
   }).join('');
 }
