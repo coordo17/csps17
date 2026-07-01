@@ -1668,20 +1668,20 @@ function injecterRisquesIC(zip, risquesIC, ficData) {
       return '<w:tr><w:trPr><w:cantSplit/></w:trPr><w:tc>' + fullTcPr + content + '</w:tc></w:tr>';
     }
 
-    // Col 1 : label + R.IMP + R.EX — 18%
-    var col1 = '<w:tc>' + mkTcPr('1730', fill)
+    // Col 1 : label + R.IMP + R.EX — 25%
+    var col1 = '<w:tc>' + mkTcPr('2410', fill)
       + mkP(def.label, 18, true, false, '', 20)
       + mkP('R.IMP.' + imp, 16, false, false, 'right', 20)
       + mkP('R.EX.' + ex,  16, false, false, 'right', 20)
       + '</w:tc>';
-    // Col 2 : situations — 20%
-    var col2 = '<w:tc>' + mkTcPr('1900', 'FFFFFF');
+    // Col 2 : situations — 25%
+    var col2 = '<w:tc>' + mkTcPr('2410', 'FFFFFF');
     def.situations.forEach(function(s, i) {
       col2 += mkP(s, 16, false, false, '', i < def.situations.length-1 ? 60 : 0);
     });
     col2 += '</w:tc>';
-    // Col 3 : mesures — 62%
-    var col3 = '<w:tc>' + mkTcPr('6010', 'FFFFFF');
+    // Col 3 : mesures — 50%
+    var col3 = '<w:tc>' + mkTcPr('4820', 'FFFFFF');
     def.mesures.forEach(function(m, i) {
       col3 += mkP(m, 16, i===0, false, '', i < def.mesures.length-1 ? 60 : 0);
     });
@@ -1706,7 +1706,7 @@ function injecterRisquesIC(zip, risquesIC, ficData) {
 
   // Forcer les largeurs du tblGrid (en-tete) sur les memes proportions que les
   // lignes generees (25% / 25% / 50%) pour eviter tout decalage visuel avec le corps
-  var nouvellesLargeurs = ['1730', '1900', '6010'];
+  var nouvellesLargeurs = ['2410', '2410', '4820'];
   var gridColIdx = 0;
   header = header.replace(/<w:gridCol w:w="\d+"\/>/g, function() {
     var w = nouvellesLargeurs[gridColIdx] || nouvellesLargeurs[nouvellesLargeurs.length - 1];
@@ -1730,7 +1730,7 @@ function injecterRisquesIC(zip, risquesIC, ficData) {
   });
 
   // Ajouter ligne Précisions diverses (toujours présente), remplie si obsRisques/meteo renseignes
-  var precTrStart = xmlStr.lastIndexOf('<w:tr>', precIdx);
+  var precTrStart = Math.max(xmlStr.lastIndexOf('<w:tr>', precIdx), xmlStr.lastIndexOf('<w:tr ', precIdx));
   var precTrEnd   = xmlStr.indexOf('</w:tr>', precIdx) + 7;
   var precRowXml  = xmlStr.slice(precTrStart, precTrEnd);
 
@@ -1751,11 +1751,14 @@ function injecterRisquesIC(zip, risquesIC, ficData) {
     if (hiver.length) diversText.push('Intemperies : ' + hiver.join(', ') + (ficData.meteoReferentHiver ? ' (referent : ' + ficData.meteoReferentHiver + ')' : '') + '.');
   }
   if (diversText.length) {
-    var firstTcPrEnd = precRowXml.indexOf('</w:tcPr>') + '</w:tcPr>'.length;
-    var valueTcPrEnd = precRowXml.indexOf('</w:tcPr>', firstTcPrEnd) + '</w:tcPr>'.length;
+    // La ligne "Precisions diverses" est une cellule unique pleine largeur (gridSpan=3),
+    // pas 2 cellules label+valeur : on insere juste avant la fermeture de cette cellule.
+    var tcEnd = precRowXml.lastIndexOf('</w:tc>');
     var rowTail = '</w:tc></w:tr>';
     var contentXml = diversText.map(function(t, i){ return mkP(t, 16, false, false, '', i < diversText.length-1 ? 60 : 0); }).join('');
-    precRowXml = precRowXml.slice(0, valueTcPrEnd) + contentXml + rowTail;
+    if (tcEnd !== -1) {
+      precRowXml = precRowXml.slice(0, tcEnd) + contentXml + rowTail;
+    }
   }
   rows += precRowXml;
 
