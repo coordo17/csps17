@@ -1654,7 +1654,7 @@ function injecterRisquesIC(zip, risquesIC, ficData) {
 
     // Canicule et AUTRES : cellule pleine largeur (label + mesures fusionnés)
     if (isCanicule || isAutres) {
-      var fullTcPr = '<w:tcPr><w:tcW w:w="9640" w:type="dxa"/><w:gridSpan w:val="3"/>'
+      var fullTcPr = '<w:tcPr><w:tcW w:w="9640" w:type="dxa"/><w:gridSpan w:val="2"/>'
         + '<w:tcBorders><w:top w:val="single" w:sz="6" w:color="C4C7C5"/>'
         + '<w:left w:val="single" w:sz="6" w:color="C4C7C5"/>'
         + '<w:bottom w:val="single" w:sz="6" w:color="C4C7C5"/>'
@@ -1668,25 +1668,20 @@ function injecterRisquesIC(zip, risquesIC, ficData) {
       return '<w:tr><w:trPr><w:cantSplit/></w:trPr><w:tc>' + fullTcPr + content + '</w:tc></w:tr>';
     }
 
-    // Col 1 : label + R.IMP + R.EX — 25%
-    var col1 = '<w:tc>' + mkTcPr('2410', fill)
+    // Col 1 : label + R.IMP + R.EX — 35%
+    var col1 = '<w:tc>' + mkTcPr('3374', fill)
       + mkP(def.label, 18, true, false, '', 20)
       + mkP('R.IMP.' + imp, 16, false, false, 'right', 20)
       + mkP('R.EX.' + ex,  16, false, false, 'right', 20)
       + '</w:tc>';
-    // Col 2 : situations — 25%
-    var col2 = '<w:tc>' + mkTcPr('2410', 'FFFFFF');
-    def.situations.forEach(function(s, i) {
-      col2 += mkP(s, 16, false, false, '', i < def.situations.length-1 ? 60 : 0);
+    // Col 2 : mesures — 65% (colonne "situations" retiree : jamais interactive, texte
+    // statique identique pour toutes les affaires -> decision Alain 01/07/2026)
+    var col2 = '<w:tc>' + mkTcPr('6266', 'FFFFFF');
+    def.mesures.forEach(function(m, i) {
+      col2 += mkP(m, 16, i===0, false, '', i < def.mesures.length-1 ? 60 : 0);
     });
     col2 += '</w:tc>';
-    // Col 3 : mesures — 50%
-    var col3 = '<w:tc>' + mkTcPr('4820', 'FFFFFF');
-    def.mesures.forEach(function(m, i) {
-      col3 += mkP(m, 16, i===0, false, '', i < def.mesures.length-1 ? 60 : 0);
-    });
-    col3 += '</w:tc>';
-    return '<w:tr><w:trPr><w:cantSplit/></w:trPr>' + col1 + col2 + col3 + '</w:tr>';
+    return '<w:tr><w:trPr><w:cantSplit/></w:trPr>' + col1 + col2 + '</w:tr>';
   }
 
   // Trouver le tableau risques (ancre = "Type de Risque" dans header bleu)
@@ -1700,26 +1695,38 @@ function injecterRisquesIC(zip, risquesIC, ficData) {
   if (precIdx === -1) return zip;
   var tblClose = xmlStr.indexOf('</w:tbl>', precIdx) + 8;
 
-  // Extraire header + tblPr + tblGrid (tout jusqu'à la fin du 1er <w:tr>)
-  var firstTrEnd = xmlStr.indexOf('</w:tr>', tblStart) + 7;
-  var header = xmlStr.slice(tblOpen, firstTrEnd);
+  // En-tete reconstruit a 2 colonnes (Type de Risque / Mesure de prevention) —
+  // la colonne "Situation identifiee sur le site" est retiree (texte statique jamais
+  // interactif, cf. decision Alain 01/07/2026). On garde tblPr du template (bordures,
+  // tblLayout...) mais on reconstruit tblGrid + la ligne d'en-tete nous-memes.
+  var tblPrStart = xmlStr.indexOf('<w:tblPr>', tblOpen);
+  var tblPrEnd   = xmlStr.indexOf('</w:tblPr>', tblPrStart) + '</w:tblPr>'.length;
+  var tblPrXml   = xmlStr.slice(tblPrStart, tblPrEnd);
 
-  // Forcer les largeurs du tblGrid (en-tete) sur les memes proportions que les
-  // lignes generees (25% / 25% / 50%) pour eviter tout decalage visuel avec le corps
-  var nouvellesLargeurs = ['2410', '2410', '4820'];
-  var gridColIdx = 0;
-  header = header.replace(/<w:gridCol w:w="\d+"\/>/g, function() {
-    var w = nouvellesLargeurs[gridColIdx] || nouvellesLargeurs[nouvellesLargeurs.length - 1];
-    gridColIdx++;
-    return '<w:gridCol w:w="' + w + '"/>';
-  });
-  // Forcer aussi les largeurs des cellules du header (3 premieres <w:tcW> du <w:tr>)
-  var tcwIdx = 0;
-  header = header.replace(/<w:tcW w:w="\d+" w:type="dxa"\/>/g, function() {
-    var w = nouvellesLargeurs[tcwIdx] || nouvellesLargeurs[nouvellesLargeurs.length - 1];
-    tcwIdx++;
-    return '<w:tcW w:w="' + w + '" w:type="dxa"/>';
-  });
+  var headCol1W = '3374', headCol2W = '6266';
+  function mkHeaderCell(w, text) {
+    return '<w:tc><w:tcPr><w:tcW w:w="' + w + '" w:type="dxa"/>'
+      + '<w:tcBorders><w:top w:val="single" w:sz="6" w:space="0" w:color="C4C7C5"/>'
+      + '<w:left w:val="single" w:sz="6" w:space="0" w:color="C4C7C5"/>'
+      + '<w:bottom w:val="single" w:sz="6" w:space="0" w:color="C4C7C5"/>'
+      + '<w:right w:val="single" w:sz="6" w:space="0" w:color="C4C7C5"/></w:tcBorders>'
+      + '<w:shd w:val="clear" w:color="auto" w:fill="2E75B6"/>'
+      + '<w:tcMar><w:top w:w="120" w:type="dxa"/><w:left w:w="180" w:type="dxa"/>'
+      + '<w:bottom w:w="120" w:type="dxa"/><w:right w:w="180" w:type="dxa"/></w:tcMar>'
+      + '<w:vAlign w:val="center"/></w:tcPr>'
+      + '<w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'
+      + '<w:b/><w:bCs/><w:color w:val="FFFFFF"/><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>'
+      + '<w:t>' + escXml(text) + '</w:t></w:r></w:p></w:tc>';
+  }
+  var newTblGrid = '<w:tblGrid><w:gridCol w:w="' + headCol1W + '"/><w:gridCol w:w="' + headCol2W + '"/></w:tblGrid>';
+  var newHeaderRow = '<w:tr><w:trPr><w:cantSplit/><w:tblHeader/></w:trPr>'
+    + mkHeaderCell(headCol1W, 'Type de Risque')
+    + mkHeaderCell(headCol2W, 'Mesure de prévention arrêtée en commun')
+    + '</w:tr>';
+  var header = '<w:tbl>' + tblPrXml + newTblGrid + newHeaderRow;
+
+  // Ancienne fin de l'en-tete original (a ignorer desormais, on a reconstruit)
+  var firstTrEnd = xmlStr.indexOf('</w:tr>', tblStart) + 7;
 
   // Construire les lignes dynamiques
   var rows = '';
@@ -1733,6 +1740,9 @@ function injecterRisquesIC(zip, risquesIC, ficData) {
   var precTrStart = Math.max(xmlStr.lastIndexOf('<w:tr>', precIdx), xmlStr.lastIndexOf('<w:tr ', precIdx));
   var precTrEnd   = xmlStr.indexOf('</w:tr>', precIdx) + 7;
   var precRowXml  = xmlStr.slice(precTrStart, precTrEnd);
+  // Le tableau n'a plus que 2 colonnes grille (au lieu de 3) : la ligne "Precisions
+  // diverses" du template a gridSpan=3, il faut la ramener a 2 pour rester coherente.
+  precRowXml = precRowXml.replace('w:gridSpan w:val="3"', 'w:gridSpan w:val="2"');
 
   var diversText = [];
   if (ficData && ficData.obsRisques) diversText.push(ficData.obsRisques);
