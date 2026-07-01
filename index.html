@@ -1512,7 +1512,13 @@ function injecterFIC(zip, ficData) {
   // === SECTION 1 - Dates ===
   // Tableau 5 : Date IC | Date fin previsionnelle | Nb intervenants
   xmlStr = remplirCelluleInterne(xmlStr, "Date de l'IC", d.dateIC || '');
+  // Le template Cat.3 (Fiche_IC_Cat3_CSPS17_v4.docx) utilise le libelle "Date d'intervention
+  // prevue" (valeur dans la MEME cellule, pattern remplirCelluleInterne) et non "Date fin
+  // previsionnelle" (cellule adjacente) -> l'ancien appel etait un no-op silencieux sur ce
+  // template, champ toujours vide. On garde l'ancien appel pour le template Cat.1/2 (au cas
+  // ou son libelle/pattern differe) et on ajoute le bon appel pour Cat.3.
   xmlStr = remplirCellule(xmlStr, 'Date fin prévisionnelle', d.dateFin || '');
+  xmlStr = remplirCelluleInterne(xmlStr, "Date d'intervention prévue", d.dateFin || '');
   xmlStr = remplirCellule(xmlStr, 'Nb. intervenants prévu', d.effectif || '');
 
   // Tableau 4 - Categorie
@@ -3903,21 +3909,4 @@ async function genererDocTerrain() {
           present: true,
         });
       }
-    });
-    terrainAffaire._participants = participants;
-  }
-
-  showToast('Generation ' + (DOC_TITRES[ref] || ref) + ' en cours...');
-  await generateDoc(ref);
-}
-
-async function genTerrainDoc(ref) { ouvrirFormulaireDoc(ref); }
-async function genererCRVisite() { await genererDocTerrain(); }
-function sauvegarderVisite() { showToast('Visite sauvegardee', 'success'); }
-function addObs() {}
-function removeObs(id) { var el=document.getElementById(id); if(el) el.remove(); }
-function setObsType(id, type, btn) {}
-
-</script>
-</body>
-</html>
+ 
