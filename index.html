@@ -2233,9 +2233,21 @@ function cocherCategorie(xmlStr, cat) {
 }
 
 function cocherSousTraitance(xmlStr, stOui) {
-  var old = '☐ Oui  ☑ Non';
-  var nw = stOui ? '☑ Oui  ☐ Non' : '☐ Oui  ☑ Non';
-  return xmlStr.split(old).join(nw);
+  // Le texte "Oui"/"Non" est reparti sur 3 runs distincts dans le docx (separes par des
+  // <w:proofErr/>), donc une recherche de chaine litterale "☐ Oui  ☑ Non" ne matche jamais
+  // (0 occurrence reelle) -> la fonction etait un no-op silencieux. On repere le paragraphe
+  // via le texte d'ancrage, puis on bascule les 2 glyphes ☐/☑ qu'il contient, comme cocher().
+  if (!stOui) return xmlStr; // template par defaut = "Non" deja coche, rien a faire
+  var idx = xmlStr.indexOf('sous-traitance envisag');
+  if (idx === -1) return xmlStr;
+  var pStart = Math.max(xmlStr.lastIndexOf('<w:p ', idx), xmlStr.lastIndexOf('<w:p>', idx));
+  var pEnd = xmlStr.indexOf('</w:p>', idx) + '</w:p>'.length;
+  var para = xmlStr.slice(pStart, pEnd);
+  var firstBox = para.indexOf('☐');
+  if (firstBox !== -1) para = para.slice(0, firstBox) + '☑' + para.slice(firstBox + 1);
+  var secondBox = para.indexOf('☑', firstBox + 1);
+  if (secondBox !== -1) para = para.slice(0, secondBox) + '☐' + para.slice(secondBox + 1);
+  return xmlStr.slice(0, pStart) + para + xmlStr.slice(pEnd);
 }
 
 var DOC_FILES = {
