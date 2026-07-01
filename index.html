@@ -3909,4 +3909,21 @@ async function genererDocTerrain() {
           present: true,
         });
       }
- 
+    });
+    terrainAffaire._participants = participants;
+  }
+
+  showToast('Generation ' + (DOC_TITRES[ref] || ref) + ' en cours...');
+  await generateDoc(ref);
+}
+
+async function genTerrainDoc(ref) { ouvrirFormulaireDoc(ref); }
+async function genererCRVisite() { await genererDocTerrain(); }
+function sauvegarderVisite() { showToast('Visite sauvegardee', 'success'); }
+function addObs() {}
+function removeObs(id) { var el=document.getElementById(id); if(el) el.remove(); }
+function setObsType(id, type, btn) {}
+
+</script>
+</body>
+</html>
