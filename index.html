@@ -1879,9 +1879,12 @@ function telechargerDernierDoc(ref) {
 function showHistoriqueDoc(ref) {
   var affaire = currentAffaireObj();
   var entries = rjcEntriesForDoc(affaire, ref);
-  if (!entries.length) return;
   var doc = DOCS.find(function(d){ return d.ref === ref; })
     || PIECES_DOSSIER.find(function(d){ return d.ref === ref; });
+  if (!entries.length) {
+    openDocModal((doc ? doc.title : ref), '<p style="color:var(--text-light);font-size:13px;">Aucune version pour le moment \u2014 utilisez Generer (ou Deposer pour les pieces).</p>', null, null);
+    return;
+  }
   var html = '<div style="max-height:320px;overflow-y:auto;text-align:left;">'
     + entries.slice().reverse().map(function(e){
       var lien;
@@ -1891,13 +1894,25 @@ function showHistoriqueDoc(ref) {
       } else {
         lien = '<span>' + escHtml(e.objet || e.nature || '') + '</span> <span style="color:var(--text-light);font-size:11px;">(sans fichier)</span>';
       }
-      return '<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;">'
-        + '<span style="color:var(--text-light);">' + formatDateFR(e.date) + '</span>'
-        + ' <a href="#" onclick="modifierDateRJC(\'' + e.id + '\'); showHistoriqueDoc(\'' + ref + '\'); return false;" style="font-size:10px;color:var(--blue-mid);">modifier</a>'
-        + ' \u2014 ' + lien + '</div>';
+      return '<div style="display:flex;align-items:baseline;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;">'
+        + '<span style="color:var(--text-light);white-space:nowrap;">' + formatDateFR(e.date)
+        + ' <a href="#" onclick="modifierDateRJC(\'' + e.id + '\'); showHistoriqueDoc(\'' + ref + '\'); return false;" style="font-size:10px;color:var(--blue-mid);">modifier</a></span>'
+        + '<span style="flex:1;min-width:0;overflow-wrap:anywhere;">' + lien + '</span>'
+        + '<a href="#" onclick="supprimerPieceHistorique(\'' + e.id + '\', \'' + ref + '\'); return false;" title="Supprimer cette ligne (et son fichier)" style="font-size:13px;text-decoration:none;">&#128465;</a>'
+        + '</div>';
     }).join('')
     + '</div>';
   openDocModal('Historique — ' + (doc ? doc.title : ref) + ' (' + entries.length + ')', html, null, null);
+}
+
+// Suppression d'une version/piece depuis l'historique (Apercu ou badge).
+// Reutilise supprimerEntreeRJC (confirmation + suppression du fichier stocke),
+// puis rafraichit la grille et rouvre l'historique.
+async function supprimerPieceHistorique(entryId, ref) {
+  await supprimerEntreeRJC(entryId);
+  try { if (document.getElementById('docs-grid') && document.getElementById('docs-grid').innerHTML) renderDocsGrid(); } catch (eG) {}
+  var affaire = currentAffaireObj();
+  if (rjcEntriesForDoc(affaire, ref).length) { showHistoriqueDoc(ref); } else { closeModal(); }
 }
 
 function renderDocsGrid() {
@@ -3404,7 +3419,7 @@ async function generateDocs() {
   showToast(docs.length + ' documents generes !', 'success');
 }
 
-function previewDoc(ref) { showToast('Apercu ' + ref + ' - fonctionnalite a venir'); }
+function previewDoc(ref) { showHistoriqueDoc(ref); }
 
 function handleDragOver(e) {
   e.preventDefault();
