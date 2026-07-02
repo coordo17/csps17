@@ -83,14 +83,22 @@ app.post('/api/claude', async (req, res) => {
 let db = null;
 let firebaseOk = false;
 try {
-  if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
-    fbInitializeApp({
-      credential: fbCert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-      }),
-    });
+  let cred = null;
+  // Methode robuste (recommandee) : coller le JSON complet du compte de service
+  // dans UNE seule variable FIREBASE_SERVICE_ACCOUNT. JSON.parse gere les \n
+  // nativement -> plus jamais d'erreur "Failed to parse private key".
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    cred = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  } else if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
+    // Methode historique (3 variables separees), conservee en secours
+    cred = {
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    };
+  }
+  if (cred) {
+    fbInitializeApp({ credential: fbCert(cred) });
     db = fbGetFirestore();
     firebaseOk = true;
     console.log('Firestore initialise OK');
