@@ -1071,6 +1071,27 @@
 <div id="toast"></div>
 
 <script>
+// ── AUTHENTIFICATION (mot de passe partage) ──────────────────────────────
+// Ajoute automatiquement l'en-tete X-App-Password a tous les appels /api/*.
+var APP_PW = localStorage.getItem('csps17_pw') || '';
+(function(){
+  var _f = window.fetch.bind(window);
+  window.fetch = function(u, o){
+    o = o || {};
+    if (typeof u === 'string' && u.indexOf('/api/') === 0) {
+      var hh = new Headers(o.headers || {});
+      hh.set('X-App-Password', APP_PW);
+      o.headers = hh;
+    }
+    return _f(u, o);
+  };
+})();
+function demanderMotDePasse(msg){
+  var p = prompt(msg || 'Mot de passe CSPS17 :');
+  if (p != null && p !== '') { APP_PW = p; localStorage.setItem('csps17_pw', p); location.reload(); }
+}
+function oublierMotDePasse(){ localStorage.removeItem('csps17_pw'); APP_PW=''; location.reload(); }
+
 var affaires = JSON.parse(localStorage.getItem('csps17_affaires') || '[]');
 // FUSION INTELLIGENTE (anti-retour-en-arriere) : on ne laisse JAMAIS le serveur
 // ecraser aveuglement le local. Pour chaque affaire, on garde la version dont
@@ -1086,7 +1107,10 @@ function fusionnerAffaires(locales, serveur){
   });
   return Object.keys(parId).map(function(k){ return parId[k]; });
 }
-fetch('/api/affaires').then(function(r){return r.json();}).then(function(data){
+fetch('/api/affaires').then(function(r){
+  if(r.status===401){ demanderMotDePasse('Mot de passe CSPS17 requis :'); throw new Error('auth'); }
+  return r.json();
+}).then(function(data){
   if(Array.isArray(data) && data.length){
     var avant = JSON.stringify(affaires);
     affaires = fusionnerAffaires(affaires, data);

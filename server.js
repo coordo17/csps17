@@ -13,6 +13,17 @@ const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 // Limite relevee (au lieu de 20mb) : l'envoi du RJC par email peut regrouper
 // plusieurs documents en base64 (chacun +33% une fois encode) dans une seule requete.
 app.use(express.json({ limit: '40mb' }));
+
+// ── AUTHENTIFICATION simple (mot de passe partage via variable APP_PASSWORD) ──
+// Tant que APP_PASSWORD n'est pas defini sur Render, l'API reste ouverte (pour
+// ne pas se bloquer avant configuration). Des qu'il est defini, chaque appel
+// /api/* doit fournir l'en-tete X-App-Password correspondant, sinon 401.
+app.use('/api', function (req, res, next) {
+  if (!process.env.APP_PASSWORD) return next();
+  const fourni = req.headers['x-app-password'] || '';
+  if (fourni === process.env.APP_PASSWORD) return next();
+  return res.status(401).json({ error: 'Mot de passe requis ou invalide' });
+});
 app.use(express.static(__dirname));
 app.use(express.static(path.join(__dirname, 'public')));
 
