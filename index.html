@@ -1370,6 +1370,35 @@ async function uploaderFichierRJC(affaireId, filename, dataUrl, contentType) {
   return json.path;
 }
 
+// Envoi d'UN document vers la boite mail du CSPS lui-meme (auto-archivage /
+// transfert facile depuis le tel + horodatage externe Gmail).
+async function envoyerDocMoiCore(affaire, entryId) {
+  var e = affaire && affaire.rjc ? affaire.rjc.find(function(x){ return x.id === entryId; }) : null;
+  if (!e || (!e.fichierPath && !e.fichierData)) { showToast('Pas de fichier attache a cette ligne', 'error'); return; }
+  showToast('Envoi vers votre boite mail...');
+  try {
+    var res = await fetch('/api/envoyer-doc', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fichierPath: e.fichierPath || null,
+        fichierData: e.fichierData || null,
+        fichierNom: e.fichierNom || e.ref || 'document.docx',
+        numAffaire: affaire.num || '',
+        chantierNom: (affaire.chantier && affaire.chantier.nom) || '',
+        objet: e.objet || e.nature || '',
+      }),
+    });
+    var out = await res.json();
+    if (!res.ok || !out.ok) throw new Error(out.error || ('serveur ' + res.status));
+    showToast('Envoye dans votre boite mail \u2709', 'success');
+  } catch (err) {
+    showToast('Echec envoi : ' + err.message, 'error');
+  }
+}
+function envoyerDocMoi(entryId) { envoyerDocMoiCore(currentAffaireObj(), entryId); }
+function envoyerDocMoiTerrain(entryId) { envoyerDocMoiCore(terrainAffaire, entryId); }
+
 // Envoi du RJC complet par email (ex: sur demande de l'Inspection du Travail, sur le
 // terrain). Le serveur (server.js /api/envoyer-rjc) joint tous les fichiers deja
 // presents dans les entrees + liste en texte les entrees sans fichier joint.
@@ -1898,6 +1927,7 @@ function showHistoriqueDoc(ref) {
         + '<span style="color:var(--text-light);white-space:nowrap;">' + formatDateFR(e.date)
         + ' <a href="#" onclick="modifierDateRJC(\'' + e.id + '\'); showHistoriqueDoc(\'' + ref + '\'); return false;" style="font-size:10px;color:var(--blue-mid);">modifier</a></span>'
         + '<span style="flex:1;min-width:0;overflow-wrap:anywhere;">' + lien + '</span>'
+        + ((e.fichierPath || e.fichierData) ? '<a href="#" onclick="envoyerDocMoi(\'' + e.id + '\'); return false;" title="M\'envoyer ce fichier par email (pour transfert)" style="font-size:13px;text-decoration:none;">&#9993;</a>' : '')
         + '<a href="#" onclick="supprimerPieceHistorique(\'' + e.id + '\', \'' + ref + '\'); return false;" title="Supprimer cette ligne (et son fichier)" style="font-size:13px;text-decoration:none;">&#128465;</a>'
         + '</div>';
     }).join('')
@@ -4821,7 +4851,10 @@ function genFormulaireRJC() {
         + (e.objet ? e.objet + '<br>' : '')
         + (e.intervenants ? '<span style="color:var(--text-light);">' + e.intervenants + '</span><br>' : '')
         + (e.ref ? '<span style="color:var(--text-light);font-size:11px;">Réf : ' + e.ref + '</span><br>' : '')
-        + ((e.fichierData || e.fichierPath) ? '<span style="color:var(--blue-mid);font-size:11px;">&#128206; ' + escHtml(e.fichierNom || 'fichier joint') + '</span>' : '')
+        + ((e.fichierData || e.fichierPath)
+            ? '<span style="color:var(--blue-mid);font-size:11px;">&#128206; ' + escHtml(e.fichierNom || 'fichier joint') + '</span>'
+              + ' <button type="button" onclick="envoyerDocMoiTerrain(\'' + e.id + '\')" style="font-size:11px;padding:2px 8px;margin-left:6px;border:1px solid var(--blue-mid);background:white;color:var(--blue-mid);border-radius:5px;cursor:pointer;">&#9993; M\'envoyer</button>'
+            : '')
         + '</div>';
     });
     html2 += '</div>';

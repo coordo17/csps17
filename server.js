@@ -338,6 +338,41 @@ function creerZipBuffer(fichiers) {
   });
 }
 
+// Envoi d'un document unique vers la boite du CSPS lui-meme (auto-archivage :
+// horodatage externe dans Gmail + transfert facile au destinataire depuis le tel).
+app.post('/api/envoyer-doc', async (req, res) => {
+  if (!mailer) {
+    return res.status(500).json({ error: "Envoi email non configure sur le serveur (variables GMAIL_USER / GMAIL_APP_PASSWORD manquantes)" });
+  }
+  try {
+    const { fichierPath, fichierData, fichierNom, numAffaire, chantierNom, objet } = req.body || {};
+    let content = null;
+    if (fichierPath && supabaseOk) {
+      const { data, error } = await supabase.storage.from(SUPABASE_BUCKET).download(fichierPath);
+      if (error) throw error;
+      content = Buffer.from(await data.arrayBuffer());
+    } else if (fichierData && typeof fichierData === 'string' && fichierData.startsWith('data:')) {
+      content = Buffer.from(fichierData.split(',')[1] || '', 'base64');
+    }
+    if (!content || !content.length) return res.status(400).json({ error: 'Fichier introuvable ou vide' });
+    const sujet = ('[CSPS17] ' + (numAffaire || '') + ' ' + (chantierNom || '') + ' \u2014 ' + (fichierNom || 'document')).replace(/\s+/g, ' ').trim();
+    await mailer.sendMail({
+      from: process.env.GMAIL_USER,
+      to: process.env.GMAIL_USER,
+      subject: sujet,
+      text: 'Document genere via CSPS17.\n\n'
+        + 'Affaire : ' + (numAffaire || '-') + ' \u2014 ' + (chantierNom || '-') + '\n'
+        + 'Objet : ' + (objet || '-') + '\n\n'
+        + 'Pret a etre transfere au destinataire.',
+      attachments: [{ filename: fichierNom || 'document.docx', content }],
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Erreur envoi doc:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/envoyer-rjc', async (req, res) => {
   if (!mailer) {
     return res.status(500).json({ error: "Envoi email non configure sur le serveur (variables GMAIL_USER / GMAIL_APP_PASSWORD manquantes)" });
