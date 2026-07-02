@@ -1892,7 +1892,9 @@ function showHistoriqueDoc(ref) {
         lien = '<span>' + escHtml(e.objet || e.nature || '') + '</span> <span style="color:var(--text-light);font-size:11px;">(sans fichier)</span>';
       }
       return '<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;">'
-        + '<span style="color:var(--text-light);">' + formatDateFR(e.date) + '</span> — ' + lien + '</div>';
+        + '<span style="color:var(--text-light);">' + formatDateFR(e.date) + '</span>'
+        + ' <a href="#" onclick="modifierDateRJC(\'' + e.id + '\'); showHistoriqueDoc(\'' + ref + '\'); return false;" style="font-size:10px;color:var(--blue-mid);">modifier</a>'
+        + ' \u2014 ' + lien + '</div>';
     }).join('')
     + '</div>';
   openDocModal('Historique — ' + (doc ? doc.title : ref) + ' (' + entries.length + ')', html, null, null);
@@ -5131,6 +5133,7 @@ function modifierDateRJC(entryId) {
   if (affaire.rjc) affaire.rjc.sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
   persistAffaires();
   renderRJCTab();
+  try { if (document.getElementById('docs-grid') && document.getElementById('docs-grid').innerHTML) renderDocsGrid(); } catch (eG) {}
   showToast('Date mise a jour', 'success');
 }
 
