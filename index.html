@@ -291,6 +291,7 @@
   }
   .btn-outline:hover { background: var(--blue-xl); }
   .btn-sm { padding: 6px 12px; font-size: 12px; }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
   .btn-danger { background: #dc2626; color: white; }
   .btn-danger:hover { background: #b91c1c; }
 
@@ -882,6 +883,12 @@
       <div class="tab-content" id="tab-documents">
         <div class="section-title">Documents disponibles selon categorie</div>
         <div id="cat-reminder" style="margin-bottom:16px;padding:10px 14px;border-radius:6px;font-size:13px;"></div>
+        <div id="pieces-section" style="display:none;margin-bottom:20px;">
+          <div style="font-size:14px;font-weight:700;color:var(--blue-dark);margin-bottom:8px;">&#128194; Pieces du dossier <span style="font-weight:400;color:var(--text-light);font-size:12px;">(documents recus &mdash; chaque depot est trace au RJC)</span></div>
+          <div class="docs-grid" id="pieces-grid" style="margin-top:0;"></div>
+          <input type="file" id="piece-input-PGC" accept=".pdf,.docx" style="display:none;" onchange="handlePieceUpload(event,'PGC')">
+          <input type="file" id="piece-input-DIAG" accept=".pdf,.docx" style="display:none;" multiple onchange="handlePieceUpload(event,'DIAG')">
+        </div>
         <div class="docs-grid" id="docs-grid"></div>
         <div class="gen-progress" id="gen-progress">
           <h4>&#9889; Generation en cours...</h4>
@@ -1262,6 +1269,31 @@ function saveAffaire() {
   fetch('/api/affaires', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(affaires)}).catch(function(){});
   renderAffaireList();
   showToast('Affaire sauvegardee', 'success');
+  // Si un PGC vient d'etre importe par IA, attacher le fichier au dossier
+  if (window._pgcImportFile) {
+    var pgcAff = affaires.find(function(x){ return x.id === currentAffaireId; });
+    var pgcFile = window._pgcImportFile;
+    window._pgcImportFile = null;
+    if (pgcAff && pgcFile && pgcFile.dataUrl) {
+      var pgcEntree = ajouterEntreeRJC(pgcAff, {
+        date: new Date().toISOString().split('T')[0],
+        nature: 'Reception PGC',
+        objet: pgcFile.nom + ' (import)',
+        intervenants: '',
+        ref: pgcFile.nom,
+        docRef: 'PGC',
+      });
+      if (pgcEntree) {
+        uploaderFichierRJC(pgcAff.id, pgcFile.nom, pgcFile.dataUrl, pgcFile.type || 'application/pdf').then(function(path){
+          pgcEntree.fichierPath = path;
+          pgcEntree.fichierNom = pgcFile.nom;
+          pgcEntree.fichierType = pgcFile.type || '';
+          persistAffaires();
+          showToast('PGC attache au dossier', 'success');
+        }).catch(function(){ /* la ligne RJC existe deja meme sans fichier */ });
+      }
+    }
+  }
 }
 
 // ============================================================================
@@ -1548,6 +1580,13 @@ function deleteAffaire(e, id) {
 //   des champs manquants avec confirmation "generer quand meme"
 // ============================================================================
 
+// Pieces du dossier : documents RECUS (pas generes) rattaches a l'affaire.
+// Chaque depot cree une entree RJC datee (reception de piece — R.4532-38).
+var PIECES_DOSSIER = [
+  { ref: 'PGC',  title: 'PGC \u2014 Plan General de Coordination', icon: '&#128216;', note: 'PGC recu / diffuse' },
+  { ref: 'DIAG', title: 'Rapports & diagnostics', icon: '&#129514;', note: 'Amiante (RAAT), plomb (CREP), geotechnique...' },
+];
+
 // Type de document d'une entree RJC : champ docRef (nouvelles entrees) ou
 // deduit du nom de fichier auto 'CSPS17_<REF>_...' (entrees existantes).
 function entryDocRef(e) {
@@ -1559,7 +1598,52 @@ function entryDocRef(e) {
 function rjcEntriesForDoc(affaire, ref) {
   if (!affaire || !affaire.rjc) return [];
   if (ref === 'RJC') return affaire.rjc.slice();
+  if (ref === 'PGC') return affaire.rjc.filter(function(e){
+    if (e.docRef === 'PGC') return true;
+    if (e.docRef) return false;
+    // Reconnait les PGC deja deposes avant cette version (dropzone RJC)
+    return entryDocRef(e) === null && /pgc/i.test(e.fichierNom || '');
+  });
+  if (ref === 'DIAG') return affaire.rjc.filter(function(e){ return e.docRef === 'DIAG'; });
   return affaire.rjc.filter(function(e){ return entryDocRef(e) === ref; });
+}
+
+// Depot d'une piece du dossier (PGC ou rapport/diagnostic)
+async function handlePieceUpload(e, type) {
+  var files = Array.prototype.slice.call(e.target.files || []);
+  e.target.value = '';
+  if (!files.length) return;
+  var affaire = currentAffaireObj();
+  if (!affaire) { showToast('Sauvegardez l\'affaire avant de deposer une piece', 'error'); return; }
+  for (var i = 0; i < files.length; i++) {
+    await deposerPieceDossier(affaire, files[i], type);
+  }
+  renderDocsGrid();
+}
+
+async function deposerPieceDossier(affaire, file, type) {
+  try {
+    showToast('Depot de ' + file.name + '...');
+    var dataUrl = await blobToDataURL(file);
+    var created = ajouterEntreeRJC(affaire, {
+      date: new Date().toISOString().split('T')[0],
+      nature: type === 'PGC' ? 'Reception PGC' : 'Reception rapport / diagnostic',
+      objet: file.name,
+      intervenants: '',
+      ref: file.name,
+      docRef: type,
+    });
+    if (created) {
+      var path = await uploaderFichierRJC(affaire.id, file.name, dataUrl, file.type || 'application/octet-stream');
+      created.fichierPath = path;
+      created.fichierNom = file.name;
+      created.fichierType = file.type || '';
+      persistAffaires();
+    }
+    showToast(file.name + ' ajoute au dossier', 'success');
+  } catch (err) {
+    showToast('Erreur depot : ' + err.message, 'error');
+  }
 }
 
 function dernierFichierDoc(affaire, ref) {
@@ -1666,7 +1750,8 @@ function showHistoriqueDoc(ref) {
   var affaire = currentAffaireObj();
   var entries = rjcEntriesForDoc(affaire, ref);
   if (!entries.length) return;
-  var doc = DOCS.find(function(d){ return d.ref === ref; });
+  var doc = DOCS.find(function(d){ return d.ref === ref; })
+    || PIECES_DOSSIER.find(function(d){ return d.ref === ref; });
   var html = '<div style="max-height:320px;overflow-y:auto;text-align:left;">'
     + entries.slice().reverse().map(function(e){
       var lien;
@@ -1686,10 +1771,12 @@ function showHistoriqueDoc(ref) {
 function renderDocsGrid() {
   var grid = document.getElementById('docs-grid');
   var reminder = document.getElementById('cat-reminder');
+  var piecesSection = document.getElementById('pieces-section');
   if (!currentCat) {
     reminder.style.cssText = 'background:var(--orange);color:var(--orange-dark);';
     reminder.textContent = 'Selectionnez la categorie de l\'operation dans l\'onglet Chantier pour voir les documents disponibles.';
     grid.innerHTML = '';
+    if (piecesSection) piecesSection.style.display = 'none';
     return;
   }
   var catColors = { 1: '#fef2f2', 2: '#fffbeb', 3: '#f0fdf4' };
@@ -1699,6 +1786,34 @@ function renderDocsGrid() {
   reminder.textContent = 'Categorie ' + currentCat + ' - ' + docsForCat.length + ' documents disponibles sur 17';
   var affaire = currentAffaireObj();
   var formData = collectFormData();
+  // Rangee Pieces du dossier (PGC + rapports/diagnostics)
+  var piecesGrid = document.getElementById('pieces-grid');
+  if (piecesSection && piecesGrid) {
+    piecesSection.style.display = 'block';
+    piecesGrid.innerHTML = PIECES_DOSSIER.map(function(p){
+      var entries = rjcEntriesForDoc(affaire, p.ref);
+      var nb = entries.length;
+      var dernierF = dernierFichierDoc(affaire, p.ref);
+      var badge = nb > 0
+        ? '<span class="doc-badge" onclick="showHistoriqueDoc(\'' + p.ref + '\')" title="' + nb + ' piece(s) au dossier \u2014 cliquer pour l\'historique">' + nb + '</span>'
+        : '';
+      var dot = (p.ref === 'PGC')
+        ? '<span class="doc-dot ' + (nb > 0 ? 'ok' : 'warn') + '" title="' + (nb > 0 ? 'PGC present au dossier' : 'Aucun PGC depose pour cette affaire') + '"></span>'
+        : '';
+      var btnTel = dernierF
+        ? '<button class="btn btn-outline btn-sm" onclick="telechargerDernierDoc(\'' + p.ref + '\')" title="Derniere piece : ' + formatDateFR(dernierF.date) + '">&#11015; Telecharger</button>'
+        : '<button class="btn btn-outline btn-sm" disabled title="Aucune piece deposee">&#11015; Telecharger</button>';
+      return '<div class="doc-card">'
+        + badge
+        + '<div class="doc-card-top"><div class="doc-icon">' + p.icon + '</div>'
+        + '<div class="doc-info"><div class="doc-title">' + p.title + dot + '</div>'
+        + '<div class="doc-ref">' + p.note + '</div></div></div>'
+        + '<div class="doc-actions">'
+        + '<button class="btn btn-primary btn-sm" onclick="document.getElementById(\'piece-input-' + p.ref + '\').click()">&#128229; Deposer</button>'
+        + btnTel
+        + '</div></div>';
+    }).join('');
+  }
   grid.innerHTML = DOCS.map(function(doc){
     var active = doc.cats.includes(currentCat);
     var entries = rjcEntriesForDoc(affaire, doc.ref);
@@ -3305,6 +3420,11 @@ async function processPGCFile(file) {
   document.getElementById('extract-result').classList.remove('show');
 
   try {
+    // Conserver le fichier PGC lui-meme : il sera attache a l'affaire
+    // (entree RJC 'Reception PGC') a la sauvegarde — voir saveAffaire().
+    try {
+      window._pgcImportFile = { nom: file.name, dataUrl: await blobToDataURL(file), type: file.type || '' };
+    } catch (ePgcKeep) { window._pgcImportFile = null; }
     var pdfText = '';
     if (file.name.endsWith('.pdf')) {
       var arrayBuffer = await file.arrayBuffer();
