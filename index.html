@@ -3483,6 +3483,15 @@ async function generateDoc(ref) {
             persistAffaires();
           } catch (eAttach) { /* pas bloquant : la ligne RJC existe deja meme sans fichier */ }
         }
+        // TRACE AUTOMATIQUE (choix d'Alain) : l'Inspection Commune (Fiche IC +
+        // Courrier IC) et le CR de Visite partent AUTOMATIQUEMENT par mail sur
+        // coordo17sps des la generation — pour toujours avoir une trace datee,
+        // sans y penser. Les autres documents restent en envoi manuel (bouton
+        // M'envoyer dans le RJC).
+        if (createdRJC && (createdRJC.fichierPath || createdRJC.fichierData)
+            && (ref === 'FIC' || ref === 'IC' || ref === 'VIS')) {
+          try { envoyerDocMoiCore(affaireRJC, createdRJC.id); } catch (eMail) {}
+        }
       }
     }
     document.body.appendChild(a);
