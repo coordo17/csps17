@@ -710,6 +710,16 @@
               <div class="field"><label>N Declaration Prealable</label><input type="text" id="chantier-dp" placeholder="Ex : DP 029 2026 00123"></div>
               <div class="field"><label>N Permis de Construire</label><input type="text" id="chantier-pc" placeholder="Ou N/A"></div>
             </div>
+            <div class="form-row">
+              <div class="field"><label>Phase de mission CSPS</label>
+                <select id="mission-phase" title="Determine l'usage des rapports deposes : en realisation ils nourrissent les IC et documents aval ; en conception ils serviront a rediger le PGC.">
+                  <option value="">Non precisee</option>
+                  <option value="conception">Conception</option>
+                  <option value="realisation">Realisation</option>
+                  <option value="deux">Conception + Realisation</option>
+                </select>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1109,7 +1119,7 @@ function showNewAffaire() {
   currentCat = null;
   entrepriseCount = 0;
   document.getElementById('num-affaire').value = genNumAffaire();
-  ['chantier-nom','chantier-adresse','chantier-nature','chantier-duree','chantier-montant',
+  ['mission-phase','chantier-nom','chantier-adresse','chantier-nature','chantier-duree','chantier-montant',
    'chantier-dp','chantier-pc','chantier-hj',
    'moa-nom','moa-contact','moa-adresse','moa-tel','moa-mail',
    'moe-nom','moe-contact','moe-adresse','moe-tel','moe-mail',
@@ -1200,6 +1210,7 @@ function collectFormData() {
   return {
     num: document.getElementById('num-affaire').value,
     cat: currentCat,
+    missionPhase: document.getElementById('mission-phase') ? document.getElementById('mission-phase').value : '',
     chantier: {
       nom: document.getElementById('chantier-nom').value,
       adresse: document.getElementById('chantier-adresse').value,
@@ -1399,6 +1410,14 @@ function loadAffaire(id) {
     var el=document.getElementById('chantier-'+f); if(el) el.value=c[f]||'';
   });
   document.getElementById('chantier-nb-ent').value = c.nbEnt || '';
+  var elMP = document.getElementById('mission-phase'); if (elMP) elMP.value = a.missionPhase || '';
+  // Recharger les donnees PGC/rapports DE CETTE affaire (evite qu'un import
+  // fait sur une affaire ne fuie dans la suivante via les variables globales)
+  window._risquesPGC = a.risques_pgc || null;
+  window._cat3PGC = a.cat3_pgc || null;
+  window._secoursPGC = a.secours_pgc || null;
+  window._inspectionPGC = a.inspection_pgc || null;
+  window._amiantePGC = a.amiante_pgc || null;
   var suivi = a.suivi || {};
   document.getElementById('suivi-prochaine-visite').value = suivi.prochaineVisite || '';
   document.getElementById('suivi-prochaine-facture').value = suivi.prochaineFacture || '';
@@ -1584,7 +1603,7 @@ function deleteAffaire(e, id) {
 // Chaque depot cree une entree RJC datee (reception de piece — R.4532-38).
 var PIECES_DOSSIER = [
   { ref: 'PGC',  title: 'PGC \u2014 Plan General de Coordination', icon: '&#128216;', note: 'PGC recu / diffuse' },
-  { ref: 'DIAG', title: 'Rapports & diagnostics', icon: '&#129514;', note: 'Amiante (RAAT), plomb (CREP), geotechnique...' },
+  { ref: 'DIAG', title: 'Rapports & diagnostics', icon: '&#129514;', note: 'RAAT, CREP, geotech... — analyse IA au depot' },
 ];
 
 // Type de document d'une entree RJC : champ docRef (nouvelles entrees) ou
@@ -1641,8 +1660,119 @@ async function deposerPieceDossier(affaire, file, type) {
       persistAffaires();
     }
     showToast(file.name + ' ajoute au dossier', 'success');
+    // Analyse IA des rapports/diagnostics (pas du PGC : en realisation il fait foi tel quel)
+    if (type === 'DIAG') await analyserRapportDiag(affaire, file);
   } catch (err) {
     showToast('Erreur depot : ' + err.message, 'error');
+  }
+}
+
+// ── ANALYSE IA DES RAPPORTS/DIAGNOSTICS DEPOSES ─────────────────────────────
+// Logique metier (choix d'Alain) :
+// - phase realisation (ou les deux, ou non precisee) : les conclusions nourrissent
+//   les documents AVAL (Fiche IC, risques particuliers, notes amiante...) — jamais le PGC.
+// - phase conception uniquement : rien n'est injecte, l'analyse est stockee dans
+//   affaire.rapportsAnalyses[] pour servir a la redaction du futur PGC.
+async function extraireTexteFichier(file) {
+  var nom = (file.name || '').toLowerCase();
+  if (nom.endsWith('.pdf')) {
+    var ab = await file.arrayBuffer();
+    var pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+    var maxPages = Math.min(pdf.numPages, 15);
+    var t = '';
+    for (var i = 1; i <= maxPages; i++) {
+      var page = await pdf.getPage(i);
+      var tc = await page.getTextContent();
+      t += tc.items.map(function(it){ return it.str; }).join(' ') + '\n';
+    }
+    return t;
+  }
+  if (nom.endsWith('.docx')) {
+    if (typeof mammoth === 'undefined') throw new Error('Lecture DOCX indisponible (mammoth.js non charge)');
+    var buf = await file.arrayBuffer();
+    var res = await mammoth.extractRawText({ arrayBuffer: buf });
+    return res.value || '';
+  }
+  return await file.text();
+}
+
+async function analyserRapportDiag(affaire, file) {
+  try {
+    showToast('Analyse IA de ' + file.name + '...');
+    var texte = (await extraireTexteFichier(file)).slice(0, 12000);
+    var ratioInvalide = (texte.match(/\uFFFD/g) || []).length / Math.max(texte.length, 1);
+    if (ratioInvalide > 0.05 || texte.trim().length < 30) {
+      showToast('Rapport illisible (scan/image ?) — depot conserve, analyse ignoree', 'error');
+      return;
+    }
+    var prompt = 'Voici le contenu d\'un rapport ou diagnostic technique (amiante, plomb, geotechnique, structure...) remis au Coordonnateur SPS d\'une operation BTP :\n\n' + texte + '\n\nReponds UNIQUEMENT en JSON valide, sans markdown ni backtick :\n{"type_rapport":"amiante|plomb|geotechnique|structure|autre","date_rapport":null,"bureau":null,"synthese":"...","amiante":{"presence":false,"raat_date":null,"ss4_obligatoire":false,"localisation":null},"plomb":{"presence":false,"localisation":null},"risques_lies":{"r1":false,"r2":false,"r3":false,"r4":false,"r5":false,"r11":false,"r12":false,"r16":false,"r17":false,"r20":false,"r21":false,"r22":false},"points_vigilance_ic":"..."}\ntype_rapport=nature du rapport. date_rapport=date du rapport (JJ/MM/AAAA si trouvee). bureau=nom du bureau d\'etudes ou diagnostiqueur. synthese=3 phrases max resumant les conclusions utiles au CSPS. amiante : presence=true si amiante detecte ou suspecte, raat_date=date du reperage amiante, ss4_obligatoire=true si travaux SS3/SS4 ou entreprise certifiee exiges, localisation=zones concernees en 1 phrase. plomb : presence=true si plomb detecte (CREP positif), localisation=zones. risques_lies (true uniquement si le rapport les met en evidence) : r1=chute hauteur>3m, r2=ensevelissement/sols instables, r3=substances chimiques ou biologiques, r4=amiante, r5=radiations ionisantes, r11=demolition>200m3, r12=explosifs, r16=projections ou chutes de materiaux, r17=incendie, r20=poussieres, r21=produits dangereux/CMR, r22=engins et vehicules. points_vigilance_ic=1 a 2 phrases concretes a rappeler lors de l\'inspection commune avec les entreprises. Met null pour les champs texte non trouves.';
+    var response = await fetch('/api/claude', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        max_tokens: 900,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    var result = await response.json();
+    if (!response.ok) {
+      throw new Error('Serveur (' + response.status + ') : ' + (result.error && result.error.message ? result.error.message : JSON.stringify(result)));
+    }
+    var text = '{}';
+    if (result.choices && result.choices[0] && result.choices[0].message && result.choices[0].message.content) {
+      text = result.choices[0].message.content;
+    } else if (result.content && result.content[0] && result.content[0].text) {
+      text = result.content[0].text;
+    }
+    var parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+    // Stockage systematique (sert aussi a la redaction du PGC en phase conception)
+    if (!affaire.rapportsAnalyses) affaire.rapportsAnalyses = [];
+    affaire.rapportsAnalyses.push({
+      id: 'rap-' + Date.now(),
+      date: new Date().toISOString().split('T')[0],
+      fichier: file.name,
+      analyse: parsed,
+    });
+    var phase = affaire.missionPhase || '';
+    if (phase !== 'conception') {
+      injecterAnalyseRapport(affaire, parsed);
+      showToast('Rapport analyse (' + (parsed.type_rapport || 'autre') + ') — risques et notes IC mis a jour', 'success');
+    } else {
+      showToast('Rapport analyse (' + (parsed.type_rapport || 'autre') + ') — stocke pour la redaction du PGC', 'success');
+    }
+    persistAffaires();
+  } catch (err) {
+    showToast('Analyse du rapport impossible : ' + err.message, 'error');
+  }
+}
+
+function injecterAnalyseRapport(affaire, p) {
+  // Risques particuliers de l'affaire (cases onglet Chantier)
+  affaire.risques = affaire.risques || {};
+  if (p.amiante && p.amiante.presence) affaire.risques.amiante = true;
+  if (p.plomb && p.plomb.presence) affaire.risques.plomb = true;
+  // Fusion dans les risques identifies (OR : un risque detecte ne s'efface pas)
+  if (p.risques_lies) {
+    affaire.risques_pgc = affaire.risques_pgc || {};
+    Object.keys(p.risques_lies).forEach(function(k){
+      if (p.risques_lies[k]) affaire.risques_pgc[k] = true;
+    });
+    window._risquesPGC = affaire.risques_pgc;
+  }
+  // Note amiante : le rapport RAAT fait foi sur la mention du PGC
+  if (p.amiante && (p.amiante.presence || p.amiante.raat_date)) {
+    var am = affaire.amiante_pgc || window._amiantePGC || {};
+    if (p.amiante.raat_date) am.raat_date = p.amiante.raat_date;
+    if (p.bureau) am.bureau = p.bureau;
+    if (p.amiante.ss4_obligatoire) am.ss4_obligatoire = true;
+    affaire.amiante_pgc = am;
+    window._amiantePGC = am;
+  }
+  // Refleter les cases a l'ecran si l'affaire est ouverte
+  if (currentAffaireId === affaire.id) {
+    var cbA = document.getElementById('rp-amiante'); if (cbA && affaire.risques.amiante) cbA.checked = true;
+    var cbP = document.getElementById('rp-plomb'); if (cbP && affaire.risques.plomb) cbP.checked = true;
   }
 }
 
@@ -4059,6 +4189,10 @@ function genFormulaireFIC() {
   if (amiantePgc.raat_date || amiantePgc.bureau) {
     obsAuto.push('RAAT realise le ' + (amiantePgc.raat_date || '?') + (amiantePgc.bureau ? ' par ' + amiantePgc.bureau : '') + (amiantePgc.ss4_obligatoire ? '. Entreprise certifiee SS4 obligatoire.' : '.'));
   }
+  // Points de vigilance issus des rapports/diagnostics analyses par IA
+  (terrainAffaire.rapportsAnalyses || []).forEach(function(ra){
+    if (ra.analyse && ra.analyse.points_vigilance_ic) obsAuto.push(ra.analyse.points_vigilance_ic);
+  });
   html2 += sectionHeader('12', 'Observations du CSPS', '&#128221;');
   html2 += fieldRow('Observations / prescriptions', 'fic-obs-csps', 'textarea', 'Observations, prescriptions...', obsAuto.join(' '));
   html2 += twoCol(
