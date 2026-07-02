@@ -2,7 +2,8 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
-const admin = require('firebase-admin');
+const { initializeApp: fbInitializeApp, cert: fbCert } = require('firebase-admin/app');
+const { getFirestore: fbGetFirestore } = require('firebase-admin/firestore');
 const nodemailer = require('nodemailer');
 const archiver = require('archiver');
 const { createClient } = require('@supabase/supabase-js');
@@ -83,14 +84,14 @@ let db = null;
 let firebaseOk = false;
 try {
   if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
-    admin.initializeApp({
-      credential: admin.credential.cert({
+    fbInitializeApp({
+      credential: fbCert({
         projectId: process.env.FIREBASE_PROJECT_ID,
         clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
         privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
       }),
     });
-    db = admin.firestore();
+    db = fbGetFirestore();
     firebaseOk = true;
     console.log('Firestore initialise OK');
   } else {
