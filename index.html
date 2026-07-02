@@ -622,6 +622,8 @@
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
     <button class="btn btn-outline btn-sm" id="btn-import-pgc" onclick="showPage('import')">&#128229; Importer PGC</button>
     <button class="btn btn-outline btn-sm" onclick="showPage('terrain');setTimeout(populateTerrainSelect,100);" style="background:#e8f5e9;color:#2e7d52;border-color:#2e7d52;">&#128241; Terrain</button>
+    <button class="btn btn-outline btn-sm" onclick="ouvrirSauvegardes()" title="Exporter / importer une sauvegarde de toutes vos affaires">&#128190; Sauvegardes</button>
+    <span id="sync-indic" onclick="resyncMaintenant()" title="Etat de la sauvegarde serveur" style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 9px;border-radius:12px;cursor:pointer;background:#eee;color:#666;"><span id="sync-dot" style="width:9px;height:9px;border-radius:50%;background:#999;"></span><span id="sync-txt">—</span></span>
   </div>
 </header>
 
@@ -1070,9 +1072,35 @@
 
 <script>
 var affaires = JSON.parse(localStorage.getItem('csps17_affaires') || '[]');
+// FUSION INTELLIGENTE (anti-retour-en-arriere) : on ne laisse JAMAIS le serveur
+// ecraser aveuglement le local. Pour chaque affaire, on garde la version dont
+// le savedAt est le plus recent. Un serveur vide ne supprime rien en local.
+function fusionnerAffaires(locales, serveur){
+  var parId = {};
+  (locales||[]).forEach(function(a){ if(a&&a.id) parId[a.id]=a; });
+  (serveur||[]).forEach(function(s){
+    if(!s||!s.id) return;
+    var l = parId[s.id];
+    if(!l){ parId[s.id]=s; return; }
+    parId[s.id] = ((s.savedAt||'') > (l.savedAt||'')) ? s : l;
+  });
+  return Object.keys(parId).map(function(k){ return parId[k]; });
+}
 fetch('/api/affaires').then(function(r){return r.json();}).then(function(data){
-  if(data && data.length){ affaires=data; localStorage.setItem('csps17_affaires',JSON.stringify(affaires)); renderAffaireList(); }
-}).catch(function(){});
+  if(Array.isArray(data) && data.length){
+    var avant = JSON.stringify(affaires);
+    affaires = fusionnerAffaires(affaires, data);
+    if(JSON.stringify(affaires) !== avant){
+      localStorage.setItem('csps17_affaires', JSON.stringify(affaires));
+      renderAffaireList();
+    }
+    majSyncIndic('ok');
+  } else {
+    // serveur vide : on garde le local tel quel, mais on signale que rien
+    // n'est sauvegarde cote serveur (donnees a risque tant que non re-pousse)
+    majSyncIndic(affaires.length ? 'local' : 'ok');
+  }
+}).catch(function(){ majSyncIndic('local'); });
 var currentAffaireId = null;
 var currentCat = null;
 var entrepriseCount = 0;
@@ -1289,7 +1317,7 @@ function saveAffaire() {
     affaires.push(Object.assign({ id: currentAffaireId }, data));
   }
   localStorage.setItem('csps17_affaires', JSON.stringify(affaires));
-  fetch('/api/affaires', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(affaires)}).catch(function(){});
+  pousserVersServeur();
   renderAffaireList();
   showToast('Affaire sauvegardee', 'success');
   // Si un PGC vient d'etre importe par IA, attacher le fichier au dossier
@@ -1326,8 +1354,48 @@ function saveAffaire() {
 // voir generateDoc()) et manuelle (formulaire terrain, voir genFormulaireRJC()).
 // ============================================================================
 function persistAffaires() {
+  // Horodater l'affaire courante pour que la fusion sache qui est le plus recent
+  var maintenant = new Date().toISOString();
+  if (currentAffaireId) {
+    var idx = affaires.findIndex(function(a){ return a.id === currentAffaireId; });
+    if (idx >= 0) affaires[idx].savedAt = maintenant;
+  }
   localStorage.setItem('csps17_affaires', JSON.stringify(affaires));
-  fetch('/api/affaires', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(affaires)}).catch(function(){});
+  pousserVersServeur();
+}
+
+// Pousse le local vers le serveur et met a jour l'indicateur (fini le silence).
+function pousserVersServeur() {
+  majSyncIndic('sync');
+  return fetch('/api/affaires', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(affaires)})
+    .then(function(r){
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      return r.json();
+    })
+    .then(function(out){
+      if(out && out.ok){ majSyncIndic('ok'); }
+      else { throw new Error((out&&out.error)||'reponse inattendue'); }
+    })
+    .catch(function(e){ majSyncIndic('fail'); });
+}
+
+function resyncMaintenant(){ pousserVersServeur(); }
+
+// Indicateur de sauvegarde dans le header
+function majSyncIndic(etat){
+  var dot = document.getElementById('sync-dot');
+  var txt = document.getElementById('sync-txt');
+  var box = document.getElementById('sync-indic');
+  if(!dot||!txt||!box) return;
+  var conf = {
+    ok:    { c:'#16a34a', bg:'#e8f5e9', t:'Enregistre' },
+    sync:  { c:'#f59e0b', bg:'#fff8e1', t:'Envoi...' },
+    local: { c:'#f59e0b', bg:'#fff3e0', t:'Local seulement' },
+    fail:  { c:'#dc2626', bg:'#ffebee', t:'Echec serveur' },
+  };
+  var k = conf[etat] || conf.local;
+  dot.style.background = k.c; txt.textContent = k.t;
+  box.style.background = k.bg; box.style.color = k.c;
 }
 
 function ajouterEntreeRJC(affaire, entry) {
@@ -3857,6 +3925,53 @@ async function analyserPPSPSImport(file) {
 }
 
 function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
+
+// ── SAUVEGARDES (export / import de toutes les affaires) ────────────────────
+function exporterSauvegarde(){
+  var data = JSON.stringify(affaires, null, 2);
+  var blob = new Blob([data], {type:'application/json'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  var d = new Date(); var p=function(n){return (n<10?'0':'')+n;};
+  a.href = url;
+  a.download = 'CSPS17_SAUVEGARDE_affaires_' + d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'-'+p(d.getHours())+p(d.getMinutes()) + '.json';
+  document.body.appendChild(a); a.click();
+  setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 2000);
+  showToast('Sauvegarde exportee (' + affaires.length + ' affaires)', 'success');
+}
+
+function importerSauvegardeFichier(input){
+  var file = input.files && input.files[0];
+  if(!file) return;
+  var reader = new FileReader();
+  reader.onload = function(){
+    try{
+      var imported = JSON.parse(reader.result);
+      if(!Array.isArray(imported)) throw new Error('Format invalide');
+      // Fusion : on ajoute/actualise sans ecraser un travail local plus recent
+      affaires = fusionnerAffaires(affaires, imported);
+      localStorage.setItem('csps17_affaires', JSON.stringify(affaires));
+      pousserVersServeur();
+      renderAffaireList();
+      closeModal();
+      showToast('Sauvegarde importee et fusionnee (' + imported.length + ' affaires)', 'success');
+    }catch(e){ showToast('Import impossible : ' + e.message, 'error'); }
+  };
+  reader.readAsText(file);
+}
+
+function ouvrirSauvegardes(){
+  var html = '<div style="text-align:left;font-size:13px;">'
+    + '<p style="margin-bottom:12px;">Vos affaires sont stockees dans ce navigateur et synchronisees avec le serveur. '
+    + 'Faites un export regulier : c\'est votre sauvegarde sure, independante du serveur.</p>'
+    + '<p style="margin-bottom:14px;"><strong>' + affaires.length + '</strong> affaire(s) actuellement en memoire.</p>'
+    + '<button class="btn btn-primary btn-sm" onclick="exporterSauvegarde()" style="margin-bottom:10px;">&#11015; Exporter la sauvegarde (.json)</button><br>'
+    + '<label class="btn btn-outline btn-sm" style="cursor:pointer;">&#128229; Importer / restaurer une sauvegarde'
+    + '<input type="file" accept=".json,application/json" style="display:none;" onchange="importerSauvegardeFichier(this)"></label>'
+    + '<p style="margin-top:12px;color:var(--text-light);font-size:12px;">L\'import fusionne sans ecraser : une affaire plus recente en memoire est conservee.</p>'
+    + '</div>';
+  openDocModal('\uD83D\uDCBE Sauvegardes', html, null, null);
+}
 
 var toastTimer;
 function showToast(msg, type) {
