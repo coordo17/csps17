@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- CSPS17 index.html - v2.12 - 03/07/2026 - Fix dates FR (Date IC / Date intervention prevue) dans Fiche IC -->
+<!-- CSPS17 index.html - v2.13 - 03/07/2026 - Pastille synchro visible mobile + envoi simultane CSPS + entreprise (M'envoyer) -->
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
@@ -460,6 +460,14 @@
     .btn-import-pgc { display: none !important; }
     .pouvoir-alert-desktop { display: none !important; }
     .pouvoir-alert-mobile { display: inline-flex !important; }
+    /* Pastille synchro visible sur mobile : on gagne la place necessaire
+       (le nom dans le logo + le texte de la pastille passent a la trappe,
+       seul le point de couleur compte sur petit ecran). */
+    .logo-name { display: none; }
+    .header-actions { gap: 5px; }
+    .header-actions .btn-sm { padding: 4px 7px; font-size: 12px; }
+    #sync-txt { display: none; }
+    #sync-indic { padding: 4px 6px; }
   }
   .pouvoir-alert-mobile { display: none; }
   .btn-menu {
@@ -1474,12 +1482,25 @@ async function uploaderFichierRJC(affaireId, filename, dataUrl, contentType) {
   return json.path;
 }
 
-// Envoi d'UN document vers la boite mail du CSPS lui-meme (auto-archivage /
-// transfert facile depuis le tel + horodatage externe Gmail).
-async function envoyerDocMoiCore(affaire, entryId) {
+// Envoi d'UN document : toujours vers la boite du CSPS (auto-archivage /
+// horodatage externe Gmail) + EN OPTION d'autres destinataires en simultane
+// (l'entreprise a qui le document est du, la MOE...). L'envoi AUTO a la
+// generation (opts.auto) reste silencieux et ne part qu'au CSPS (la trace).
+async function envoyerDocMoiCore(affaire, entryId, opts) {
+  opts = opts || {};
   var e = affaire && affaire.rjc ? affaire.rjc.find(function(x){ return x.id === entryId; }) : null;
   if (!e || (!e.fichierPath && !e.fichierData)) { showToast('Pas de fichier attache a cette ligne', 'error'); return; }
-  showToast('Envoi vers votre boite mail...');
+  var supp = '';
+  if (!opts.auto) {
+    // Suggestion : les emails des entreprises de l'affaire (modifiable).
+    var suggestion = (affaire.entreprises || [])
+      .map(function(en){ return en && en.mail ? String(en.mail).trim() : ''; })
+      .filter(Boolean).join(', ');
+    supp = prompt('Envoyer aussi a (emails separes par des virgules).\nVide = seulement votre boite (' + 'sauvegarde). Annuler = ne rien envoyer.', suggestion);
+    if (supp === null) return; // annule par l'utilisateur
+    supp = supp.trim();
+  }
+  showToast(supp ? 'Envoi (vous + ' + supp.split(',').length + ' destinataire(s))...' : 'Envoi vers votre boite mail...');
   try {
     var res = await fetch('/api/envoyer-doc', {
       method: 'POST',
@@ -1491,11 +1512,17 @@ async function envoyerDocMoiCore(affaire, entryId) {
         numAffaire: affaire.num || '',
         chantierNom: (affaire.chantier && affaire.chantier.nom) || '',
         objet: e.objet || e.nature || '',
+        destinatairesSupp: supp || '',
       }),
     });
     var out = await res.json();
     if (!res.ok || !out.ok) throw new Error(out.error || ('serveur ' + res.status));
-    showToast('Envoye dans votre boite mail \u2709', 'success');
+    showToast(supp ? 'Envoye : vous + ' + supp + ' \u2709' : 'Envoye dans votre boite mail \u2709', 'success');
+    // Trace RJC de l'envoi a un tiers (utile en cas de litige sur la diffusion)
+    if (supp && affaire.rjc) {
+      e.diffusion = (e.diffusion ? e.diffusion + ' ; ' : '') + new Date().toISOString().split('T')[0] + ' \u2192 ' + supp;
+      persistAffaires();
+    }
   } catch (err) {
     showToast('Echec envoi : ' + err.message, 'error');
   }
@@ -3515,7 +3542,7 @@ async function generateDoc(ref) {
         // M'envoyer dans le RJC).
         if (createdRJC && (createdRJC.fichierPath || createdRJC.fichierData)
             && (ref === 'FIC' || ref === 'IC' || ref === 'VIS')) {
-          try { envoyerDocMoiCore(affaireRJC, createdRJC.id); } catch (eMail) {}
+          try { envoyerDocMoiCore(affaireRJC, createdRJC.id, { auto: true }); } catch (eMail) {}
         }
       }
     }

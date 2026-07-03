@@ -348,12 +348,15 @@ if (BREVO_API_KEY) console.log('Envoi email via API Brevo configure OK');
 else if (mailer) console.log('Envoi email via SMTP Gmail configure (attention : bloque sur Render gratuit)');
 else console.warn('Ni BREVO_API_KEY ni GMAIL_USER/GMAIL_APP_PASSWORD -> envoi email indisponible');
 
-// Envoi unifie. attachments = [{ filename, content (Buffer) }]
+// Envoi unifie. to = email unique OU tableau d'emails.
+// attachments = [{ filename, content (Buffer) }]
 async function envoyerEmail({ to, subject, text, attachments }) {
+  const dests = (Array.isArray(to) ? to : [to]).filter(Boolean);
+  if (!dests.length) throw new Error('Aucun destinataire');
   if (BREVO_API_KEY) {
     const body = {
       sender: { email: MAIL_FROM, name: 'CSPS17 — Alain SUZANNE' },
-      to: [{ email: to }],
+      to: dests.map((e) => ({ email: e })),
       subject: subject,
       textContent: text,
     };
@@ -376,7 +379,7 @@ async function envoyerEmail({ to, subject, text, attachments }) {
     return;
   }
   if (mailer) {
-    await mailer.sendMail({ from: process.env.GMAIL_USER, to, subject, text, attachments });
+    await mailer.sendMail({ from: process.env.GMAIL_USER, to: dests.join(', '), subject, text, attachments });
     return;
   }
   throw new Error('Envoi email non configure (BREVO_API_KEY manquante)');
@@ -417,7 +420,13 @@ app.post('/api/envoyer-doc', async (req, res) => {
     return res.status(500).json({ error: "Envoi email non configure sur le serveur (variable BREVO_API_KEY manquante)" });
   }
   try {
-    const { fichierPath, fichierData, fichierNom, numAffaire, chantierNom, objet } = req.body || {};
+    const { fichierPath, fichierData, fichierNom, numAffaire, chantierNom, objet, destinatairesSupp } = req.body || {};
+    // Destinataires supplementaires optionnels (entreprise, MOE...) : envoi
+    // SIMULTANE au CSPS (sauvegarde/trace) + aux tiers, en un seul email.
+    const supp = String(destinatairesSupp || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s));
     let content = null;
     if (fichierPath && supabaseOk) {
       const { data, error } = await supabase.storage.from(SUPABASE_BUCKET).download(fichierPath);
@@ -428,16 +437,25 @@ app.post('/api/envoyer-doc', async (req, res) => {
     }
     if (!content || !content.length) return res.status(400).json({ error: 'Fichier introuvable ou vide' });
     const sujet = ('[CSPS17] ' + (numAffaire || '') + ' ' + (chantierNom || '') + ' \u2014 ' + (fichierNom || 'document')).replace(/\s+/g, ' ').trim();
-    await envoyerEmail({
-      to: process.env.GMAIL_USER || MAIL_FROM,
-      subject: sujet,
-      text: 'Document genere via CSPS17.\n\n'
+    const moi = process.env.GMAIL_USER || MAIL_FROM;
+    const dests = [moi].concat(supp.filter((s) => s.toLowerCase() !== String(moi).toLowerCase()));
+    const corps = supp.length
+      ? 'Bonjour,\n\n'
+        + 'Veuillez trouver ci-joint le document suivant, transmis par Alain SUZANNE, coordonnateur SPS (CSPS17).\n\n'
         + 'Affaire : ' + (numAffaire || '-') + ' \u2014 ' + (chantierNom || '-') + '\n'
         + 'Objet : ' + (objet || '-') + '\n\n'
-        + 'Pret a etre transfere au destinataire.',
+        + 'Cordialement,\nAlain SUZANNE \u2014 Coordonnateur SPS\ncoordo17sps@gmail.com \u2014 07 81 08 30 54'
+      : 'Document genere via CSPS17.\n\n'
+        + 'Affaire : ' + (numAffaire || '-') + ' \u2014 ' + (chantierNom || '-') + '\n'
+        + 'Objet : ' + (objet || '-') + '\n\n'
+        + 'Pret a etre transfere au destinataire.';
+    await envoyerEmail({
+      to: dests,
+      subject: sujet,
+      text: corps,
       attachments: [{ filename: fichierNom || 'document.docx', content }],
     });
-    res.json({ ok: true });
+    res.json({ ok: true, destinataires: dests.length });
   } catch (err) {
     console.error('Erreur envoi doc:', err);
     res.status(500).json({ error: err.message });
