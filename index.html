@@ -3507,6 +3507,15 @@ function buildTagsPGC(data) {
     secours_dae: ou(sec.dae, 'Neant sur site — DAE le plus proche : ' + AC),
     risques: risquesLoop,
     lots: lots,
+    // Les tags cat3_* (partages avec la Fiche IC Cat.3) : priorite au formulaire
+    // terrain (_ficData), sinon repli sur l'import PGC (cat3_pgc), sinon vide.
+    cat3_acces:        ou((data._ficData || {}).cat3_acces, ou(c3.acces, '')),
+    cat3_securisation: ou((data._ficData || {}).cat3_securisation, ou(c3.securisation, '')),
+    cat3_hygiene:      ou((data._ficData || {}).cat3_hygiene, ou(c3.hygiene, '')),
+    cat3_energie:      ou((data._ficData || {}).cat3_energie, ou(c3.energie, '')),
+    cat3_stockages:    ou((data._ficData || {}).cat3_stockages, ou(c3.stockages, '')),
+    cat3_dechets:      ou((data._ficData || {}).cat3_dechets, ou(c3.dechets, '')),
+    cat3_secours:      ou((data._ficData || {}).cat3_secours, ou(c3.secours, '')),
   };
 }
 
