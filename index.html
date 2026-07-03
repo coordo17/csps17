@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- CSPS17 index.html - v2.13 - 03/07/2026 - Pastille synchro visible mobile + envoi simultane CSPS + entreprise (M'envoyer) -->
+<!-- CSPS17 index.html - v2.14 - 03/07/2026 - Generateur PGC (18e/19e documents : PGC complet + PGC simplifie Cat.3) -->
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
@@ -624,7 +624,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.13</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.14</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -1140,6 +1140,8 @@ var extractedData = null;
 
 var DOCS = [
   { ref: 'DP',        title: 'Suivi Declaration Prealable', icon: '&#128203;', cats: [1,2] },
+  { ref: 'PGCR',      title: 'PGC SPS — Redaction', icon: '&#128214;', cats: [1,2] },
+  { ref: 'PGC3R',     title: 'PGC Simplifie — Redaction (Cat.3)', icon: '&#128214;', cats: [3] },
   { ref: 'RJC',       title: 'Registre Journal de Coordination', icon: '&#128212;', cats: [1,2,3] },
   { ref: 'DIF',       title: 'Fiche Diffusion PGC', icon: '&#128226;', cats: [1,2] },
   { ref: 'FIC',       title: 'Fiche IC Vierge', icon: '&#128269;', cats: [1,2,3] },
@@ -1980,6 +1982,14 @@ function analyserCompletude(ref, data, affaire) {
       break;
     case 'RJC':
       if (!affaire || !affaire.rjc || !affaire.rjc.length) manque.push('Aucune entree au registre (le document sortira vide)');
+      break;
+    case 'PGCR':
+    case 'PGC3R':
+      if (!data.moe.nom) manque.push('Maitre d\'oeuvre (onglet Intervenants)');
+      if (!data.chantier.nature) manque.push('Nature des travaux');
+      if (!data.chantier.debut) manque.push('Date de debut des travaux');
+      if (!data.chantier.duree) manque.push('Duree previsible');
+      if (!window._risquesPGC && !(affaire && affaire.risques_pgc)) manque.push('Risques identifies (import PGC ou coches) — le tableau des risques sortira avec le socle par defaut');
       break;
   }
   return manque;
@@ -3257,6 +3267,8 @@ function injecterPPSPS(zip, d) {
 var DOC_FILES = {
   'DP':          'CSPS17_Suivi_Declaration_Prealable_v3.docx',
   'RJC':         'CSPS17_Registre_Journal_Bordereau_v3_1.docx',
+  'PGCR':        'CSPS17_PGC_v1.docx',
+  'PGC3R':       'CSPS17_PGC_Simplifie_Cat3_v1.docx',
   'DIF':         'CSPS17_Fiche_Diffusion_PGC_v3.docx',
   'FIC':         'Fiche_IC_Vierge_CSPS17_v15.docx',
   'FIC3':        'Fiche_IC_Cat3_CSPS17_v4.docx',
@@ -3366,7 +3378,136 @@ function buildTagData(data) {
     tags['ppsps_item' + (pi + 1) + '_statut'] = ppspsItems[pi].statut || '';
     tags['ppsps_item' + (pi + 1) + '_obs'] = ppspsItems[pi].obs || '';
   }
+  // ── Tags PGC (18e/19e documents : redaction PGC complet / PGC simplifie Cat.3) ──
+  Object.assign(tags, buildTagsPGC(data));
   return tags;
+}
+
+// ============================================================================
+// GENERATEUR PGC — donnees des trames CSPS17_PGC_v1 / CSPS17_PGC_Simplifie_Cat3_v1
+// Tout ce que l'affaire connait est injecte ; le reste sort avec un marqueur
+// [A COMPLETER] pour relecture du CSPS (le PGC reste un document d'auteur).
+// ============================================================================
+var PGC_RISQUES_LIB = {
+  r1:  { label: 'Chute de hauteur', mesures: "Protections collectives contre les chutes sur TOUS les ouvrages où le risque est présent (garde-corps, filets). Échafaudages conformes, montés et vérifiés (PV ou autocontrôle) ; convention et réception en cas de prêt. Utilisation de PIRL ; le recours à l'échelle reste exceptionnel et jamais comme poste de travail. EPI antichute uniquement pour opérations ponctuelles avec personnel formé." },
+  r2:  { label: 'Ensevelissement / effondrement', mesures: "Blindage ou talutage obligatoire pour toute fouille > 1,30 m (R.4534-24). Respect des prescriptions du bureau d'étude sol et du fruit de talus. Pas de stockage à moins de 1 m du bord de fouille. Éloigner la circulation des engins. Étayer toute construction insuffisamment stable." },
+  r3:  { label: 'Substances chimiques / biologiques', mesures: 'FDS disponibles sur le poste de travail. EPI adaptés (gants, masque, lunettes). Ventilation des locaux.' },
+  r4:  { label: 'Amiante — retrait / confinement', mesures: "Entreprise certifiée SS3 (retrait) ou personnel formé SS4 (interventions). RAAT dans les pièces de marché. PRA soumis à l'inspection du travail. Zone délimitée pour stockage des MPCA avant évacuation sans délai. Aucune coactivité pendant le retrait. BSDA au maître d'ouvrage." },
+  r5:  { label: 'Radiations ionisantes', mesures: 'Dosimétrie obligatoire. Accès réservé aux personnels habilités.' },
+  r6:  { label: 'Réseaux & électricité', mesures: "DT/DICT avant tous travaux, personnel AIPR. Marquage/piquetage maintenu pendant le chantier. Mise hors tension à solliciter (R.4534-111) ; à défaut, protection ou distances limites (3 m / 5 m). Installations provisoires contrôlées par organisme agréé (PV sans réserve), différentiels 30 mA, câbles fixés en hauteur, aucun point à plus de 25 m d'un coffret." },
+  r7:  { label: 'Noyade', mesures: 'Gilet de sauvetage et dispositif de récupération pour travaux à proximité de l\'eau.' },
+  r8:  { label: 'Puits / souterrains / ambiances confinées', mesures: 'Ventilation obligatoire, détection gaz avant entrée, binôme obligatoire (pas de travailleur isolé), équipier de sécurité en surface.' },
+  r9:  { label: 'Plongée appareillée', mesures: 'Équipe certifiée, médecin hyperbariste désigné.' },
+  r10: { label: 'Milieu hyperbare', mesures: 'Personnel certifié, protocole de décompression respecté.' },
+  r11: { label: 'Démolition / déconstruction', mesures: "Plan de démolition établi et visé. Zone définie, délimitée et rendue inaccessible aux autres corps d'état — aucune superposition. Garantir les constructions voisines des heurts et projections. Terrain laissé exempt de tout élément à risque pour les lots suivants." },
+  r12: { label: 'Explosifs', mesures: 'Chef de tir certifié, périmètre de sécurité et évacuation.' },
+  r13: { label: 'Éléments préfabriqués lourds', mesures: 'Plan de levage validé, élingage par personnel certifié, montage au sol privilégié.' },
+  r14: { label: 'Levage lourd / grue', mesures: "Plan de levage et études d'implantation (M1, M2...) au CSPS. PV de vérification sans réserve avant première utilisation. Autorisation de conduite. Pas d'activité sous charge, zone d'évolution barriérée, pas de survol hors emprise." },
+  r15: { label: 'Chute de plain-pied', mesures: 'Pas de stockage dans les circulations. Nettoyage des zones de travaux chaque fin de demi-journée. Éclairage permanent des circulations et escaliers.' },
+  r16: { label: 'Projections — chutes de matériaux', mesures: "Écrans ou neutralisation des zones impactées. Étude d'adéquation et affichage de charge maxi des platelages et recettes. Plinthes en bordure d'ouvrage donnant sur le vide." },
+  r17: { label: 'Points chauds / incendie', mesures: "Permis de feu obligatoire avant démarrage. Extincteur adapté sur le poste. Déclaration au MOE et CSPS des travaux à risque feu. Feux de toute nature interdits dans l'enceinte du chantier." },
+  r18: { label: 'Manutention manuelle / TMS', mesures: 'Aide mécanique au-delà de 25 kg (transpalette...). Formation du personnel. Limitation du poids des colis. Rotation des postes si gestes répétitifs.' },
+  r19: { label: 'Bruit', mesures: 'Protection auditive si exposition > 80 dB. Phasage des travaux bruyants si possible.' },
+  r20: { label: 'Poussières (hors amiante)', mesures: "Aspiration à la source, masque FFP2 minimum, arrosage. Retenue des boues et eaux de ruissellement ; roues des camions nettoyées en sortie de chantier." },
+  r21: { label: 'Produits dangereux / CMR / plomb', mesures: 'FDS sur chantier, ventilation, EPI selon FDS. Stockage délimité, affiché (pictogrammes), consignes en cas de contact. Évacuation par filière spécialisée.' },
+  r22: { label: 'Engins / heurt de véhicules', mesures: 'Séparation engins/piétons. Gilet HV obligatoire. Vitesse limitée à 10 km/h. Respect des sens de circulation du site.' },
+  r23: { label: 'Coupures / outils', mesures: "Gants anti-coupure. Vérification périodique obligatoire des machines ; protections constructeur en place (écrans, arrêt d'urgence)." },
+  r24: { label: 'Coactivité / superposition de tâches', mesures: 'Planning de coactivité établi et affiché. Superposition des tâches interdite. Zones de travaux balisées hermétiquement.' },
+  r25: { label: 'Canicule', mesures: "Mesures de sauvegarde du personnel conformément au décret n°2025-482 du 27 mai 2025. Eau fraîche en permanence. Arrêt des travaux aux heures les plus chaudes si alerte rouge." },
+  r26: { label: 'Autres risques propres à l\'opération', mesures: "Balisage hermétique des zones de travaux vis-à-vis des autres corps d'état. Précisions à apporter par chaque entreprise dans son PPSPS." },
+  r27: { label: 'Intempéries', mesures: 'Arrêt des travaux en hauteur ou de levage si vent > 50-60 km/h ou vigilance orange/rouge. Suivi Météo-France. Report des travaux extérieurs en cas de verglas, neige, fortes pluies.' },
+};
+
+function buildTagsPGC(data) {
+  function ou(v, def) { return (v && String(v).trim()) ? String(v).trim() : def; }
+  var c = data.chantier || {};
+  var cspsc = data.cspsc || {};
+  var cspsr = data.cspsr || {};
+  var c3 = data.cat3_pgc || {};
+  var sec = data.secours_pgc || {};
+  var am = data.amiante_pgc || {};
+  var rp = data.risques || {};
+  var moi = { nom: 'SUZANNE Alain — CSPS17', tel: '07 81 08 30 54', mail: 'coordo17sps@gmail.com' };
+  var AC = '[A COMPLETER par le CSPS]';
+
+  // Tableau des risques : coches import PGC + risques particuliers + socle commun
+  var ids = [];
+  var rpgc = data.risques_pgc || window._risquesPGC || {};
+  Object.keys(PGC_RISQUES_LIB).forEach(function(k){ if (rpgc[k]) ids.push(k); });
+  var forces = [];
+  if (rp.amiante) forces.push('r4');
+  if (rp.plomb) forces.push('r21');
+  if (rp.demolition) forces.push('r11');
+  if (rp.terrassement) forces.push('r2');
+  if (rp.reseaux) forces.push('r6');
+  if (rp.hauteur) forces.push('r1');
+  forces.forEach(function(k){ if (ids.indexOf(k) < 0) ids.push(k); });
+  var socle = ['r15', 'r16', 'r17', 'r18', 'r20', 'r22', 'r23', 'r24', 'r27'];
+  socle.forEach(function(k){ if (ids.indexOf(k) < 0) ids.push(k); });
+  ids.sort(function(a, b){ return parseInt(a.slice(1)) - parseInt(b.slice(1)); });
+  var risquesLoop = ids.map(function(k){
+    return { label: PGC_RISQUES_LIB[k].label, mesures: PGC_RISQUES_LIB[k].mesures, oeuvre: 'TCE', benef: 'TCE' };
+  });
+
+  // Lots / entreprises retenues
+  var lots = (data.entreprises || []).filter(function(e){ return e && e.nom; }).map(function(e){
+    return { lot: ou(e.lot, 'Lot a preciser'), nom: e.nom };
+  });
+  if (!lots.length) lots = [{ lot: 'Ensemble des lots', nom: "En appel d'offres au jour de la redaction" }];
+
+  // Detail amiante : import PGC + analyses IA des diagnostics deposes (conception)
+  var aff = (typeof currentAffaireObj === 'function') ? currentAffaireObj() : null;
+  var amiante = !!(rp.amiante || am.raat_date || am.bureau);
+  var amDetails = [];
+  if (am.raat_date || am.bureau) amDetails.push('RAAT du ' + ou(am.raat_date, '?') + (am.bureau ? ' etabli par ' + am.bureau : '') + (am.ss4_obligatoire ? ' — entreprise certifiee exigee' : '') + '.');
+  if (aff && aff.rapportsAnalyses && aff.rapportsAnalyses.length) {
+    aff.rapportsAnalyses.forEach(function(ra){
+      if (ra && ra.resume) amDetails.push(ra.resume);
+      else if (ra && ra.type) amDetails.push(ra.type + (ra.date ? ' du ' + ra.date : '') + (ra.bureau ? ' (' + ra.bureau + ')' : '') + '.');
+    });
+    amiante = amiante || aff.rapportsAnalyses.some(function(ra){ return ra && (ra.amiante === true || /amiante/i.test(ra.resume || '')); });
+  }
+  if (rp.amiante && !amDetails.length) amDetails.push('Presence d\'amiante identifiee sur l\'operation — voir RAAT dans les pieces de marche.');
+
+  var travauxDang = [];
+  if (rp.amiante) travauxDang.push('exposition a l\'amiante');
+  if (rp.plomb) travauxDang.push('exposition au plomb');
+  if (rp.demolition) travauxDang.push('demolition');
+  if (rp.terrassement) travauxDang.push('terrassement / risque d\'ensevelissement');
+  if (rp.reseaux) travauxDang.push('travaux a proximite de reseaux');
+  if (rp.hauteur) travauxDang.push('travaux en hauteur > 3 m');
+
+  return {
+    cspsc_nom: ou(cspsc.nom, moi.nom), cspsc_tel: ou(cspsc.tel, moi.tel), cspsc_mail: ou(cspsc.mail, moi.mail),
+    cspsr_nom: ou(cspsr.nom, moi.nom), cspsr_tel: ou(cspsr.tel, moi.tel), cspsr_mail: ou(cspsr.mail, moi.mail),
+    chantier_debut_fr: formatDateFR(c.debut || '') || ou(c.debut, AC),
+    pgc_indice: '00',
+    pgc_date: new Date().toLocaleDateString('fr-FR'),
+    pgc_type_marche: ou(c.marche, AC),
+    pgc_demarches: AC + ' (voirie, emprise, autorisations particulieres...)',
+    pgc_interferences: (amiante || rp.demolition) ? AC + ' — chantier avec demolition : verifier les activites voisines / site en exploitation.' : 'Sans objet au jour de la redaction. ' + AC,
+    pgc_reseaux: AC + ' (presence de reseaux, PV de coupure, servitudes...)',
+    pgc_phasage: ou(c.duree, AC) === AC ? AC : 'Duree previsible ' + c.duree + '. Phasage detaille : ' + AC,
+    pgc_base_vie: ou(c3.hygiene, 'Vestiaire — refectoire — sanitaires mis en place par le lot principal des le demarrage, y compris raccordements. ' + AC),
+    pgc_acces: ou(c3.acces, AC),
+    pgc_securisation: ou(c3.securisation, 'Cloture type HERAS h=2,00 m avec colliers anti-vandalisme, portail verrouille. ' + AC),
+    pgc_energie: ou(c3.energie, AC),
+    pgc_stockages: ou(c3.stockages, ''),
+    pgc_dechets: ou(c3.dechets, ''),
+    pgc_hygiene: ou(c3.hygiene, AC),
+    pgc_effectif: ou(c.nbEnt ? c.nbEnt + ' entreprises — effectif de pointe a preciser' : '', AC),
+    pgc_coactivite: AC + ' (suivant planning MOE phase DCE)',
+    pgc_environnement: AC + ' (site en exploitation, voisinage, affluence, reseaux aeriens...)',
+    pgc_travaux_dangereux: travauxDang.length ? travauxDang.join(', ') : AC,
+    a_amiante: amiante,
+    amiante_detail: amDetails.join('\n'),
+    secours_hopital: ou(sec.hopital, AC) + (sec.distance ? ' (' + sec.distance + ')' : ''),
+    secours_urgences: ou(sec.urgences, 'SAMU 15 — Pompiers 18 — Urgence europeenne 112'),
+    secours_trousse: ou(sec.trousse, 'Une trousse de premiers secours par entreprise, disponible sur le chantier.'),
+    secours_dae: ou(sec.dae, 'Neant sur site — DAE le plus proche : ' + AC),
+    risques: risquesLoop,
+    lots: lots,
+  };
 }
 
 async function generateDoc(ref) {
