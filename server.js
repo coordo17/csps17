@@ -318,12 +318,21 @@ app.post('/api/rjc-delete-file', async (req, res) => {
 // ============================================================================
 let mailer = null;
 if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
+  // Port 587 STARTTLS (le 465 s'est montre bloque/injoignable depuis Render
+  // le 03/07/2026 -> "Connection timeout"). Timeouts explicites pour echouer
+  // vite et proprement au lieu de geler la requete ~2 min.
   mailer = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false,
+    requireTLS: true,
     auth: {
       user: process.env.GMAIL_USER,
       pass: process.env.GMAIL_APP_PASSWORD,
     },
+    connectionTimeout: 20000,
+    greetingTimeout: 20000,
+    socketTimeout: 60000,
   });
   console.log('Envoi email (Gmail) configure OK');
 } else {
