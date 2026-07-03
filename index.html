@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- CSPS17 index.html - v2.11 - 29/06/2026 - Photos illimitees CR Visite + Observations injectees + Nettoyage cases vides + PWA offline -->
+<!-- CSPS17 index.html - v2.12 - 03/07/2026 - Fix dates FR (Date IC / Date intervention prevue) dans Fiche IC -->
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
@@ -2372,14 +2372,15 @@ function injecterFIC(zip, ficData) {
 
   // === SECTION 1 - Dates ===
   // Tableau 5 : Date IC | Date fin previsionnelle | Nb intervenants
-  xmlStr = remplirCelluleInterne(xmlStr, "Date de l'IC", d.dateIC || '');
+  // formatDateFR : les inputs date renvoient l'ISO (2026-07-03) -> 03/07/2026 dans le doc.
+  xmlStr = remplirCelluleInterne(xmlStr, "Date de l'IC", formatDateFR(d.dateIC || ''));
   // Le template Cat.3 (Fiche_IC_Cat3_CSPS17_v4.docx) utilise le libelle "Date d'intervention
   // prevue" (valeur dans la MEME cellule, pattern remplirCelluleInterne) et non "Date fin
   // previsionnelle" (cellule adjacente) -> l'ancien appel etait un no-op silencieux sur ce
   // template, champ toujours vide. On garde l'ancien appel pour le template Cat.1/2 (au cas
   // ou son libelle/pattern differe) et on ajoute le bon appel pour Cat.3.
-  xmlStr = remplirCellule(xmlStr, 'Date fin prévisionnelle', d.dateFin || '');
-  xmlStr = remplirCelluleInterne(xmlStr, "Date d'intervention prévue", d.dateFin || '');
+  xmlStr = remplirCellule(xmlStr, 'Date fin prévisionnelle', formatDateFR(d.dateFin || ''));
+  xmlStr = remplirCelluleInterne(xmlStr, "Date d'intervention prévue", formatDateFR(d.dateFin || ''));
   xmlStr = remplirCellule(xmlStr, 'Nb. intervenants prévu', d.effectif || '');
 
   // Tableau 4 - Categorie
