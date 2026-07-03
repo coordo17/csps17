@@ -316,11 +316,18 @@ app.post('/api/rjc-delete-file', async (req, res) => {
 // ("Partie 1/2", "Partie 2/2"...) si necessaire, chaque zip restant sous une
 // limite prudente, pour garantir que l'envoi aboutit toujours.
 // ============================================================================
+// ── Envoi email : API HTTPS Brevo en priorite, SMTP Gmail en secours ──
+// Render (plan gratuit) BLOQUE le SMTP sortant (ports 25/465/587) depuis fin
+// septembre 2025 -> nodemailer/Gmail ne peut plus fonctionner ("Connection
+// timeout"). On passe donc par l'API HTTPS de Brevo (port 443, non bloque).
+// Le SMTP Gmail reste en secours automatique si BREVO_API_KEY est absente
+// (utile si l'appli migre un jour sur un plan payant ou un autre hebergeur).
+const BREVO_API_KEY = process.env.BREVO_API_KEY || '';
+// Expediteur : doit etre VALIDE dans Brevo (Senders). Par defaut = GMAIL_USER.
+const MAIL_FROM = process.env.BREVO_SENDER || process.env.GMAIL_USER || '';
+
 let mailer = null;
 if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
-  // Port 587 STARTTLS (le 465 s'est montre bloque/injoignable depuis Render
-  // le 03/07/2026 -> "Connection timeout"). Timeouts explicites pour echouer
-  // vite et proprement au lieu de geler la requete ~2 min.
   mailer = nodemailer.createTransport({
     host: 'smtp.gmail.com',
     port: 587,
@@ -334,9 +341,45 @@ if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
     greetingTimeout: 20000,
     socketTimeout: 60000,
   });
-  console.log('Envoi email (Gmail) configure OK');
-} else {
-  console.warn('Variables GMAIL_USER / GMAIL_APP_PASSWORD absentes -> envoi RJC par email indisponible');
+}
+
+const mailPret = !!(BREVO_API_KEY || mailer);
+if (BREVO_API_KEY) console.log('Envoi email via API Brevo configure OK');
+else if (mailer) console.log('Envoi email via SMTP Gmail configure (attention : bloque sur Render gratuit)');
+else console.warn('Ni BREVO_API_KEY ni GMAIL_USER/GMAIL_APP_PASSWORD -> envoi email indisponible');
+
+// Envoi unifie. attachments = [{ filename, content (Buffer) }]
+async function envoyerEmail({ to, subject, text, attachments }) {
+  if (BREVO_API_KEY) {
+    const body = {
+      sender: { email: MAIL_FROM, name: 'CSPS17 — Alain SUZANNE' },
+      to: [{ email: to }],
+      subject: subject,
+      textContent: text,
+    };
+    if (attachments && attachments.length) {
+      body.attachment = attachments.map((a) => ({
+        name: a.filename,
+        content: Buffer.isBuffer(a.content) ? a.content.toString('base64') : String(a.content),
+      }));
+    }
+    const r = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      let msg = 'HTTP ' + r.status;
+      try { const j = await r.json(); msg += ' — ' + (j.message || JSON.stringify(j)); } catch (e) {}
+      throw new Error('Brevo : ' + msg);
+    }
+    return;
+  }
+  if (mailer) {
+    await mailer.sendMail({ from: process.env.GMAIL_USER, to, subject, text, attachments });
+    return;
+  }
+  throw new Error('Envoi email non configure (BREVO_API_KEY manquante)');
 }
 
 // Taille max (donnees brutes avant zip) par email — marge prudente sous la
@@ -370,8 +413,8 @@ function creerZipBuffer(fichiers) {
 // Envoi d'un document unique vers la boite du CSPS lui-meme (auto-archivage :
 // horodatage externe dans Gmail + transfert facile au destinataire depuis le tel).
 app.post('/api/envoyer-doc', async (req, res) => {
-  if (!mailer) {
-    return res.status(500).json({ error: "Envoi email non configure sur le serveur (variables GMAIL_USER / GMAIL_APP_PASSWORD manquantes)" });
+  if (!mailPret) {
+    return res.status(500).json({ error: "Envoi email non configure sur le serveur (variable BREVO_API_KEY manquante)" });
   }
   try {
     const { fichierPath, fichierData, fichierNom, numAffaire, chantierNom, objet } = req.body || {};
@@ -385,9 +428,8 @@ app.post('/api/envoyer-doc', async (req, res) => {
     }
     if (!content || !content.length) return res.status(400).json({ error: 'Fichier introuvable ou vide' });
     const sujet = ('[CSPS17] ' + (numAffaire || '') + ' ' + (chantierNom || '') + ' \u2014 ' + (fichierNom || 'document')).replace(/\s+/g, ' ').trim();
-    await mailer.sendMail({
-      from: process.env.GMAIL_USER,
-      to: process.env.GMAIL_USER,
+    await envoyerEmail({
+      to: process.env.GMAIL_USER || MAIL_FROM,
       subject: sujet,
       text: 'Document genere via CSPS17.\n\n'
         + 'Affaire : ' + (numAffaire || '-') + ' \u2014 ' + (chantierNom || '-') + '\n'
@@ -403,8 +445,8 @@ app.post('/api/envoyer-doc', async (req, res) => {
 });
 
 app.post('/api/envoyer-rjc', async (req, res) => {
-  if (!mailer) {
-    return res.status(500).json({ error: "Envoi email non configure sur le serveur (variables GMAIL_USER / GMAIL_APP_PASSWORD manquantes)" });
+  if (!mailPret) {
+    return res.status(500).json({ error: "Envoi email non configure sur le serveur (variable BREVO_API_KEY manquante)" });
   }
   try {
     const { destinataire, numAffaire, chantierNom, entries } = req.body || {};
@@ -497,8 +539,7 @@ app.post('/api/envoyer-rjc', async (req, res) => {
         ? [{ filename: `RJC_${numAffaire || 'dossier'}${nbParties > 1 ? '_partie' + (p + 1) : ''}.zip`, content: zipBuffer }]
         : [];
 
-      await mailer.sendMail({
-        from: process.env.GMAIL_USER,
+      await envoyerEmail({
         to: destinataire,
         subject: sujet,
         text: corps,
