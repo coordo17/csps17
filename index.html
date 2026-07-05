@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- CSPS17 index.html - v2.23 - 05/07/2026 - Fenetres (modales) : bouton X toujours visible en haut a droite + defilement interne (plus de "bande" infinie a scroller pour fermer) -->
+<!-- CSPS17 index.html - v2.24 - 05/07/2026 - Correcteur d'elisions sur les analyses IA (d'personnels -> de personnel) + modales X visible + defilement interne -->
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
@@ -636,7 +636,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.23</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.24</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -2085,6 +2085,7 @@ async function analyserRapportDiag(affaire, file) {
       text = result.content[0].text;
     }
     var parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+    parsed = nettoyerAnalyseFr(parsed);
     // Stockage systematique (sert aussi a la redaction du PGC en phase conception)
     if (!affaire.rapportsAnalyses) affaire.rapportsAnalyses = [];
     affaire.rapportsAnalyses.push({
@@ -2233,6 +2234,30 @@ async function attacherAnalyseAuRJC(affaire, parsed, nomFichierSource) {
       persistAffaires();
     }
   } catch (e) { showToast('Analyse OK mais docx RJC non genere : ' + e.message, 'error'); }
+}
+
+// ── CORRECTEUR D'ELISIONS (le modele IA fait parfois "d'personnels" au lieu de
+// "de personnel"). L'elision ne se fait QUE devant une voyelle ou un h muet ;
+// devant une consonne c'est fautif -> on retablit le mot entier. Cas non
+// ambigus uniquement (d'/qu'/n'/s'/c'/j'/m'/t'), on laisse l' (le/la ambigu).
+function corrigerElisions(s) {
+  if (typeof s !== 'string') return s;
+  var C = 'bcdfgjklmnpqrstvwxzçBCDFGJKLMNPQRSTVWXZÇ';
+  var map = { d: 'de', n: 'ne', j: 'je', m: 'me', t: 'te', s: 'se', c: 'ce', qu: 'que' };
+  var re = new RegExp('\\b(qu|d|n|j|m|t|s|c)['’]([' + C + '])', 'gi');
+  return s.replace(re, function(m, p, cons){
+    var repl = map[p.toLowerCase()] || p;
+    // conserve la casse initiale (Majuscule si le mot d'origine commencait par une majuscule)
+    if (p[0] === p[0].toUpperCase()) repl = repl.charAt(0).toUpperCase() + repl.slice(1);
+    return repl + ' ' + cons;
+  });
+}
+// Nettoie recursivement toutes les chaines d'un objet d'analyse IA.
+function nettoyerAnalyseFr(o) {
+  if (typeof o === 'string') return corrigerElisions(o);
+  if (Array.isArray(o)) return o.map(nettoyerAnalyseFr);
+  if (o && typeof o === 'object') { for (var k in o) { if (o.hasOwnProperty(k)) o[k] = nettoyerAnalyseFr(o[k]); } return o; }
+  return o;
 }
 
 // ── AFFICHAGE DES ANALYSES IA (fenetre apres depot + consultation a la carte) ──
@@ -2457,6 +2482,7 @@ async function analyserPGCDepose(affaire, file) {
     var text = (result.content && result.content[0] && result.content[0].text) ? result.content[0].text
       : (result.choices && result.choices[0] && result.choices[0].message ? result.choices[0].message.content : '{}');
     var parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+    parsed = nettoyerAnalyseFr(parsed);
     parsed.type_rapport = 'PGC';
     if (!affaire.rapportsAnalyses) affaire.rapportsAnalyses = [];
     affaire.rapportsAnalyses.push({ id: 'rap-' + Date.now(), date: new Date().toISOString().split('T')[0], fichier: file.name, analyse: parsed });
@@ -2504,6 +2530,7 @@ async function analyserPlanning(affaire, file) {
     var text = (result.content && result.content[0] && result.content[0].text) ? result.content[0].text
       : (result.choices && result.choices[0] && result.choices[0].message ? result.choices[0].message.content : '{}');
     var parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+    parsed = nettoyerAnalyseFr(parsed);
     parsed.type_rapport = 'planning';
     if (!affaire.rapportsAnalyses) affaire.rapportsAnalyses = [];
     affaire.rapportsAnalyses.push({ id: 'rap-' + Date.now(), date: new Date().toISOString().split('T')[0], fichier: file.name, analyse: parsed });
