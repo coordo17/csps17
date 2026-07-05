@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- CSPS17 index.html - v2.14 - 03/07/2026 - Generateur PGC (18e/19e documents : PGC complet + PGC simplifie Cat.3) -->
+<!-- CSPS17 index.html - v2.15 - 05/07/2026 - Analyses IA visibles : fenetre de resultat au depot + bouton Analyses sur la carte Rapports & diagnostics -->
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
@@ -624,7 +624,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.14</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.15</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -1904,9 +1904,57 @@ async function analyserRapportDiag(affaire, file) {
       showToast('Rapport analyse (' + (parsed.type_rapport || 'autre') + ') — stocke pour la redaction du PGC', 'success');
     }
     persistAffaires();
+    // RESULTAT VISIBLE (demande d'Alain 05/07) : le toast disparait en 3 s,
+    // on affiche donc le resultat de l'analyse dans une vraie fenetre.
+    afficherAnalyseModal(parsed, phase, file.name);
   } catch (err) {
     showToast('Analyse du rapport impossible : ' + err.message, 'error');
   }
+}
+
+// ── AFFICHAGE DES ANALYSES IA (fenetre apres depot + consultation a la carte) ──
+function htmlAnalyse(p) {
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  var l = [];
+  l.push('<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">'
+    + '<span style="background:var(--blue-xl);color:var(--blue-dark);font-weight:700;padding:2px 10px;border-radius:10px;font-size:12px;">' + esc(p.type_rapport || 'autre') + '</span>'
+    + (p.date_rapport ? '<span style="background:#eee;padding:2px 10px;border-radius:10px;font-size:12px;">' + esc(p.date_rapport) + '</span>' : '')
+    + (p.bureau ? '<span style="background:#eee;padding:2px 10px;border-radius:10px;font-size:12px;">' + esc(p.bureau) + '</span>' : '')
+    + '</div>');
+  if (p.synthese) l.push('<p style="margin-bottom:8px;">' + esc(p.synthese) + '</p>');
+  if (p.amiante) {
+    l.push('<p style="margin-bottom:4px;"><strong>Amiante : ' + (p.amiante.presence ? '&#9888;&#65039; DETECTE' : 'non detecte') + '</strong>'
+      + (p.amiante.localisation ? ' — ' + esc(p.amiante.localisation) : '')
+      + (p.amiante.raat_date ? ' (RAAT du ' + esc(p.amiante.raat_date) + ')' : '')
+      + (p.amiante.ss4_obligatoire ? ' — <strong>entreprise certifiee SS3/SS4 exigee</strong>' : '') + '</p>');
+  }
+  if (p.plomb) {
+    l.push('<p style="margin-bottom:4px;"><strong>Plomb : ' + (p.plomb.presence ? '&#9888;&#65039; DETECTE' : 'non detecte') + '</strong>'
+      + (p.plomb.localisation ? ' — ' + esc(p.plomb.localisation) : '') + '</p>');
+  }
+  if (p.points_vigilance_ic) l.push('<p style="background:var(--orange);color:var(--orange-dark);padding:8px 10px;border-radius:6px;margin-top:8px;"><strong>Vigilance IC :</strong> ' + esc(p.points_vigilance_ic) + '</p>');
+  return l.join('');
+}
+
+function afficherAnalyseModal(parsed, phase, nomFichier) {
+  var suite = (phase === 'conception')
+    ? '<p style="font-size:12px;color:var(--text-light);margin-top:10px;">Phase conception : analyse stockee, elle alimentera la redaction du PGC.</p>'
+    : '<p style="font-size:12px;color:var(--text-light);margin-top:10px;">Risques particuliers, notes amiante et observations IC de l\'affaire mis a jour automatiquement.</p>';
+  openDocModal('&#128300; Analyse — ' + nomFichier, htmlAnalyse(parsed) + suite, null, null);
+}
+
+function voirAnalysesRapports() {
+  var affaire = currentAffaireObj();
+  if (!affaire || !affaire.rapportsAnalyses || !affaire.rapportsAnalyses.length) {
+    showToast('Aucune analyse enregistree pour cette affaire', 'error'); return;
+  }
+  var html = affaire.rapportsAnalyses.slice().reverse().map(function(r){
+    return '<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px;">'
+      + '<div style="font-weight:700;margin-bottom:6px;">' + formatDateFR(r.date) + ' — ' + String(r.fichier||'').replace(/</g,'&lt;') + '</div>'
+      + htmlAnalyse(r.analyse || {})
+      + '</div>';
+  }).join('');
+  openDocModal('&#128300; Analyses des rapports (' + affaire.rapportsAnalyses.length + ')', html, null, null);
 }
 
 function injecterAnalyseRapport(affaire, p) {
@@ -2121,6 +2169,10 @@ function renderDocsGrid() {
       var btnTel = dernierF
         ? '<button class="btn btn-outline btn-sm" onclick="telechargerDernierDoc(\'' + p.ref + '\')" title="Derniere piece : ' + formatDateFR(dernierF.date) + '">&#11015; Telecharger</button>'
         : '<button class="btn btn-outline btn-sm" disabled title="Aucune piece deposee">&#11015; Telecharger</button>';
+      // Bouton "Analyses" : consultation des analyses IA passees des rapports deposes
+      var btnAnalyses = (p.ref === 'DIAG' && affaire && affaire.rapportsAnalyses && affaire.rapportsAnalyses.length)
+        ? '<button class="btn btn-outline btn-sm" onclick="voirAnalysesRapports()" title="' + affaire.rapportsAnalyses.length + ' analyse(s) IA consultables">&#128300; Analyses</button>'
+        : '';
       return '<div class="doc-card">'
         + badge
         + '<div class="doc-card-top"><div class="doc-icon">' + p.icon + '</div>'
@@ -2129,6 +2181,7 @@ function renderDocsGrid() {
         + '<div class="doc-actions">'
         + '<button class="btn btn-primary btn-sm" onclick="document.getElementById(\'piece-input-' + p.ref + '\').click()">&#128229; Deposer</button>'
         + btnTel
+        + btnAnalyses
         + '</div></div>';
     }).join('');
   }
