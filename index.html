@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- CSPS17 index.html - v2.15 - 05/07/2026 - Analyses IA visibles : fenetre de resultat au depot + bouton Analyses sur la carte Rapports & diagnostics -->
+<!-- CSPS17 index.html - v2.16 - 05/07/2026 - Analyses IA completes : PGC analyse au depot, impression, bouton Analyses sur le tel (Terrain) -->
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
@@ -624,7 +624,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.15</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.16</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -1001,6 +1001,7 @@
             <button class="btn btn-danger" style="padding:16px 10px;font-size:14px;flex-direction:column;gap:4px;" onclick="ouvrirFormulaireDoc('DGI')">&#128680;<br>Danger grave</button>
             <button class="btn btn-outline" style="padding:16px 10px;font-size:14px;flex-direction:column;gap:4px;" onclick="ouvrirFormulaireDoc('PPP')">&#128202;<br>Grille PPSPS</button>
             <button class="btn btn-outline" style="padding:16px 10px;font-size:14px;flex-direction:column;gap:4px;" onclick="ouvrirFormulaireDoc('RJC')">&#128212;<br>RJC</button>
+            <button class="btn btn-outline" style="padding:16px 10px;font-size:14px;flex-direction:column;gap:4px;" onclick="voirAnalysesRapports(terrainAffaire)">&#128300;<br>Analyses</button>
           </div>
         </div>
       </div>
@@ -1822,8 +1823,10 @@ async function deposerPieceDossier(affaire, file, type) {
       persistAffaires();
     }
     showToast(file.name + ' ajoute au dossier', 'success');
-    // Analyse IA des rapports/diagnostics (pas du PGC : en realisation il fait foi tel quel)
+    // Analyse IA : rapports/diagnostics (avec injection dans l'affaire) ET
+    // PGC (simple synthese aide-memoire, sans injection — le PGC fait foi).
     if (type === 'DIAG') await analyserRapportDiag(affaire, file);
+    else if (type === 'PGC') await analyserPGCDepose(affaire, file);
   } catch (err) {
     showToast('Erreur depot : ' + err.message, 'error');
   }
@@ -1906,7 +1909,7 @@ async function analyserRapportDiag(affaire, file) {
     persistAffaires();
     // RESULTAT VISIBLE (demande d'Alain 05/07) : le toast disparait en 3 s,
     // on affiche donc le resultat de l'analyse dans une vraie fenetre.
-    afficherAnalyseModal(parsed, phase, file.name);
+    afficherAnalyseModal(parsed, phase, file.name, affaire);
   } catch (err) {
     showToast('Analyse du rapport impossible : ' + err.message, 'error');
   }
@@ -1936,15 +1939,18 @@ function htmlAnalyse(p) {
   return l.join('');
 }
 
-function afficherAnalyseModal(parsed, phase, nomFichier) {
-  var suite = (phase === 'conception')
-    ? '<p style="font-size:12px;color:var(--text-light);margin-top:10px;">Phase conception : analyse stockee, elle alimentera la redaction du PGC.</p>'
-    : '<p style="font-size:12px;color:var(--text-light);margin-top:10px;">Risques particuliers, notes amiante et observations IC de l\'affaire mis a jour automatiquement.</p>';
-  openDocModal('&#128300; Analyse — ' + nomFichier, htmlAnalyse(parsed) + suite, null, null);
+function afficherAnalyseModal(parsed, phase, nomFichier, affaire) {
+  var suite = (parsed.type_rapport === 'PGC')
+    ? '<p style="font-size:12px;color:var(--text-light);margin-top:10px;">Le PGC depose fait foi tel quel — cette synthese est un aide-memoire, elle ne modifie pas l\'affaire.</p>'
+    : (phase === 'conception')
+      ? '<p style="font-size:12px;color:var(--text-light);margin-top:10px;">Phase conception : analyse stockee, elle alimentera la redaction du PGC.</p>'
+      : '<p style="font-size:12px;color:var(--text-light);margin-top:10px;">Risques particuliers, notes amiante et observations IC de l\'affaire mis a jour automatiquement.</p>';
+  openDocModal('🔬 Analyse — ' + nomFichier, htmlAnalyse(parsed) + suite,
+    '🖨 Imprimer', function(){ imprimerAnalyses(affaire || currentAffaireObj(), { fichier: nomFichier, analyse: parsed }); });
 }
 
-function voirAnalysesRapports() {
-  var affaire = currentAffaireObj();
+function voirAnalysesRapports(affaireOpt) {
+  var affaire = affaireOpt || currentAffaireObj();
   if (!affaire || !affaire.rapportsAnalyses || !affaire.rapportsAnalyses.length) {
     showToast('Aucune analyse enregistree pour cette affaire', 'error'); return;
   }
@@ -1954,7 +1960,71 @@ function voirAnalysesRapports() {
       + htmlAnalyse(r.analyse || {})
       + '</div>';
   }).join('');
-  openDocModal('&#128300; Analyses des rapports (' + affaire.rapportsAnalyses.length + ')', html, null, null);
+  openDocModal('🔬 Analyses des rapports (' + affaire.rapportsAnalyses.length + ')', html,
+    '🖨 Imprimer', function(){ imprimerAnalyses(affaire); });
+}
+
+// Impression : page propre (PC et tel), une analyse ou toutes celles de l'affaire.
+function imprimerAnalyses(affaire, seule) {
+  affaire = affaire || {};
+  var c = affaire.chantier || {};
+  var liste = seule ? [seule] : (affaire.rapportsAnalyses || []).slice().reverse();
+  if (!liste.length) { showToast('Rien a imprimer', 'error'); return; }
+  var corps = liste.map(function(r){
+    return '<div class="bloc">'
+      + '<h3>' + (r.date ? formatDateFR(r.date) + ' — ' : '') + String(r.fichier||'').replace(/</g,'&lt;') + '</h3>'
+      + htmlAnalyse(r.analyse || {})
+      + '</div>';
+  }).join('');
+  var w = window.open('', '_blank');
+  if (!w) { showToast('Autorisez les popups pour imprimer', 'error'); return; }
+  w.document.write('<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Analyses — '
+    + String(c.nom||'').replace(/</g,'&lt;') + '</title><style>'
+    + ':root{--blue-xl:#EBF3FB;--blue-dark:#1F4E79;--orange:#FFF0CC;--orange-dark:#C07000;--text-light:#555;--border:#d0dae8;}'
+    + 'body{font-family:Segoe UI,Arial,sans-serif;font-size:13px;color:#1a1a2e;margin:20px;max-width:800px;}'
+    + 'h1{font-size:18px;color:#1F4E79;margin-bottom:2px;} h2{font-size:13px;color:#555;font-weight:400;margin-top:0;}'
+    + 'h3{font-size:14px;color:#1F4E79;margin:0 0 6px;} .bloc{border:1px solid #d0dae8;border-radius:8px;padding:12px;margin-bottom:12px;page-break-inside:avoid;}'
+    + 'p{margin:0 0 6px;} @media print{.noprint{display:none;}}'
+    + '</style></head><body>'
+    + '<h1>Analyses des rapports & diagnostics</h1>'
+    + '<h2>' + String(affaire.num||'').replace(/</g,'&lt;') + ' — ' + String(c.nom||'').replace(/</g,'&lt;')
+    + ' — imprime le ' + new Date().toLocaleDateString('fr-FR') + ' — CSPS : Alain SUZANNE (CSPS17)</h2>'
+    + '<button class="noprint" onclick="window.print()" style="padding:8px 16px;margin:10px 0;">🖨 Imprimer</button>'
+    + corps + '</body></html>');
+  w.document.close();
+  setTimeout(function(){ try { w.print(); } catch(e) {} }, 400);
+}
+
+// Analyse du PGC depose : simple synthese aide-memoire (le PGC fait foi tel quel,
+// rien n'est injecte dans l'affaire) — demande d'Alain du 05/07.
+async function analyserPGCDepose(affaire, file) {
+  try {
+    showToast('Analyse IA du PGC ' + file.name + '...');
+    var texte = (await extraireTexteFichier(file)).slice(0, 12000);
+    if (texte.trim().length < 30) { showToast('PGC illisible (scan/image ?) — depot conserve sans analyse', 'error'); return; }
+    var prompt = 'Voici le contenu d\'un Plan General de Coordination SPS (PGC) d\'une operation BTP :\n\n' + texte
+      + '\n\nReponds UNIQUEMENT en JSON valide, sans markdown ni backtick :\n'
+      + '{"type_rapport":"PGC","date_rapport":null,"bureau":null,"synthese":"...","points_vigilance_ic":"..."}\n'
+      + 'date_rapport=date ou indice du PGC si trouve. bureau=redacteur du PGC (coordonnateur SPS ou societe). '
+      + 'synthese=5 phrases max : nature de l\'operation, categorie, risques principaux traites, organisation notable (acces, base vie, phasage), points marquants. '
+      + 'points_vigilance_ic=2 phrases max : ce qu\'il faudra rappeler aux entreprises lors des inspections communes.';
+    var response = await fetch('/api/claude', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'llama-3.3-70b-versatile', max_tokens: 600, messages: [{ role: 'user', content: prompt }] })
+    });
+    var result = await response.json();
+    if (!response.ok) throw new Error('Serveur ' + response.status);
+    var text = (result.content && result.content[0] && result.content[0].text) ? result.content[0].text
+      : (result.choices && result.choices[0] && result.choices[0].message ? result.choices[0].message.content : '{}');
+    var parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+    parsed.type_rapport = 'PGC';
+    if (!affaire.rapportsAnalyses) affaire.rapportsAnalyses = [];
+    affaire.rapportsAnalyses.push({ id: 'rap-' + Date.now(), date: new Date().toISOString().split('T')[0], fichier: file.name, analyse: parsed });
+    persistAffaires();
+    afficherAnalyseModal(parsed, affaire.missionPhase || '', file.name, affaire);
+  } catch (err) {
+    showToast('Analyse du PGC impossible : ' + err.message, 'error');
+  }
 }
 
 function injecterAnalyseRapport(affaire, p) {
