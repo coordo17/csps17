@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- CSPS17 index.html - v2.16 - 05/07/2026 - Analyses IA completes : PGC analyse au depot, impression, bouton Analyses sur le tel (Terrain) -->
+<!-- CSPS17 index.html - v2.17 - 05/07/2026 - Bouton Inserer sur chaque document : rattacher un doc realise hors application (date reelle, trace RJC) -->
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
@@ -624,7 +624,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.16</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.17</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -919,6 +919,7 @@
           <div class="docs-grid" id="pieces-grid" style="margin-top:0;"></div>
           <input type="file" id="piece-input-PGC" accept=".pdf,.docx" style="display:none;" onchange="handlePieceUpload(event,'PGC')">
           <input type="file" id="piece-input-DIAG" accept=".pdf,.docx" style="display:none;" multiple onchange="handlePieceUpload(event,'DIAG')">
+          <input type="file" id="insert-doc-input" accept=".pdf,.docx,.doc,.jpg,.jpeg,.png" style="display:none;" multiple onchange="handleInsertDoc(event)">
         </div>
         <div class="docs-grid" id="docs-grid"></div>
         <div class="gen-progress" id="gen-progress">
@@ -2289,8 +2290,68 @@ function renderDocsGrid() {
       + '<button class="btn btn-primary btn-sm" ' + (active ? 'onclick="generateDocAvecCheck(\'' + doc.ref + '\')"' : 'disabled') + '>Generer</button>'
       + '<button class="btn btn-outline btn-sm" ' + (active ? 'onclick="previewDoc(\'' + doc.ref + '\')"' : 'disabled') + '>Apercu</button>'
       + btnTelecharger
+      + '<button class="btn btn-outline btn-sm" ' + (active ? 'onclick="insererDocExterne(\'' + doc.ref + '\')"' : 'disabled')
+      + ' title="Inserer un document realise HORS application (Word rempli sur le tel en zone blanche, IC faite avant CSPS17, scan signe...) — rattache a ce document et trace au RJC a sa date reelle">&#128206; Inserer</button>'
       + '</div></div>';
   }).join('');
+}
+
+// ── INSERTION D'UN DOCUMENT REALISE HORS APPLICATION (demande d'Alain 05/07) ──
+// Cas d'usage : IC LE ROUX TP faite avant l'existence de l'appli ; IC ou CR de
+// visite rempli sur un modele Word neutre depuis le tel dans une zone sans
+// reseau ; document papier scanne/photographie. Le fichier est rattache au bon
+// document (badge/historique/Telecharger/M'envoyer) et trace au RJC a sa DATE
+// REELLE, pas a la date d'insertion.
+var _insertDocRef = null;
+function insererDocExterne(ref) {
+  var affaire = currentAffaireObj();
+  if (!affaire) { showToast('Sauvegardez l\'affaire avant d\'inserer un document', 'error'); return; }
+  _insertDocRef = ref;
+  document.getElementById('insert-doc-input').click();
+}
+
+async function handleInsertDoc(e) {
+  var files = Array.prototype.slice.call(e.target.files || []);
+  e.target.value = '';
+  if (!files.length || !_insertDocRef) return;
+  var ref = _insertDocRef; _insertDocRef = null;
+  var affaire = currentAffaireObj();
+  if (!affaire) { showToast('Sauvegardez l\'affaire avant d\'inserer un document', 'error'); return; }
+  var docDef = DOCS.find(function(d){ return d.ref === ref; });
+  var titre = docDef ? docDef.title : ref;
+  // Date REELLE du document (celle de l'IC/de la visite, pas celle du depot)
+  var dISO = new Date().toISOString().split('T')[0];
+  var saisie = prompt('Date reelle du document "' + titre + '" (JJ/MM/AAAA) :\nC\'est elle qui apparaitra dans la chronologie du RJC.', formatDateFR(dISO));
+  if (saisie === null) return; // annule
+  var m = String(saisie).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) dISO = m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+  else if (String(saisie).trim() !== '') { showToast('Date invalide (attendu JJ/MM/AAAA) — insertion annulee', 'error'); return; }
+  for (var i = 0; i < files.length; i++) {
+    var file = files[i];
+    try {
+      showToast('Insertion de ' + file.name + '...');
+      var dataUrl = await blobToDataURL(file);
+      var created = ajouterEntreeRJC(affaire, {
+        date: dISO,
+        nature: titre + ' — insere (realise hors CSPS17)',
+        objet: file.name,
+        intervenants: '',
+        ref: file.name,
+        docRef: ref,
+      });
+      if (created) {
+        var path = await uploaderFichierRJC(affaire.id, file.name, dataUrl, file.type || 'application/octet-stream');
+        created.fichierPath = path;
+        created.fichierNom = file.name;
+        created.fichierType = file.type || '';
+        persistAffaires();
+      }
+      showToast(file.name + ' insere au ' + formatDateFR(dISO) + ' — trace au RJC', 'success');
+    } catch (err) {
+      showToast('Erreur insertion : ' + err.message, 'error');
+    }
+  }
+  renderDocsGrid();
 }
 
 // ── INJECTION SIGNATURES DANS DOCX ─────────────────────────────
