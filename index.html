@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- CSPS17 index.html - v2.18 - 05/07/2026 - Archivage fin de mission (ZIP externe 5 ans + purge + stub Affaires sorties) + numerotation sans trou + fix resurrection apres suppression -->
+<!-- CSPS17 index.html - v2.19 - 05/07/2026 - Audit : PGC lit les analyses IA, archive inclut fichiers inline, purge fichiers a la suppression, analyses en .docx au RJC -->
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
@@ -624,7 +624,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.18</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.19</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -1792,11 +1792,17 @@ function deleteAffaire(e, id) {
   if (a && a.archive) { showToast('Une affaire archivee ne se supprime pas (numero reserve 5 ans)', 'error'); return; }
   var label = (a && a.chantier && a.chantier.nom) ? a.chantier.nom : (a && a.num) || 'cette affaire';
   if (!confirm('Supprimer definitivement "' + label + '" ?\nSon numero sera reutilise par la prochaine affaire creee.\nNe supprimez JAMAIS une affaire dont des documents ont deja ete diffuses aux intervenants.')) return;
+  // Purge des fichiers Supabase de l'affaire (sinon orphelins a vie — audit 05/07)
+  if (a && a.rjc) {
+    a.rjc.filter(function(e){ return e.fichierPath; }).forEach(function(e){
+      fetch('/api/rjc-delete-file', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: e.fichierPath }) }).catch(function(){});
+    });
+  }
   affaires = affaires.filter(function(x){ return x.id !== id; });
   localStorage.setItem('csps17_affaires', JSON.stringify(affaires));
   pousserVersServeur(); // sinon l'affaire supprimee ressuscite a la prochaine synchro (bug corrige 05/07)
   renderAffaireList();
-  showToast('Affaire supprimee — numero libere pour la prochaine', 'success');
+  showToast('Affaire supprimee — numero libere, fichiers en ligne purges', 'success');
 }
 
 // ============================================================================
@@ -1832,18 +1838,29 @@ async function archiverAffaireCourante() {
     for (var i = 0; i < entries.length; i++) {
       var e = entries[i];
       var ligne = (i + 1) + '. ' + formatDateFR(e.date) + ' — ' + (e.nature || '') + (e.objet && e.objet !== e.nature ? ' — ' + e.objet : '');
+      var nomF = String(i + 1).padStart(2, '0') + '_' + (e.date || '') + '_' + nomFichierSurClient(e.fichierNom || e.ref || 'document');
       if (e.fichierPath) {
         try {
           var r = await fetch('/api/rjc-file?path=' + encodeURIComponent(e.fichierPath));
           if (!r.ok) throw new Error('HTTP ' + r.status);
           var ab = await r.arrayBuffer();
-          var nomF = String(i + 1).padStart(2, '0') + '_' + (e.date || '') + '_' + nomFichierSurClient(e.fichierNom || 'document');
           zip.file('fichiers/' + nomF, ab);
           nbFichiers++;
           ligne += '  [fichiers/' + nomF + ']';
         } catch (errF) {
           manquants.push(e.fichierNom || e.fichierPath);
           ligne += '  [FICHIER EN LIGNE INTROUVABLE]';
+        }
+      } else if (e.fichierData && typeof e.fichierData === 'string' && e.fichierData.indexOf('data:') === 0) {
+        // Ancien format (avant migration Supabase) : fichier inline en base64
+        // dans l'affaire — a inclure dans le ZIP sinon PERDU a la purge (audit 05/07)
+        try {
+          zip.file('fichiers/' + nomF, e.fichierData.split(',')[1] || '', { base64: true });
+          nbFichiers++;
+          ligne += '  [fichiers/' + nomF + ']';
+        } catch (errD) {
+          manquants.push(e.fichierNom || e.ref || 'fichier inline');
+          ligne += '  [FICHIER INLINE ILLISIBLE]';
         }
       } else {
         ligne += '  [sans fichier]';
@@ -2063,12 +2080,79 @@ async function analyserRapportDiag(affaire, file) {
       showToast('Rapport analyse (' + (parsed.type_rapport || 'autre') + ') — stocke pour la redaction du PGC', 'success');
     }
     persistAffaires();
+    // Analyse materialisee en .docx au Registre Journal (tracabilite)
+    await attacherAnalyseAuRJC(affaire, parsed, file.name);
     // RESULTAT VISIBLE (demande d'Alain 05/07) : le toast disparait en 3 s,
     // on affiche donc le resultat de l'analyse dans une vraie fenetre.
     afficherAnalyseModal(parsed, phase, file.name, affaire);
   } catch (err) {
     showToast('Analyse du rapport impossible : ' + err.message, 'error');
   }
+}
+
+// ── ANALYSE EN .DOCX AU REGISTRE (demande d'Alain 05/07) ────────────────────
+// Chaque analyse IA est aussi materialisee en document Word date, attache au
+// RJC (docRef ANALYSE) : telechargeable, imprimable, envoyable comme les autres.
+function xmlEscA(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+function genererDocxAnalyse(parsed, nomFichierSource) {
+  function para(txt, opts) {
+    opts = opts || {};
+    var rpr = '<w:rPr>' + (opts.bold ? '<w:b/>' : '') + (opts.color ? '<w:color w:val="' + opts.color + '"/>' : '') + '<w:sz w:val="' + (opts.size || 22) + '"/></w:rPr>';
+    var runs = String(txt).split('\n').map(function(l, i){
+      return (i ? '<w:r>' + rpr + '<w:br/></w:r>' : '') + '<w:r>' + rpr + '<w:t xml:space="preserve">' + xmlEscA(l) + '</w:t></w:r>';
+    }).join('');
+    return '<w:p>' + runs + '</w:p>';
+  }
+  var p = parsed || {};
+  var c = [];
+  c.push(para('ANALYSE DE RAPPORT — CSPS17', { bold: true, size: 32, color: '1F4E79' }));
+  c.push(para(nomFichierSource, { bold: true, size: 24 }));
+  c.push(para('Type : ' + (p.type_rapport || 'autre') + (p.date_rapport ? ' — Rapport du ' + p.date_rapport : '') + (p.bureau ? ' — ' + p.bureau : '')));
+  c.push(para(''));
+  if (p.synthese) { c.push(para('SYNTHÈSE', { bold: true, color: '1F4E79' })); c.push(para(p.synthese)); }
+  if (p.amiante) c.push(para('Amiante : ' + (p.amiante.presence ? 'DÉTECTÉ' : 'non détecté') + (p.amiante.localisation ? ' — ' + p.amiante.localisation : '') + (p.amiante.raat_date ? ' (RAAT du ' + p.amiante.raat_date + ')' : '') + (p.amiante.ss4_obligatoire ? ' — entreprise certifiée SS3/SS4 exigée' : ''), { bold: !!p.amiante.presence }));
+  if (p.plomb) c.push(para('Plomb : ' + (p.plomb.presence ? 'DÉTECTÉ' : 'non détecté') + (p.plomb.localisation ? ' — ' + p.plomb.localisation : ''), { bold: !!p.plomb.presence }));
+  if (p.points_vigilance_ic) { c.push(para('POINTS DE VIGILANCE — INSPECTION COMMUNE', { bold: true, color: 'C07000' })); c.push(para(p.points_vigilance_ic)); }
+  c.push(para(''));
+  c.push(para('Analyse assistée par IA du ' + new Date().toLocaleDateString('fr-FR') + ' — vérifiée et validée par le coordonnateur SPS. Alain SUZANNE — CSPS17.', { size: 18, color: '555555' }));
+  var docXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'
+    + c.join('') + '<w:sectPr/></w:body></w:document>';
+  var zip = new PizZip();
+  zip.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+    + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+    + '<Default Extension="xml" ContentType="application/xml"/>'
+    + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
+  zip.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+  zip.file('word/document.xml', docXml);
+  return new Blob([zip.generate({ type: 'arraybuffer' })], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+}
+
+async function attacherAnalyseAuRJC(affaire, parsed, nomFichierSource) {
+  try {
+    var blob = genererDocxAnalyse(parsed, nomFichierSource);
+    var nomDoc = 'CSPS17_ANALYSE_' + nomFichierSurClient(nomFichierSource).replace(/\.[^.]+$/, '') + '_' + new Date().toISOString().split('T')[0].replace(/-/g, '') + '.docx';
+    var created = ajouterEntreeRJC(affaire, {
+      date: new Date().toISOString().split('T')[0],
+      nature: 'Analyse de rapport (IA, validée CSPS)',
+      objet: 'Analyse — ' + nomFichierSource,
+      intervenants: '',
+      ref: nomDoc,
+      docRef: 'ANALYSE',
+    });
+    if (created) {
+      var dataUrl = await blobToDataURL(blob);
+      var path = await uploaderFichierRJC(affaire.id, nomDoc, dataUrl, blob.type);
+      created.fichierPath = path;
+      created.fichierNom = nomDoc;
+      created.fichierType = blob.type;
+      persistAffaires();
+    }
+  } catch (e) { showToast('Analyse OK mais docx RJC non genere : ' + e.message, 'error'); }
 }
 
 // ── AFFICHAGE DES ANALYSES IA (fenetre apres depot + consultation a la carte) ──
@@ -2177,6 +2261,7 @@ async function analyserPGCDepose(affaire, file) {
     if (!affaire.rapportsAnalyses) affaire.rapportsAnalyses = [];
     affaire.rapportsAnalyses.push({ id: 'rap-' + Date.now(), date: new Date().toISOString().split('T')[0], fichier: file.name, analyse: parsed });
     persistAffaires();
+    await attacherAnalyseAuRJC(affaire, parsed, file.name);
     afficherAnalyseModal(parsed, affaire.missionPhase || '', file.name, affaire);
   } catch (err) {
     showToast('Analyse du PGC impossible : ' + err.message, 'error');
@@ -3800,11 +3885,24 @@ function buildTagsPGC(data) {
   var amDetails = [];
   if (am.raat_date || am.bureau) amDetails.push('RAAT du ' + ou(am.raat_date, '?') + (am.bureau ? ' etabli par ' + am.bureau : '') + (am.ss4_obligatoire ? ' — entreprise certifiee exigee' : '') + '.');
   if (aff && aff.rapportsAnalyses && aff.rapportsAnalyses.length) {
+    // Structure reelle : {id, date, fichier, analyse:{type_rapport, synthese,
+    // bureau, amiante:{presence, localisation, raat_date, ss4_obligatoire}, ...}}
+    // (corrige le 05/07 : l'ancien code lisait ra.resume/ra.type, inexistants)
     aff.rapportsAnalyses.forEach(function(ra){
-      if (ra && ra.resume) amDetails.push(ra.resume);
-      else if (ra && ra.type) amDetails.push(ra.type + (ra.date ? ' du ' + ra.date : '') + (ra.bureau ? ' (' + ra.bureau + ')' : '') + '.');
+      var an = (ra && ra.analyse) ? ra.analyse : (ra || {});
+      if (an.amiante && (an.amiante.presence || an.amiante.raat_date)) {
+        var lg = 'Amiante' + (an.amiante.presence ? ' DETECTE' : ' — reperage realise')
+          + (an.amiante.localisation ? ' : ' + an.amiante.localisation : '')
+          + (an.amiante.raat_date ? ' (RAAT du ' + an.amiante.raat_date + ')' : '')
+          + (an.bureau ? ' — ' + an.bureau : '')
+          + (an.amiante.ss4_obligatoire ? ' — entreprise certifiee SS3/SS4 exigee' : '') + '.';
+        amDetails.push(lg);
+        amiante = amiante || !!an.amiante.presence;
+      }
+      if (an.plomb && an.plomb.presence) {
+        amDetails.push('Plomb DETECTE' + (an.plomb.localisation ? ' : ' + an.plomb.localisation : '') + '.');
+      }
     });
-    amiante = amiante || aff.rapportsAnalyses.some(function(ra){ return ra && (ra.amiante === true || /amiante/i.test(ra.resume || '')); });
   }
   if (rp.amiante && !amDetails.length) amDetails.push('Presence d\'amiante identifiee sur l\'operation — voir RAAT dans les pieces de marche.');
 
