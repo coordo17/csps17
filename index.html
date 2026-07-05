@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- CSPS17 index.html - v2.19 - 05/07/2026 - Audit : PGC lit les analyses IA, archive inclut fichiers inline, purge fichiers a la suppression, analyses en .docx au RJC -->
+<!-- CSPS17 index.html - v2.20 - 05/07/2026 - Fix mobile : ouverture d'un fichier RJC (diagnostic...) = telechargement au lieu de plein ecran bloquant (retour arriere) -->
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
@@ -624,7 +624,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.19</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.20</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -5978,18 +5978,31 @@ async function supprimerEntreeRJC(entryId) {
 }
 
 function ouvrirFichierRJC(entryId) {
-  var affaire = currentAffaireObj();
+  // Cherche l'entree dans l'affaire courante OU l'affaire terrain (mobile).
+  var affaire = currentAffaireObj() || (typeof terrainAffaire !== 'undefined' ? terrainAffaire : null);
   var e = affaire && affaire.rjc ? affaire.rjc.find(function(x){ return x.id === entryId; }) : null;
   if (!e) return;
   // Nouveau format (Supabase Storage) : on passe par le proxy serveur.
   // Ancien format (avant migration) : le fichier est deja en dataURL inline.
   var source = e.fichierPath ? ('/api/rjc-file?path=' + encodeURIComponent(e.fichierPath)) : e.fichierData;
   if (!source) return;
-  fetch(source).then(function(r){ return r.blob(); }).then(function(blob){
+  // TELECHARGEMENT (pas window.open) : sur mobile/tablette, ouvrir un blob dans
+  // un nouvel onglet affiche le fichier en PLEIN ECRAN et bloque l'appli (retour
+  // arriere obligatoire), et un .docx ne s'affiche meme pas. Le telechargement
+  // laisse l'appli intacte : l'utilisateur ouvre ensuite le fichier avec l'appli
+  // de son choix (lecteur PDF, Word...). Corrige le bug signale le 05/07.
+  showToast('Telechargement du fichier...');
+  fetch(source).then(function(r){ if (!r.ok) throw new Error('introuvable'); return r.blob(); }).then(function(blob){
     var url = URL.createObjectURL(blob);
-    window.open(url, '_blank');
-    setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
-  }).catch(function(){ showToast('Impossible d\'ouvrir le fichier', 'error'); });
+    var a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = e.fichierNom || e.ref || 'document';
+    document.body.appendChild(a);
+    a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+    setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 2000);
+    showToast('Fichier telecharge — ouvrez-le depuis vos telechargements', 'success');
+  }).catch(function(){ showToast('Impossible de recuperer le fichier', 'error'); });
 }
 
 function toggleMeteo() {
