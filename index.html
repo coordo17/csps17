@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- CSPS17 index.html - v2.20 - 05/07/2026 - Fix mobile : ouverture d'un fichier RJC (diagnostic...) = telechargement au lieu de plein ecran bloquant (retour arriere) -->
+<!-- CSPS17 index.html - v2.21 - 05/07/2026 - Carte "Analyse des diagnostics" (Word liste comme un doc + RJC) + bouton Analyse dans le bandeau + fix mobile telechargement (octet-stream) -->
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
@@ -624,7 +624,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.20</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.21</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -680,6 +680,7 @@
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
           <button class="btn btn-outline btn-sm" onclick="saveAffaire()">&#128190; Sauvegarder</button>
+          <button class="btn btn-outline btn-sm" onclick="voirAnalysesRapports()" title="Revoir toutes les analyses IA des diagnostics de l'affaire — pour ne rien rater avant une decision (archivage, generation PGC...)">&#128300; Analyse</button>
           <button class="btn btn-outline btn-sm" onclick="archiverAffaireCourante()" title="Fin de mission (DIUO rendu) : ZIP complet a poser sur un support externe (conservation 5 ans), puis purge en ligne — seuls numero, nom et adresse restent en memoire">&#128230; Archiver</button>
           <button class="btn btn-success" onclick="generateDocs()">&#9889; Generer les documents</button>
         </div>
@@ -2189,6 +2190,37 @@ function afficherAnalyseModal(parsed, phase, nomFichier, affaire) {
     '🖨 Imprimer', function(){ imprimerAnalyses(affaire || currentAffaireObj(), { fichier: nomFichier, analyse: parsed }); });
 }
 
+// Carte "Analyse des diagnostics" (demande d'Alain 05/07) : les Word d'analyse
+// (docRef ANALYSE, generes a chaque depot de diagnostic) listes comme un vrai
+// document — Apercu / Telecharger / Details — en plus de leur trace au RJC.
+function renderAnalyseCard(affaire) {
+  var entries = rjcEntriesForDoc(affaire, 'ANALYSE');
+  var nbDocs = entries.length;
+  var nbAnalyses = (affaire && affaire.rapportsAnalyses) ? affaire.rapportsAnalyses.length : 0;
+  var count = nbDocs || nbAnalyses;
+  var dernierF = dernierFichierDoc(affaire, 'ANALYSE');
+  var badge = count > 0
+    ? '<span class="doc-badge" onclick="showHistoriqueDoc(\'ANALYSE\')" title="' + count + ' analyse(s) — cliquer pour l\'historique">' + count + '</span>'
+    : '';
+  var dot = '<span class="doc-dot ' + (count > 0 ? 'ok' : 'warn') + '" title="'
+    + (count > 0 ? count + ' analyse(s) de diagnostic' : 'Aucune analyse — deposez un diagnostic (carte Rapports & diagnostics)') + '"></span>';
+  var btnApercu = nbDocs > 0
+    ? '<button class="btn btn-outline btn-sm" onclick="showHistoriqueDoc(\'ANALYSE\')">Apercu</button>'
+    : '<button class="btn btn-outline btn-sm" disabled title="Aucun Word d\'analyse — deposez un diagnostic">Apercu</button>';
+  var btnTel = dernierF
+    ? '<button class="btn btn-outline btn-sm" onclick="telechargerDernierDoc(\'ANALYSE\')" title="Derniere analyse : ' + formatDateFR(dernierF.date) + '">&#11015; Telecharger</button>'
+    : '<button class="btn btn-outline btn-sm" disabled>&#11015; Telecharger</button>';
+  var btnDetails = nbAnalyses > 0
+    ? '<button class="btn btn-outline btn-sm" onclick="voirAnalysesRapports()" title="Vue detaillee (amiante, plomb, vigilance IC) de toutes les analyses">&#128269; Details</button>'
+    : '';
+  return '<div class="doc-card">'
+    + badge
+    + '<div class="doc-card-top"><div class="doc-icon">&#128300;</div>'
+    + '<div class="doc-info"><div class="doc-title">Analyse des diagnostics' + dot + '</div>'
+    + '<div class="doc-ref">Word genere a chaque depot — aussi au RJC</div></div></div>'
+    + '<div class="doc-actions">' + btnApercu + btnTel + btnDetails + '</div></div>';
+}
+
 function voirAnalysesRapports(affaireOpt) {
   var affaire = affaireOpt || currentAffaireObj();
   if (!affaire || !affaire.rapportsAnalyses || !affaire.rapportsAnalyses.length) {
@@ -2390,8 +2422,10 @@ function telechargerDernierDoc(ref) {
   var source = e.fichierPath ? ('/api/rjc-file?path=' + encodeURIComponent(e.fichierPath)) : e.fichierData;
   fetch(source).then(function(r){
     if (!r.ok) throw new Error('fichier introuvable');
-    return r.blob();
-  }).then(function(blob){
+    return r.arrayBuffer();
+  }).then(function(buf){
+    // MIME generique : evite l'apercu PDF plein ecran sur Android (voir ouvrirFichierRJC).
+    var blob = new Blob([buf], { type: 'application/octet-stream' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.style.display = 'none';
@@ -2410,8 +2444,9 @@ function showHistoriqueDoc(ref) {
   var entries = rjcEntriesForDoc(affaire, ref);
   var doc = DOCS.find(function(d){ return d.ref === ref; })
     || PIECES_DOSSIER.find(function(d){ return d.ref === ref; });
+  var titreDoc = doc ? doc.title : (ref === 'ANALYSE' ? 'Analyse des diagnostics' : ref);
   if (!entries.length) {
-    openDocModal((doc ? doc.title : ref), '<p style="color:var(--text-light);font-size:13px;">Aucune version pour le moment \u2014 utilisez Generer (ou Deposer pour les pieces).</p>', null, null);
+    openDocModal(titreDoc, '<p style="color:var(--text-light);font-size:13px;">Aucune version pour le moment \u2014 utilisez Generer (ou Deposer pour les pieces).</p>', null, null);
     return;
   }
   var html = '<div style="max-height:320px;overflow-y:auto;text-align:left;">'
@@ -2432,7 +2467,7 @@ function showHistoriqueDoc(ref) {
         + '</div>';
     }).join('')
     + '</div>';
-  openDocModal('Historique — ' + (doc ? doc.title : ref) + ' (' + entries.length + ')', html, null, null);
+  openDocModal('Historique — ' + titreDoc + ' (' + entries.length + ')', html, null, null);
 }
 
 // Suppression d'une version/piece depuis l'historique (Apercu ou badge).
@@ -2494,7 +2529,7 @@ function renderDocsGrid() {
         + btnTel
         + btnAnalyses
         + '</div></div>';
-    }).join('');
+    }).join('') + renderAnalyseCard(affaire);
   }
   grid.innerHTML = DOCS.map(function(doc){
     var active = doc.cats.includes(currentCat);
@@ -5992,7 +6027,13 @@ function ouvrirFichierRJC(entryId) {
   // laisse l'appli intacte : l'utilisateur ouvre ensuite le fichier avec l'appli
   // de son choix (lecteur PDF, Word...). Corrige le bug signale le 05/07.
   showToast('Telechargement du fichier...');
-  fetch(source).then(function(r){ if (!r.ok) throw new Error('introuvable'); return r.blob(); }).then(function(blob){
+  fetch(source).then(function(r){ if (!r.ok) throw new Error('introuvable'); return r.arrayBuffer(); }).then(function(buf){
+    // MIME generique 'application/octet-stream' (et PAS application/pdf) : sinon
+    // Android Chrome ouvre le PDF en PLEIN ECRAN dans son lecteur integre au lieu
+    // de le telecharger (bug signale le 05/07 — l'attribut download seul ne suffit
+    // pas a contourner ce comportement pour les PDF). En generique, le navigateur
+    // n'essaie pas d'afficher : il telecharge, l'appli reste intacte.
+    var blob = new Blob([buf], { type: 'application/octet-stream' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.style.display = 'none';
