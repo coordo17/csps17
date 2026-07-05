@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- CSPS17 index.html - v2.21 - 05/07/2026 - Carte "Analyse des diagnostics" (Word liste comme un doc + RJC) + bouton Analyse dans le bandeau + fix mobile telechargement (octet-stream) -->
+<!-- CSPS17 index.html - v2.22 - 05/07/2026 - Analyse POUSSEE du planning (co-activite, phases dangereuses, alertes rouges) : carte Planning + bouton bandeau + Word + RJC + coche risque coactivite -->
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
@@ -624,7 +624,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.21</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.22</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -681,6 +681,7 @@
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
           <button class="btn btn-outline btn-sm" onclick="saveAffaire()">&#128190; Sauvegarder</button>
           <button class="btn btn-outline btn-sm" onclick="voirAnalysesRapports()" title="Revoir toutes les analyses IA des diagnostics de l'affaire — pour ne rien rater avant une decision (archivage, generation PGC...)">&#128300; Analyse</button>
+          <button class="btn btn-outline btn-sm" onclick="voirAnalysePlanning()" title="Analyse coordination du planning : co-activite, phases dangereuses, alertes cruciales">&#128197; Planning</button>
           <button class="btn btn-outline btn-sm" onclick="archiverAffaireCourante()" title="Fin de mission (DIUO rendu) : ZIP complet a poser sur un support externe (conservation 5 ans), puis purge en ligne — seuls numero, nom et adresse restent en memoire">&#128230; Archiver</button>
           <button class="btn btn-success" onclick="generateDocs()">&#9889; Generer les documents</button>
         </div>
@@ -921,6 +922,7 @@
           <div class="docs-grid" id="pieces-grid" style="margin-top:0;"></div>
           <input type="file" id="piece-input-PGC" accept=".pdf,.docx" style="display:none;" onchange="handlePieceUpload(event,'PGC')">
           <input type="file" id="piece-input-DIAG" accept=".pdf,.docx" style="display:none;" multiple onchange="handlePieceUpload(event,'DIAG')">
+          <input type="file" id="piece-input-PLAN" accept=".pdf,.docx" style="display:none;" onchange="handlePieceUpload(event,'PLAN')">
           <input type="file" id="insert-doc-input" accept=".pdf,.docx,.doc,.jpg,.jpeg,.png" style="display:none;" multiple onchange="handleInsertDoc(event)">
         </div>
         <div class="docs-grid" id="docs-grid"></div>
@@ -1941,6 +1943,7 @@ async function purgerEtArchiver(affaireId, nomZip) {
 var PIECES_DOSSIER = [
   { ref: 'PGC',  title: 'PGC \u2014 Plan General de Coordination', icon: '&#128216;', note: 'PGC recu / diffuse' },
   { ref: 'DIAG', title: 'Rapports & diagnostics', icon: '&#129514;', note: 'RAAT, CREP, geotech... — analyse IA au depot' },
+  { ref: 'PLAN', title: 'Planning', icon: '&#128197;', note: 'Analyse coordination : co-activite, phases critiques, alertes' },
 ];
 
 // Type de document d'une entree RJC : champ docRef (nouvelles entrees) ou
@@ -1981,9 +1984,12 @@ async function deposerPieceDossier(affaire, file, type) {
   try {
     showToast('Depot de ' + file.name + '...');
     var dataUrl = await blobToDataURL(file);
+    var natureDepot = type === 'PGC' ? 'Reception PGC'
+      : type === 'PLAN' ? 'Reception planning'
+      : 'Reception rapport / diagnostic';
     var created = ajouterEntreeRJC(affaire, {
       date: new Date().toISOString().split('T')[0],
-      nature: type === 'PGC' ? 'Reception PGC' : 'Reception rapport / diagnostic',
+      nature: natureDepot,
       objet: file.name,
       intervenants: '',
       ref: file.name,
@@ -2001,6 +2007,7 @@ async function deposerPieceDossier(affaire, file, type) {
     // PGC (simple synthese aide-memoire, sans injection — le PGC fait foi).
     if (type === 'DIAG') await analyserRapportDiag(affaire, file);
     else if (type === 'PGC') await analyserPGCDepose(affaire, file);
+    else if (type === 'PLAN') await analyserPlanning(affaire, file);
   } catch (err) {
     showToast('Erreur depot : ' + err.message, 'error');
   }
@@ -2107,8 +2114,67 @@ function genererDocxAnalyse(parsed, nomFichierSource) {
   }
   var p = parsed || {};
   var c = [];
-  c.push(para('ANALYSE DE RAPPORT — CSPS17', { bold: true, size: 32, color: '1F4E79' }));
+  var estPlanning = (p.type_rapport === 'planning');
+  c.push(para(estPlanning ? 'ANALYSE COORDINATION DU PLANNING — CSPS17' : 'ANALYSE DE RAPPORT — CSPS17', { bold: true, size: 32, color: '1F4E79' }));
   c.push(para(nomFichierSource, { bold: true, size: 24 }));
+  if (estPlanning) {
+    if (p.operation) c.push(para(p.operation));
+    if (p.duree_totale) c.push(para('Duree totale : ' + p.duree_totale));
+    c.push(para(''));
+    if (p.alertes_rouges && p.alertes_rouges.length) {
+      c.push(para('/!\\ ALERTES CRUCIALES — A NE PAS RATER', { bold: true, size: 26, color: 'B91C1C' }));
+      p.alertes_rouges.forEach(function(a){ c.push(para('• ' + a, { bold: true, color: 'B91C1C' })); });
+      c.push(para(''));
+    }
+    if (p.coactivites && p.coactivites.length) {
+      c.push(para('CO-ACTIVITE (corps d\'etat simultanes)', { bold: true, color: '1F4E79' }));
+      p.coactivites.forEach(function(co){
+        var crit = (co.gravite || '').toLowerCase() === 'critique';
+        c.push(para('• [' + (co.gravite || '?') + '] ' + (co.periode || '') + (co.zone ? ' (' + co.zone + ')' : '') + ' : ' + (co.corps_etat || '') + (co.risque ? ' -> ' + co.risque : ''), { bold: crit, color: crit ? 'B91C1C' : null }));
+      });
+      c.push(para(''));
+    }
+    if (p.phases_dangereuses && p.phases_dangereuses.length) {
+      c.push(para('PHASES DANGEREUSES', { bold: true, color: '1F4E79' }));
+      p.phases_dangereuses.forEach(function(d){
+        c.push(para('• ' + (d.phase || '') + (d.nature ? ' [' + d.nature + ']' : '') + (d.incompatibilite ? ' — ' + d.incompatibilite : '') + (d.mesure ? ' | Mesure : ' + d.mesure : ''), { bold: true }));
+      });
+      c.push(para(''));
+    }
+    if (p.phases && p.phases.length) {
+      c.push(para('PHASES DU CHANTIER', { bold: true, color: '1F4E79' }));
+      p.phases.forEach(function(ph){
+        c.push(para('• ' + (ph.nom || '') + (ph.periode ? ' (' + ph.periode + ')' : '') + (ph.corps_etat ? ' : ' + ph.corps_etat : '') + (ph.dangereuse ? '  /!\\' : ph.critique ? '  [critique]' : '')));
+      });
+      c.push(para(''));
+    }
+    if (p.chemin_critique) c.push(para('Chemin critique : ' + p.chemin_critique));
+    if (p.interferences) c.push(para('Interferences : ' + p.interferences));
+    if (p.recommandations && p.recommandations.length) {
+      c.push(para('RECOMMANDATIONS DE COORDINATION', { bold: true, color: '1F4E79' }));
+      p.recommandations.forEach(function(r){ c.push(para('• ' + (r.type ? r.type + ' : ' : '') + (r.detail || ''))); });
+    }
+    if (p.points_vigilance && p.points_vigilance.length) {
+      c.push(para('POINTS DE VIGILANCE', { bold: true, color: 'C07000' }));
+      p.points_vigilance.forEach(function(v){ c.push(para('• ' + v)); });
+    }
+    c.push(para(''));
+    c.push(para('Analyse assistée par IA du ' + new Date().toLocaleDateString('fr-FR') + ' — vérifiée et validée par le coordonnateur SPS. Alain SUZANNE — CSPS17.', { size: 18, color: '555555' }));
+    var docXmlP = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'
+      + c.join('') + '<w:sectPr/></w:body></w:document>';
+    var zipP = new PizZip();
+    zipP.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+      + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+      + '<Default Extension="xml" ContentType="application/xml"/>'
+      + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
+    zipP.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+      + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+    zipP.file('word/document.xml', docXmlP);
+    return new Blob([zipP.generate({ type: 'arraybuffer' })], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+  }
   c.push(para('Type : ' + (p.type_rapport || 'autre') + (p.date_rapport ? ' — Rapport du ' + p.date_rapport : '') + (p.bureau ? ' — ' + p.bureau : '')));
   c.push(para(''));
   if (p.synthese) { c.push(para('SYNTHÈSE', { bold: true, color: '1F4E79' })); c.push(para(p.synthese)); }
@@ -2159,6 +2225,7 @@ async function attacherAnalyseAuRJC(affaire, parsed, nomFichierSource) {
 // ── AFFICHAGE DES ANALYSES IA (fenetre apres depot + consultation a la carte) ──
 function htmlAnalyse(p) {
   function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  if (p && p.type_rapport === 'planning') return htmlAnalysePlanning(p, esc);
   var l = [];
   l.push('<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">'
     + '<span style="background:var(--blue-xl);color:var(--blue-dark);font-weight:700;padding:2px 10px;border-radius:10px;font-size:12px;">' + esc(p.type_rapport || 'autre') + '</span>'
@@ -2177,6 +2244,74 @@ function htmlAnalyse(p) {
       + (p.plomb.localisation ? ' — ' + esc(p.plomb.localisation) : '') + '</p>');
   }
   if (p.points_vigilance_ic) l.push('<p style="background:var(--orange);color:var(--orange-dark);padding:8px 10px;border-radius:6px;margin-top:8px;"><strong>Vigilance IC :</strong> ' + esc(p.points_vigilance_ic) + '</p>');
+  return l.join('');
+}
+
+// Rendu de l'analyse POUSSEE du planning : alertes rouges en tete, puis phases,
+// co-activites (colorees par gravite), phases dangereuses, recommandations.
+function htmlAnalysePlanning(p, esc) {
+  var l = [];
+  l.push('<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">'
+    + '<span style="background:#1F4E79;color:#fff;font-weight:700;padding:2px 10px;border-radius:10px;font-size:12px;">&#128197; PLANNING</span>'
+    + (p.duree_totale ? '<span style="background:#eee;padding:2px 10px;border-radius:10px;font-size:12px;">Duree : ' + esc(p.duree_totale) + '</span>' : '')
+    + '</div>');
+  if (p.operation) l.push('<p style="margin-bottom:8px;">' + esc(p.operation) + '</p>');
+  // ALERTES ROUGES — en tete, impossibles a rater
+  if (p.alertes_rouges && p.alertes_rouges.length) {
+    l.push('<div style="background:#b91c1c;color:#fff;border-radius:8px;padding:10px 12px;margin-bottom:10px;">'
+      + '<div style="font-weight:800;margin-bottom:6px;">&#9888;&#65039; ALERTES CRUCIALES — A NE PAS RATER</div>'
+      + p.alertes_rouges.map(function(a){ return '<div style="margin:3px 0;">&#128308; ' + esc(a) + '</div>'; }).join('')
+      + '</div>');
+  }
+  // CO-ACTIVITE (le risque n1)
+  if (p.coactivites && p.coactivites.length) {
+    l.push('<div style="font-weight:700;color:#1F4E79;margin:8px 0 4px;">&#128101; Co-activite (corps d\'etat simultanes)</div>');
+    l.push(p.coactivites.map(function(c){
+      var g = (c.gravite || '').toLowerCase();
+      var col = g === 'critique' ? '#b91c1c' : g === 'majeur' ? '#C07000' : '#555';
+      var bg  = g === 'critique' ? '#fde8e8' : g === 'majeur' ? '#FFF0CC' : '#f2f2f2';
+      return '<div style="background:' + bg + ';border-left:4px solid ' + col + ';padding:6px 10px;margin-bottom:5px;border-radius:4px;font-size:13px;">'
+        + '<strong style="color:' + col + ';">' + (c.gravite ? esc(c.gravite).toUpperCase() + ' — ' : '') + esc(c.periode || '') + '</strong>'
+        + (c.corps_etat ? '<br>' + esc(c.corps_etat) : '')
+        + (c.zone ? ' <em>(' + esc(c.zone) + ')</em>' : '')
+        + (c.risque ? '<br>&#8594; ' + esc(c.risque) : '') + '</div>';
+    }).join(''));
+  }
+  // PHASES DANGEREUSES
+  if (p.phases_dangereuses && p.phases_dangereuses.length) {
+    l.push('<div style="font-weight:700;color:#1F4E79;margin:8px 0 4px;">&#9760; Phases dangereuses</div>');
+    l.push(p.phases_dangereuses.map(function(d){
+      return '<div style="background:#fde8e8;padding:6px 10px;margin-bottom:5px;border-radius:4px;font-size:13px;">'
+        + '<strong>' + esc(d.phase || '') + (d.nature ? ' [' + esc(d.nature) + ']' : '') + '</strong>'
+        + (d.incompatibilite ? '<br>&#9888;&#65039; ' + esc(d.incompatibilite) : '')
+        + (d.mesure ? '<br>&#9989; ' + esc(d.mesure) : '') + '</div>';
+    }).join(''));
+  }
+  // PHASES (vue globale)
+  if (p.phases && p.phases.length) {
+    l.push('<details style="margin:8px 0;"><summary style="font-weight:700;color:#1F4E79;cursor:pointer;">&#128203; Phases du chantier (' + p.phases.length + ')</summary>');
+    l.push('<div style="max-height:200px;overflow-y:auto;margin-top:6px;">' + p.phases.map(function(ph){
+      var tag = ph.dangereuse ? ' &#9760;' : (ph.critique ? ' &#128308;' : '');
+      return '<div style="padding:4px 0;border-bottom:1px solid var(--border);font-size:13px;"><strong>' + esc(ph.nom || '') + '</strong>' + tag
+        + (ph.periode ? ' <span style="color:var(--text-light);">' + esc(ph.periode) + '</span>' : '')
+        + (ph.corps_etat ? '<br><span style="font-size:12px;">' + esc(ph.corps_etat) + '</span>' : '') + '</div>';
+    }).join('') + '</div></details>');
+  }
+  if (p.chemin_critique) l.push('<p style="font-size:13px;margin:4px 0;"><strong>Chemin critique :</strong> ' + esc(p.chemin_critique) + '</p>');
+  if (p.interferences) l.push('<p style="font-size:13px;margin:4px 0;"><strong>Interferences :</strong> ' + esc(p.interferences) + '</p>');
+  // RECOMMANDATIONS de coordination
+  if (p.recommandations && p.recommandations.length) {
+    l.push('<div style="font-weight:700;color:#1F4E79;margin:8px 0 4px;">&#128204; Recommandations coordination</div>');
+    l.push(p.recommandations.map(function(r){
+      return '<div style="background:var(--blue-xl);padding:6px 10px;margin-bottom:4px;border-radius:4px;font-size:13px;">'
+        + (r.type ? '<strong>' + esc(r.type) + ' :</strong> ' : '') + esc(r.detail || '') + '</div>';
+    }).join(''));
+  }
+  if (p.points_vigilance && p.points_vigilance.length) {
+    l.push('<div style="background:var(--orange);color:var(--orange-dark);padding:8px 10px;border-radius:6px;margin-top:8px;font-size:13px;">'
+      + '<strong>Points de vigilance :</strong><ul style="margin:4px 0 0 16px;padding:0;">'
+      + p.points_vigilance.map(function(v){ return '<li>' + esc(v) + '</li>'; }).join('') + '</ul></div>');
+  }
   return l.join('');
 }
 
@@ -2219,6 +2354,26 @@ function renderAnalyseCard(affaire) {
     + '<div class="doc-info"><div class="doc-title">Analyse des diagnostics' + dot + '</div>'
     + '<div class="doc-ref">Word genere a chaque depot — aussi au RJC</div></div></div>'
     + '<div class="doc-actions">' + btnApercu + btnTel + btnDetails + '</div></div>';
+}
+
+// Bouton bandeau "Planning" : montre la derniere analyse coordination du
+// planning ; si aucune, propose de deposer un planning a analyser.
+function voirAnalysePlanning() {
+  var affaire = currentAffaireObj();
+  if (!affaire) { showToast('Ouvrez une affaire', 'error'); return; }
+  var plannings = (affaire.rapportsAnalyses || []).filter(function(r){ return r.analyse && r.analyse.type_rapport === 'planning'; });
+  if (!plannings.length) {
+    if (confirm('Aucune analyse de planning pour cette affaire.\nDeposer un planning a analyser maintenant ?')) {
+      var inp = document.getElementById('piece-input-PLAN');
+      if (inp) inp.click();
+    }
+    return;
+  }
+  var dernier = plannings[plannings.length - 1];
+  openDocModal('📅 Analyse coordination — ' + String(dernier.fichier || '').replace(/</g, '&lt;'),
+    htmlAnalyse(dernier.analyse) + '<p style="font-size:12px;color:var(--text-light);margin-top:10px;">'
+    + plannings.length + ' analyse(s) de planning — la plus recente affichee. Deposez un nouveau planning pour reanalyser.</p>',
+    '🖨 Imprimer', function(){ imprimerAnalyses(affaire, dernier); });
 }
 
 function voirAnalysesRapports(affaireOpt) {
@@ -2297,6 +2452,61 @@ async function analyserPGCDepose(affaire, file) {
     afficherAnalyseModal(parsed, affaire.missionPhase || '', file.name, affaire);
   } catch (err) {
     showToast('Analyse du PGC impossible : ' + err.message, 'error');
+  }
+}
+
+// ── ANALYSE POUSSEE DU PLANNING (demande d'Alain 05/07) ─────────────────────
+// Le coeur du metier CSPS : reperer la CO-ACTIVITE (corps d'etat simultanes),
+// les PHASES DANGEREUSES (desamiantage, demolition, levage, terrassement) et
+// leurs incompatibilites, les interferences, et sortir des ALERTES ROUGES que
+// le coordonnateur ne doit pas rater. Vision globale phases + co-activite +
+// recommandations. Alimente le risque Coactivite (r24) et le phasage du PGC.
+async function analyserPlanning(affaire, file) {
+  try {
+    showToast('Analyse coordination du planning ' + file.name + '...');
+    var texte = (await extraireTexteFichier(file)).slice(0, 14000);
+    if (texte.trim().length < 30) { showToast('Planning illisible (image/scan ?) — depot conserve, analyse ignoree', 'error'); return; }
+    var prompt = 'Tu es coordonnateur SPS (CSPS). Voici le contenu d\'un PLANNING de travaux d\'une operation BTP (phases, dates, corps d\'etat) :\n\n'
+      + texte
+      + '\n\nAnalyse-le SOUS L\'ANGLE DE LA COORDINATION SPS et reponds UNIQUEMENT en JSON valide, sans markdown ni backtick :\n'
+      + '{"type_rapport":"planning","operation":null,"duree_totale":null,"chemin_critique":null,'
+      + '"phases":[{"nom":"...","periode":"...","corps_etat":"...","critique":false,"dangereuse":false}],'
+      + '"coactivites":[{"periode":"...","corps_etat":"...","zone":"...","risque":"...","gravite":"critique"}],'
+      + '"phases_dangereuses":[{"phase":"...","nature":"desamiantage","incompatibilite":"...","mesure":"..."}],'
+      + '"alertes_rouges":["..."],"interferences":null,"points_vigilance":["..."],'
+      + '"recommandations":[{"type":"inspection commune","detail":"..."}]}\n'
+      + 'REGLES : '
+      + 'phases = liste chronologique (nom, periode/dates, corps d\'etat concernes ; critique=true si sur le chemin critique, dangereuse=true si travaux a risques particuliers). '
+      + 'coactivites = periodes ou PLUSIEURS corps d\'etat interviennent EN MEME TEMPS (le risque n1 du CSPS) : precise la zone, le risque genere, et gravite=critique|majeur|mineur. '
+      + 'phases_dangereuses : nature parmi desamiantage|demolition|levage|terrassement|hauteur|reseaux|autre ; incompatibilite=avec quelles autres activites (ex "aucune co-activite pendant le desamiantage") ; mesure=disposition de coordination. '
+      + 'alertes_rouges = 2 a 5 points CRUCIAUX a ne pas rater (ex : desamiantage sans separation de phase, levage au-dessus de zones occupees, co-activite sur zone amiante). Formule chaque alerte en 1 phrase imperative. '
+      + 'recommandations : type parmi "inspection commune"|"CISSCT"|"reunion de coordination"|"separation de phase"|"PGC a mettre a jour" ; detail concret et date/phase concernee si possible. '
+      + 'Si le planning est trop pauvre en texte pour un point, mets null ou liste vide, ne l\'invente pas. Ecris en francais, concret, oriente terrain.';
+    var response = await fetch('/api/claude', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'llama-3.3-70b-versatile', max_tokens: 2200, messages: [{ role: 'user', content: prompt }] })
+    });
+    var result = await response.json();
+    if (!response.ok) throw new Error('Serveur ' + response.status);
+    var text = (result.content && result.content[0] && result.content[0].text) ? result.content[0].text
+      : (result.choices && result.choices[0] && result.choices[0].message ? result.choices[0].message.content : '{}');
+    var parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+    parsed.type_rapport = 'planning';
+    if (!affaire.rapportsAnalyses) affaire.rapportsAnalyses = [];
+    affaire.rapportsAnalyses.push({ id: 'rap-' + Date.now(), date: new Date().toISOString().split('T')[0], fichier: file.name, analyse: parsed });
+    // Co-activite detectee -> coche le risque particulier r24 (coactivite)
+    if ((parsed.coactivites && parsed.coactivites.length) || (parsed.phases_dangereuses && parsed.phases_dangereuses.length)) {
+      affaire.risques_pgc = affaire.risques_pgc || {};
+      affaire.risques_pgc.r24 = true;
+      window._risquesPGC = affaire.risques_pgc;
+    }
+    persistAffaires();
+    await attacherAnalyseAuRJC(affaire, parsed, file.name);
+    openDocModal('📅 Analyse coordination — ' + file.name, htmlAnalyse(parsed)
+      + '<p style="font-size:12px;color:var(--text-light);margin-top:10px;">Analyse assistee par IA — a verifier et valider. La co-activite a ete cochee dans les risques particuliers de l\'affaire.</p>',
+      '🖨 Imprimer', function(){ imprimerAnalyses(affaire, { fichier: file.name, analyse: parsed }); });
+  } catch (err) {
+    showToast('Analyse du planning impossible : ' + err.message, 'error');
   }
 }
 
