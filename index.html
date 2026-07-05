@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- CSPS17 index.html - v2.25 - 05/07/2026 - Repertoire du chantier (tel/mail cliquables) + envoi mail avec selecteur de destinataires a cocher (Vous + MOA + MOE + entreprises) -->
+<!-- CSPS17 index.html - v2.26 - 05/07/2026 - FIX CRITIQUE : apostrophe non echappee dans le correcteur d'elisions (v2.25) cassait tout le script (plus d'affaires affichees) -->
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
@@ -636,7 +636,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.25</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.26</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -2308,7 +2308,7 @@ function corrigerElisions(s) {
   if (typeof s !== 'string') return s;
   var C = 'bcdfgjklmnpqrstvwxzçBCDFGJKLMNPQRSTVWXZÇ';
   var map = { d: 'de', n: 'ne', j: 'je', m: 'me', t: 'te', s: 'se', c: 'ce', qu: 'que' };
-  var re = new RegExp('\\b(qu|d|n|j|m|t|s|c)['’]([' + C + '])', 'gi');
+  var re = new RegExp('\\b(qu|d|n|j|m|t|s|c)[\\u0027\\u2019]([' + C + '])', 'gi');
   return s.replace(re, function(m, p, cons){
     var repl = map[p.toLowerCase()] || p;
     // conserve la casse initiale (Majuscule si le mot d'origine commencait par une majuscule)
