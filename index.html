@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- CSPS17 index.html - v2.24 - 05/07/2026 - Correcteur d'elisions sur les analyses IA (d'personnels -> de personnel) + modales X visible + defilement interne -->
+<!-- CSPS17 index.html - v2.25 - 05/07/2026 - Repertoire du chantier (tel/mail cliquables) + envoi mail avec selecteur de destinataires a cocher (Vous + MOA + MOE + entreprises) -->
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
@@ -636,7 +636,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.24</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.25</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -692,6 +692,7 @@
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
           <button class="btn btn-outline btn-sm" onclick="saveAffaire()">&#128190; Sauvegarder</button>
+          <button class="btn btn-outline btn-sm" onclick="ouvrirRepertoire()" title="Repertoire du chantier : telephones et mails des intervenants — le numero se compose direct sur mobile">&#128222; Repertoire</button>
           <button class="btn btn-outline btn-sm" onclick="voirAnalysesRapports()" title="Revoir toutes les analyses IA des diagnostics de l'affaire — pour ne rien rater avant une decision (archivage, generation PGC...)">&#128300; Analyse</button>
           <button class="btn btn-outline btn-sm" onclick="voirAnalysePlanning()" title="Analyse coordination du planning : co-activite, phases dangereuses, alertes cruciales">&#128197; Planning</button>
           <button class="btn btn-outline btn-sm" onclick="archiverAffaireCourante()" title="Fin de mission (DIUO rendu) : ZIP complet a poser sur un support externe (conservation 5 ans), puis purge en ligne — seuls numero, nom et adresse restent en memoire">&#128230; Archiver</button>
@@ -1521,16 +1522,44 @@ async function envoyerDocMoiCore(affaire, entryId, opts) {
   opts = opts || {};
   var e = affaire && affaire.rjc ? affaire.rjc.find(function(x){ return x.id === entryId; }) : null;
   if (!e || (!e.fichierPath && !e.fichierData)) { showToast('Pas de fichier attache a cette ligne', 'error'); return; }
-  var supp = '';
-  if (!opts.auto) {
-    // Suggestion : les emails des entreprises de l'affaire (modifiable).
-    var suggestion = (affaire.entreprises || [])
-      .map(function(en){ return en && en.mail ? String(en.mail).trim() : ''; })
-      .filter(Boolean).join(', ');
-    supp = prompt('Envoyer aussi a (emails separes par des virgules).\nVide = seulement votre boite (' + 'sauvegarde). Annuler = ne rien envoyer.', suggestion);
-    if (supp === null) return; // annule par l'utilisateur
-    supp = supp.trim();
+  // Envoi AUTO (IC/CR a la generation) : silencieux, seulement dans votre boite.
+  if (opts.auto) { return envoyerDocReel(affaire, e, ''); }
+  // Envoi MANUEL : s\u00c3\u00a9lecteur de destinataires a cocher (demande d'Alain 05/07).
+  ouvrirEnvoiDoc(affaire, e);
+}
+
+// S\u00e9lecteur de destinataires : Vous (toujours) + MOA + MOE + entreprises, tout
+// coche par defaut ; on decoche les non-concernes et on envoie.
+function ouvrirEnvoiDoc(affaire, e) {
+  var moa = affaire.moa || {}, moe = affaire.moe || {};
+  var contacts = [];
+  if (moa.mail) contacts.push({ label: 'MOA \u2014 ' + (moa.nom || moa.contact || ''), mail: String(moa.mail).trim() });
+  if (moe.mail) contacts.push({ label: 'MOE \u2014 ' + (moe.nom || moe.contact || ''), mail: String(moe.mail).trim() });
+  (affaire.entreprises || []).forEach(function(en){
+    if (en && en.mail) contacts.push({ label: (en.nom || 'Entreprise') + (en.lot ? ' (' + en.lot + ')' : ''), mail: String(en.mail).trim() });
+  });
+  var html = '<p style="font-size:13px;color:var(--text-light);margin-bottom:8px;">Document : <strong>' + escHtml(e.fichierNom || e.ref || '') + '</strong></p>'
+    + '<label style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:14px;opacity:0.7;"><input type="checkbox" checked disabled> Vous (copie archive) \u2014 toujours envoyee</label>';
+  if (!contacts.length) {
+    html += '<p style="font-size:13px;color:var(--warn);margin-top:6px;">Aucun email d\'intervenant renseigne (onglet Intervenants). Le document partira seulement dans votre boite.</p>';
+  } else {
+    html += '<div style="font-weight:700;font-size:12px;color:var(--blue-dark);margin:8px 0 4px;">Envoyer aussi a (decochez les non-concernes) :</div>'
+      + contacts.map(function(c){
+        return '<label style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;font-size:14px;border-bottom:1px solid var(--border);cursor:pointer;">'
+          + '<input type="checkbox" class="envoi-dest" data-mail="' + escHtml(c.mail) + '" checked style="margin-top:3px;"> '
+          + '<span>' + escHtml(c.label) + '<br><span style="font-size:12px;color:var(--text-light);">' + escHtml(c.mail) + '</span></span></label>';
+      }).join('');
   }
+  openDocModal('\ud83d\udce7 Envoyer le document', html, '\u2709 Envoyer', function(){
+    var checked = Array.prototype.slice.call(document.querySelectorAll('#modal-body input.envoi-dest:checked'));
+    var supp = checked.map(function(cb){ return cb.getAttribute('data-mail'); }).join(',');
+    envoyerDocReel(affaire, e, supp);
+  });
+}
+
+// Envoi reel vers /api/envoyer-doc (Vous + destinataires supplementaires).
+async function envoyerDocReel(affaire, e, supp) {
+  supp = (supp || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean).join(',');
   showToast(supp ? 'Envoi (vous + ' + supp.split(',').length + ' destinataire(s))...' : 'Envoi vers votre boite mail...');
   try {
     var res = await fetch('/api/envoyer-doc', {
@@ -1549,7 +1578,7 @@ async function envoyerDocMoiCore(affaire, entryId, opts) {
     var out = await res.json();
     if (!res.ok || !out.ok) throw new Error(out.error || ('serveur ' + res.status));
     showToast(supp ? 'Envoye : vous + ' + supp + ' \u2709' : 'Envoye dans votre boite mail \u2709', 'success');
-    // Trace RJC de l'envoi a un tiers (utile en cas de litige sur la diffusion)
+    // Trace RJC de la diffusion a des tiers (utile en cas de litige)
     if (supp && affaire.rjc) {
       e.diffusion = (e.diffusion ? e.diffusion + ' ; ' : '') + new Date().toISOString().split('T')[0] + ' \u2192 ' + supp;
       persistAffaires();
@@ -1560,6 +1589,41 @@ async function envoyerDocMoiCore(affaire, entryId, opts) {
 }
 function envoyerDocMoi(entryId) { envoyerDocMoiCore(currentAffaireObj(), entryId); }
 function envoyerDocMoiTerrain(entryId) { envoyerDocMoiCore(terrainAffaire, entryId); }
+
+// \u2500\u2500 REPERTOIRE DU CHANTIER (demande d'Alain 05/07) : contacts des intervenants
+// avec telephone et mail cliquables (sur mobile, le numero compose direct).
+function ouvrirRepertoire() {
+  var affaire = currentAffaireObj() || (typeof terrainAffaire !== 'undefined' ? terrainAffaire : null);
+  if (!affaire) { showToast('Ouvrez une affaire', 'error'); return; }
+  var rows = [];
+  function add(role, nom, tel, mail, telFixe) {
+    if (!(nom || tel || mail)) return;
+    rows.push({ role: role, nom: nom || '', tel: tel || '', mail: mail || '', telFixe: telFixe || '' });
+  }
+  var moa = affaire.moa || {}, moe = affaire.moe || {}, cspsc = affaire.cspsc || {}, cspsr = affaire.cspsr || {};
+  add('Maitre d\'ouvrage', moa.contact || moa.nom, moa.tel, moa.mail);
+  add('Maitre d\'oeuvre', moe.contact || moe.nom, moe.tel, moe.mail);
+  add('CSPS Conception', cspsc.nom, cspsc.tel, cspsc.mail);
+  add('CSPS Realisation', cspsr.nom, cspsr.tel, cspsr.mail);
+  (affaire.entreprises || []).forEach(function(en){
+    add((en.lot || en.type || 'Entreprise') + (en.nom ? ' \u2014 ' + en.nom : ''), en.contact, en.tel, en.mail, en.telFixe);
+  });
+  if (!rows.length) {
+    openDocModal('\ud83d\udcc7 R\u00e9pertoire', '<p style="font-size:13px;color:var(--text-light);">Aucun contact renseigne \u2014 remplissez les intervenants (onglet Intervenants).</p>', null, null);
+    return;
+  }
+  function telLink(t){ var n = String(t).replace(/[^0-9+]/g, ''); return n ? '<a href="tel:' + n + '" style="color:var(--blue-mid);text-decoration:none;font-weight:600;">' + escHtml(t) + '</a>' : ''; }
+  function mailLink(m){ return m ? '<a href="mailto:' + escHtml(m) + '" style="color:var(--blue-mid);text-decoration:none;">' + escHtml(m) + '</a>' : ''; }
+  var html = '<div style="text-align:left;">' + rows.map(function(r){
+    return '<div style="padding:8px 0;border-bottom:1px solid var(--border);">'
+      + '<div style="font-weight:700;font-size:14px;">' + escHtml(r.nom || r.role) + '</div>'
+      + (r.nom ? '<div style="font-size:12px;color:var(--text-light);">' + escHtml(r.role) + '</div>' : '')
+      + (r.tel || r.telFixe ? '<div style="font-size:15px;margin-top:3px;">&#128222; ' + telLink(r.tel) + (r.telFixe ? ' &middot; ' + telLink(r.telFixe) : '') + '</div>' : '')
+      + (r.mail ? '<div style="font-size:13px;">&#9993; ' + mailLink(r.mail) + '</div>' : '')
+      + '</div>';
+  }).join('') + '</div>';
+  openDocModal('\ud83d\udcc7 R\u00e9pertoire \u2014 ' + (affaire.num || ''), html, null, null);
+}
 
 // Envoi du RJC complet par email (ex: sur demande de l'Inspection du Travail, sur le
 // terrain). Le serveur (server.js /api/envoyer-rjc) joint tous les fichiers deja
