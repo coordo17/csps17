@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- CSPS17 index.html - v2.17 - 05/07/2026 - Bouton Inserer sur chaque document : rattacher un doc realise hors application (date reelle, trace RJC) -->
+<!-- CSPS17 index.html - v2.18 - 05/07/2026 - Archivage fin de mission (ZIP externe 5 ans + purge + stub Affaires sorties) + numerotation sans trou + fix resurrection apres suppression -->
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
@@ -624,7 +624,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.17</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.18</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -680,6 +680,7 @@
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
           <button class="btn btn-outline btn-sm" onclick="saveAffaire()">&#128190; Sauvegarder</button>
+          <button class="btn btn-outline btn-sm" onclick="archiverAffaireCourante()" title="Fin de mission (DIUO rendu) : ZIP complet a poser sur un support externe (conservation 5 ans), puis purge en ligne — seuls numero, nom et adresse restent en memoire">&#128230; Archiver</button>
           <button class="btn btn-success" onclick="generateDocs()">&#9889; Generer les documents</button>
         </div>
       </div>
@@ -1182,11 +1183,21 @@ function switchTab(tab) {
 function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
 function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); }
 
+// Numerotation SANS TROU ni collision (choix d'Alain 05/07) : on prend le plus
+// petit numero LIBRE de l'annee. Une affaire supprimee (mauvaise manip) libere
+// son numero pour la suivante ; une affaire ARCHIVEE garde son numero a vie
+// (le stub reste dans la liste et reserve le numero).
 function genNumAffaire() {
   var year = new Date().getFullYear();
-  var existing = affaires.filter(function(a){ return a.num && a.num.startsWith('CSPS-' + year); });
-  var n = existing.length + 1;
-  return 'CSPS-' + year + '-' + String(n).padStart(4,'0');
+  var pris = {};
+  affaires.forEach(function(a){
+    if (!a || !a.num) return;
+    var m = String(a.num).match(new RegExp('^CSPS-' + year + '-(\\d+)$'));
+    if (m) pris[parseInt(m[1], 10)] = true;
+  });
+  var n = 1;
+  while (pris[n]) n++;
+  return 'CSPS-' + year + '-' + String(n).padStart(4, '0');
 }
 
 function showNewAffaire() {
@@ -1564,6 +1575,7 @@ async function envoyerRJCEmail(affaire, destinataire) {
 function loadAffaire(id) {
   var a = affaires.find(function(x){ return x.id === id; });
   if (!a) return;
+  if (a.archive) { infoAffaireArchivee(id); return; } // stub archive : lecture seule
   currentAffaireId = id;
   currentCat = a.cat;
   document.getElementById('num-affaire').value = a.num || '';
@@ -1681,7 +1693,7 @@ function renderDashboard() {
     container.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-light);">Aucune affaire pour le moment.</div>';
     return;
   }
-  var rows = affaires.map(function(a){ return { a: a, info: calculerAlerteAffaire(a) }; });
+  var rows = affaires.filter(function(a){ return !a.archive; }).map(function(a){ return { a: a, info: calculerAlerteAffaire(a) }; });
   var ordre = { urgent: 0, attention: 1, ok: 2 };
   rows.sort(function(x,y){ return ordre[x.info.niveau] - ordre[y.info.niveau]; });
 
@@ -1728,11 +1740,13 @@ function renderDashboard() {
 
 function renderAffaireList() {
   var list = document.getElementById('affaire-list');
-  if (!affaires.length) {
+  var actives = affaires.filter(function(a){ return !a.archive; });
+  var archivees = affaires.filter(function(a){ return a.archive; });
+  if (!actives.length && !archivees.length) {
     list.innerHTML = '<div style="padding:16px;font-size:12px;color:var(--text-light);text-align:center;">Aucune affaire</div>';
     return;
   }
-  list.innerHTML = affaires.slice().reverse().map(function(a){
+  var html = actives.slice().reverse().map(function(a){
     return '<div class="affaire-item" data-id="' + a.id + '">'
       + '<button class="btn-remove-ent" title="Supprimer cette affaire" onclick="deleteAffaire(event,\'' + a.id + '\')" style="flex:0 0 auto;">x</button>'
       + '<div style="flex:1;min-width:0;cursor:pointer;" onclick="loadAffaire(\'' + a.id + '\')">'
@@ -1741,17 +1755,158 @@ function renderAffaireList() {
       + (a.cat ? '<span class="cat-badge cat-' + a.cat + '">Cat.' + a.cat + '</span>' : '')
       + '</div>';
   }).join('');
+  // Affaires sorties (archivees) : memoire visuelle legere — numero, nom,
+  // adresse (choix d'Alain 05/07). Numero reserve a vie, dossier complet
+  // dans le ZIP d'archive sur support externe.
+  if (archivees.length) {
+    html += '<div class="sidebar-label" style="margin-top:16px;">Affaires sorties</div>';
+    html += archivees.slice().reverse().map(function(a){
+      var c = a.chantier || {};
+      return '<div class="affaire-item" style="opacity:0.65;" data-id="' + a.id + '" onclick="infoAffaireArchivee(\'' + a.id + '\')" title="Archivee le ' + formatDateFR(a.dateArchivage || '') + ' — cliquer pour le detail">'
+        + '<div style="flex:1;min-width:0;cursor:pointer;">'
+        + '<div class="affaire-num">&#128230; ' + (a.num || '-') + '</div>'
+        + '<div class="affaire-name">' + (c.nom || 'Sans nom') + '</div>'
+        + '<div style="font-size:10px;color:var(--text-light);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (c.adresse || '') + '</div></div>'
+        + '</div>';
+    }).join('');
+  }
+  list.innerHTML = html;
+}
+
+function infoAffaireArchivee(id) {
+  var a = affaires.find(function(x){ return x.id === id; });
+  if (!a) return;
+  var c = a.chantier || {};
+  openDocModal('📦 ' + (a.num || ''),
+    '<p><strong>' + (c.nom || '') + '</strong><br>' + (c.adresse || '') + '</p>'
+    + '<p style="margin-top:8px;">Archivée le <strong>' + formatDateFR(a.dateArchivage || '') + '</strong>'
+    + (a.archiveFichier ? '<br>Fichier d\'archive : <strong>' + a.archiveFichier + '</strong> (sur votre support externe)' : '') + '</p>'
+    + '<p style="margin-top:8px;font-size:12px;color:var(--text-light);">Conservation légale : 5 ans après réception de l\'ouvrage. Le numéro d\'affaire reste réservé. '
+    + 'Pour réactiver l\'affaire complète : Sauvegardes → Importer, avec le fichier affaire.json contenu dans le ZIP d\'archive.</p>',
+    null, null);
 }
 
 function deleteAffaire(e, id) {
   e.stopPropagation();
   var a = affaires.find(function(x){ return x.id === id; });
+  if (a && a.archive) { showToast('Une affaire archivee ne se supprime pas (numero reserve 5 ans)', 'error'); return; }
   var label = (a && a.chantier && a.chantier.nom) ? a.chantier.nom : (a && a.num) || 'cette affaire';
-  if (!confirm('Supprimer definitivement "' + label + '" ? Cette action est irreversible.')) return;
+  if (!confirm('Supprimer definitivement "' + label + '" ?\nSon numero sera reutilise par la prochaine affaire creee.\nNe supprimez JAMAIS une affaire dont des documents ont deja ete diffuses aux intervenants.')) return;
   affaires = affaires.filter(function(x){ return x.id !== id; });
   localStorage.setItem('csps17_affaires', JSON.stringify(affaires));
+  pousserVersServeur(); // sinon l'affaire supprimee ressuscite a la prochaine synchro (bug corrige 05/07)
   renderAffaireList();
-  showToast('Affaire supprimee', 'success');
+  showToast('Affaire supprimee — numero libere pour la prochaine', 'success');
+}
+
+// ============================================================================
+// ARCHIVAGE FIN DE MISSION (demande d'Alain 05/07) — conservation 5 ans.
+// 1) ZIP complet telecharge : affaire.json + INDEX_RJC.txt lisible + tous les
+//    fichiers du registre, numerotes chronologiquement. A poser sur un support
+//    EXTERNE (disque dur, cle USB...).
+// 2) Apres confirmation explicite ("mon ZIP est en securite"), purge des
+//    fichiers en ligne (Supabase) et remplacement de l'affaire par un stub
+//    leger : numero (reserve a vie), nom, adresse, date d'archivage.
+// ============================================================================
+async function archiverAffaireCourante() {
+  var a = currentAffaireObj();
+  if (!a) { showToast('Ouvrez (et sauvegardez) l\'affaire a archiver', 'error'); return; }
+  if (a.archive) { showToast('Cette affaire est deja archivee', 'error'); return; }
+  var c = a.chantier || {};
+  if (!confirm('Archiver "' + (c.nom || a.num) + '" (fin de mission) ?\n\n'
+    + '1) Un ZIP complet (donnees + tous les fichiers du registre) va etre telecharge : pose-le sur ton support externe.\n'
+    + '2) Ensuite, apres TA confirmation, les fichiers en ligne seront supprimes et l\'affaire passera en "Affaires sorties" (numero, nom, adresse conserves).')) return;
+  showToast('Construction de l\'archive... (peut prendre un moment selon les fichiers)');
+  try {
+    var zip = new PizZip();
+    zip.file('affaire.json', JSON.stringify(a, null, 2));
+    var entries = (a.rjc || []).slice().sort(function(x, y){ return (x.date || '').localeCompare(y.date || ''); });
+    var index = [];
+    index.push('ARCHIVE CSPS17 — ' + (a.num || '') + ' — ' + (c.nom || ''));
+    index.push((c.adresse || '') + ' — Categorie ' + (a.cat || '?'));
+    index.push('Archivee le ' + new Date().toLocaleDateString('fr-FR') + ' par Alain SUZANNE (CSPS17)');
+    index.push('Conservation legale : 5 ans apres reception de l\'ouvrage.');
+    index.push('');
+    index.push('REGISTRE JOURNAL — ' + entries.length + ' entree(s) :');
+    var nbFichiers = 0, manquants = [];
+    for (var i = 0; i < entries.length; i++) {
+      var e = entries[i];
+      var ligne = (i + 1) + '. ' + formatDateFR(e.date) + ' — ' + (e.nature || '') + (e.objet && e.objet !== e.nature ? ' — ' + e.objet : '');
+      if (e.fichierPath) {
+        try {
+          var r = await fetch('/api/rjc-file?path=' + encodeURIComponent(e.fichierPath));
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          var ab = await r.arrayBuffer();
+          var nomF = String(i + 1).padStart(2, '0') + '_' + (e.date || '') + '_' + nomFichierSurClient(e.fichierNom || 'document');
+          zip.file('fichiers/' + nomF, ab);
+          nbFichiers++;
+          ligne += '  [fichiers/' + nomF + ']';
+        } catch (errF) {
+          manquants.push(e.fichierNom || e.fichierPath);
+          ligne += '  [FICHIER EN LIGNE INTROUVABLE]';
+        }
+      } else {
+        ligne += '  [sans fichier]';
+      }
+      index.push(ligne);
+    }
+    zip.file('INDEX_RJC.txt', index.join('\r\n'));
+    var nomZip = 'CSPS17_ARCHIVE_' + (a.num || 'affaire').replace(/[^A-Za-z0-9_-]/g, '-') + '_' + new Date().toISOString().split('T')[0].replace(/-/g, '') + '.zip';
+    var blob = new Blob([zip.generate({ type: 'arraybuffer', compression: 'DEFLATE' })], { type: 'application/zip' });
+    var url = URL.createObjectURL(blob);
+    var lien = document.createElement('a');
+    lien.href = url; lien.download = nomZip;
+    document.body.appendChild(lien);
+    lien.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+    setTimeout(function(){ document.body.removeChild(lien); URL.revokeObjectURL(url); }, 2000);
+    var avert = manquants.length
+      ? '<p style="background:var(--orange);color:var(--orange-dark);padding:8px;border-radius:6px;"><strong>Attention :</strong> ' + manquants.length + ' fichier(s) introuvable(s) en ligne (absent(s) du ZIP) : ' + manquants.join(', ') + '</p>'
+      : '';
+    openDocModal('📦 Archive téléchargée : ' + nomZip,
+      '<p><strong>' + nbFichiers + ' fichier(s)</strong> du registre + affaire.json + index lisible.</p>' + avert
+      + '<p style="margin-top:8px;"><strong>Vérifie MAINTENANT ta copie :</strong> ouvre le ZIP depuis ton support externe (pas depuis Téléchargements) et contrôle qu\'il s\'ouvre bien.</p>'
+      + '<p style="margin-top:8px;color:var(--danger);">En confirmant : les fichiers en ligne seront définitivement supprimés et l\'affaire passera en « Affaires sorties » (numéro, nom et adresse conservés). Ton ZIP devient l\'UNIQUE copie complète.</p>',
+      'Ma copie est en sécurité — purger et archiver',
+      function(){ purgerEtArchiver(a.id, nomZip); });
+  } catch (err) {
+    showToast('Erreur archive : ' + err.message, 'error');
+  }
+}
+
+function nomFichierSurClient(str) {
+  return String(str || 'document').replace(/[\\/:*?"<>|]/g, '-').trim() || 'document';
+}
+
+async function purgerEtArchiver(affaireId, nomZip) {
+  var idx = affaires.findIndex(function(x){ return x.id === affaireId; });
+  if (idx < 0) return;
+  var a = affaires[idx];
+  showToast('Purge des fichiers en ligne...');
+  var entries = (a.rjc || []).filter(function(e){ return e.fichierPath; });
+  var echecs = 0;
+  for (var i = 0; i < entries.length; i++) {
+    try {
+      var r = await fetch('/api/rjc-delete-file', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: entries[i].fichierPath }) });
+      if (!r.ok) echecs++;
+    } catch (e) { echecs++; }
+  }
+  var c = a.chantier || {};
+  affaires[idx] = {
+    id: a.id,
+    num: a.num,
+    archive: true,
+    cat: a.cat || null,
+    chantier: { nom: c.nom || '', adresse: c.adresse || '' },
+    dateArchivage: new Date().toISOString().split('T')[0],
+    archiveFichier: nomZip,
+    savedAt: new Date().toISOString(),
+  };
+  localStorage.setItem('csps17_affaires', JSON.stringify(affaires));
+  pousserVersServeur();
+  currentAffaireId = null;
+  renderAffaireList();
+  showPage('dashboard');
+  showToast('Affaire archivee' + (echecs ? ' (' + echecs + ' fichier(s) en ligne non supprime(s))' : ' — fichiers en ligne purges'), echecs ? 'error' : 'success');
 }
 
 // ============================================================================
@@ -4415,7 +4570,7 @@ function populateTerrainSelect() {
   var sel = document.getElementById('terrain-select');
   if (!sel) return;
   sel.innerHTML = '<option value="">-- Choisir une affaire --</option>';
-  affaires.slice().reverse().forEach(function(a) {
+  affaires.filter(function(a){ return !a.archive; }).slice().reverse().forEach(function(a) {
     var opt = document.createElement('option');
     opt.value = a.id;
     opt.textContent = (a.num || '') + ' — ' + ((a.chantier && a.chantier.nom) ? a.chantier.nom : 'Sans nom');
