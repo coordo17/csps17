@@ -2088,8 +2088,58 @@ async function deposerPieceDossier(affaire, file, type) {
     if (type === 'DIAG') await analyserRapportDiag(affaire, file);
     else if (type === 'PGC') await analyserPGCDepose(affaire, file);
     else if (type === 'PLAN') await analyserPlanning(affaire, file);
+    else if (type === 'CONTRAT') await analyserContratDepose(affaire, file);
   } catch (err) {
     showToast('Erreur depot : ' + err.message, 'error');
+  }
+}
+
+// Extraction IA au depot d'un CONTRAT de coordination : identifie le
+// coordonnateur SPS CO-TRAITANT qui N'EST PAS l'utilisateur (SUZANNE Alain /
+// CSPS17) et pre-remplit la carte "CSPS Conception" — sans ecraser une saisie
+// existante. L'IA propose, le CSPS valide (regle : c'est lui le responsable).
+async function analyserContratDepose(affaire, file) {
+  try {
+    showToast('Lecture du contrat (IA)...');
+    var texte = (await extraireTexteFichier(file)).slice(0, 10000);
+    var ratioInvalide = (texte.match(/�/g) || []).length / Math.max(texte.length, 1);
+    if (ratioInvalide > 0.05 || texte.trim().length < 30) {
+      showToast('Contrat illisible (scan/image ?) — depot conserve, extraction ignoree', 'error');
+      return;
+    }
+    var prompt = 'Voici un contrat ou une convention de coordination SPS (Securite et Protection de la Sante) sur une operation BTP :\n\n' + texte + '\n\nL\'utilisateur est le coordonnateur SUZANNE Alain (CSPS17, coordo17sps@gmail.com). Ce contrat peut etre une COTRAITANCE avec un ou plusieurs AUTRES coordonnateurs SPS. Identifie le coordonnateur SPS CO-TRAITANT qui N\'EST PAS SUZANNE Alain / CSPS17. Reponds UNIQUEMENT en JSON valide, sans markdown ni backtick :\n{"cotraitant":{"nom":null,"representant":null,"tel":null,"mail":null,"adresse":null,"siret":null}}\nnom=raison sociale du co-traitant coordonnateur (ex: EURL MC2 INGENIERIE). representant=personne physique qui le represente (ex: Frederic ROUYER MANDRON). tel=telephone si present. mail=email si present. adresse=adresse du siege. siret=numero SIRET ou RCS. Ne renvoie JAMAIS SUZANNE Alain ni CSPS17 comme cotraitant : c\'est l\'utilisateur lui-meme. Si aucun autre coordonnateur n\'est nomme, mets tous les champs a null. Met null pour tout champ non trouve.';
+    var response = await fetch('/api/claude', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'llama-3.3-70b-versatile', max_tokens: 500, messages: [{ role: 'user', content: prompt }] })
+    });
+    var result = await response.json();
+    if (!response.ok) throw new Error('Serveur (' + response.status + ')');
+    var text = '{}';
+    if (result.choices && result.choices[0] && result.choices[0].message && result.choices[0].message.content) text = result.choices[0].message.content;
+    else if (result.content && result.content[0] && result.content[0].text) text = result.content[0].text;
+    var parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+    var c = parsed.cotraitant || {};
+    if (!c.nom && !c.representant && !c.tel && !c.mail) {
+      showToast('Aucun co-coordonnateur distinct trouve dans le contrat', 'success');
+      return;
+    }
+    var nomEl = document.getElementById('cspsc-nom');
+    var telEl = document.getElementById('cspsc-tel');
+    var mailEl = document.getElementById('cspsc-mail');
+    var libelle = [c.nom, c.representant].filter(Boolean).join(' — ');
+    var rempli = [];
+    if (nomEl && !nomEl.value && libelle) { nomEl.value = libelle; rempli.push('nom'); }
+    if (telEl && !telEl.value && c.tel) { telEl.value = c.tel; rempli.push('tel'); }
+    if (mailEl && !mailEl.value && c.mail) { mailEl.value = c.mail; rempli.push('email'); }
+    if (rempli.length) {
+      try { if (typeof saveAffaire === 'function') saveAffaire(); } catch (eSave) {}
+      showToast('CSPS Conception pre-rempli depuis le contrat (a verifier) : ' + libelle, 'success');
+    } else {
+      showToast('CSPS Conception deja renseigne — contrat depose, rien ecrase', 'success');
+    }
+  } catch (err) {
+    showToast('Extraction contrat impossible : ' + err.message + ' — depot conserve', 'error');
   }
 }
 
