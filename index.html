@@ -636,7 +636,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.26</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.31</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -1606,7 +1606,11 @@ function ouvrirRepertoire() {
   add('Maitre d\'oeuvre', moe.contact || moe.nom, moe.tel, moe.mail);
   add('CSPS Conception', cspsc.nom, cspsc.tel, cspsc.mail);
   add('CSPS Realisation', cspsr.nom, cspsr.tel, cspsr.mail);
+  var moaKey = String(moa.nom || '').trim().toLowerCase();
   (affaire.entreprises || []).forEach(function(en){
+    // Ne pas relister le maitre d'ouvrage comme entreprise (il figure deja en haut) :
+    // evite le doublon MOA en debut ET en fin du repertoire.
+    if (moaKey && String(en.nom || '').trim().toLowerCase() === moaKey) return;
     add((en.lot || en.type || 'Entreprise') + (en.nom ? ' \u2014 ' + en.nom : ''), en.contact, en.tel, en.mail, en.telFixe);
   });
   if (!rows.length) {
