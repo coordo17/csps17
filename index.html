@@ -933,6 +933,7 @@
         <div id="pieces-section" style="display:none;margin-bottom:20px;">
           <div style="font-size:14px;font-weight:700;color:var(--blue-dark);margin-bottom:8px;">&#128194; Pieces du dossier <span style="font-weight:400;color:var(--text-light);font-size:12px;">(documents recus &mdash; chaque depot est trace au RJC)</span></div>
           <div class="docs-grid" id="pieces-grid" style="margin-top:0;"></div>
+          <input type="file" id="piece-input-CONTRAT" accept=".pdf,.docx" style="display:none;" onchange="handlePieceUpload(event,'CONTRAT')">
           <input type="file" id="piece-input-PGC" accept=".pdf,.docx" style="display:none;" onchange="handlePieceUpload(event,'PGC')">
           <input type="file" id="piece-input-DIAG" accept=".pdf,.docx" style="display:none;" multiple onchange="handlePieceUpload(event,'DIAG')">
           <input type="file" id="piece-input-PLAN" accept=".pdf,.docx" style="display:none;" onchange="handlePieceUpload(event,'PLAN')">
@@ -2018,6 +2019,7 @@ async function purgerEtArchiver(affaireId, nomZip) {
 // Pieces du dossier : documents RECUS (pas generes) rattaches a l'affaire.
 // Chaque depot cree une entree RJC datee (reception de piece — R.4532-38).
 var PIECES_DOSSIER = [
+  { ref: 'CONTRAT', title: 'Contrat de coordination SPS (MOA)', icon: '&#128220;', note: 'Contrat signe avec le maitre d\'ouvrage \u2014 ouvre le registre-journal (R.4532-38)' },
   { ref: 'PGC',  title: 'PGC \u2014 Plan General de Coordination', icon: '&#128216;', note: 'PGC recu / diffuse' },
   { ref: 'DIAG', title: 'Rapports & diagnostics', icon: '&#129514;', note: 'RAAT, CREP, geotech... — analyse IA au depot' },
   { ref: 'PLAN', title: 'Planning', icon: '&#128197;', note: 'Analyse coordination : co-activite, phases critiques, alertes' },
@@ -2063,6 +2065,7 @@ async function deposerPieceDossier(affaire, file, type) {
     var dataUrl = await blobToDataURL(file);
     var natureDepot = type === 'PGC' ? 'Reception PGC'
       : type === 'PLAN' ? 'Reception planning'
+      : type === 'CONTRAT' ? 'Contrat de coordination SPS (MOA)'
       : 'Reception rapport / diagnostic';
     var created = ajouterEntreeRJC(affaire, {
       date: new Date().toISOString().split('T')[0],
@@ -2830,6 +2833,8 @@ function renderDocsGrid() {
         : '';
       var dot = (p.ref === 'PGC')
         ? '<span class="doc-dot ' + (nb > 0 ? 'ok' : 'warn') + '" title="' + (nb > 0 ? 'PGC present au dossier' : 'Aucun PGC depose pour cette affaire') + '"></span>'
+        : (p.ref === 'CONTRAT')
+        ? '<span class="doc-dot ' + (nb > 0 ? 'ok' : 'warn') + '" title="' + (nb > 0 ? 'Contrat de coordination present au dossier' : 'Aucun contrat de coordination depose (ouvre le registre-journal, R.4532-38)') + '"></span>'
         : '';
       var btnTel = dernierF
         ? '<button class="btn btn-outline btn-sm" onclick="telechargerDernierDoc(\'' + p.ref + '\')" title="Derniere piece : ' + formatDateFR(dernierF.date) + '">&#11015; Telecharger</button>'
@@ -4310,7 +4315,7 @@ function buildTagsPGC(data) {
   };
 }
 
-async function generateDoc(ref) {
+async function generateDoc(ref, previewMode) {
   var data = collectFormData();
   // Fusionner avec les donnees terrain si disponibles
   if (typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire._visite) {
@@ -4338,7 +4343,7 @@ async function generateDoc(ref) {
   if (ref === 'FIC' && isCat3) refEffectif = 'FIC3';
   var fname = DOC_FILES[refEffectif] || DOC_FILES[ref];
   if (!fname) { showToast('Document inconnu : ' + ref, 'error'); return; }
-  showToast('Generation ' + ref + ' en cours...');
+  showToast(previewMode ? 'Apercu ' + ref + '...' : 'Generation ' + ref + ' en cours...');
   try {
     var url = 'https://raw.githubusercontent.com/coordo17/csps17/main/' + fname;
     var response = await fetch(url);
@@ -4405,6 +4410,9 @@ async function generateDoc(ref) {
       type: 'blob',
       mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     });
+    // Apercu : vue rapide du contenu a l'ecran (modal avec croix), sans telecharger
+    // ni tracer au RJC. Meme moteur que Generer, mais rendu HTML via mammoth.
+    if (previewMode) { await apercuDocxBlob(ref, out); return; }
     var blobUrl = URL.createObjectURL(out);
     var a = document.createElement('a');
     a.style.display = 'none';
@@ -4531,7 +4539,25 @@ async function generateDocs() {
   showToast(docs.length + ' documents generes !', 'success');
 }
 
-function previewDoc(ref) { showHistoriqueDoc(ref); }
+// Apercu = vision rapide du contenu du document dans un modal (croix pour fermer),
+// sans generer ni telecharger de Word. L'historique reste accessible via le badge.
+function previewDoc(ref) { generateDoc(ref, true); }
+async function apercuDocxBlob(ref, blob) {
+  try {
+    if (typeof mammoth === 'undefined') { showToast('Apercu indisponible (mammoth non charge)', 'error'); return; }
+    var ab = await blob.arrayBuffer();
+    var res = await mammoth.convertToHtml({ arrayBuffer: ab });
+    var corps = (res && res.value && res.value.trim())
+      ? res.value
+      : '<p style="color:var(--text-light);">Document vide ou non previsualisable.</p>';
+    var html = '<div style="font-size:13px;line-height:1.55;color:var(--text);max-width:100%;">'
+      + '<p style="font-size:12px;color:var(--text-light);margin-bottom:10px;">Apercu rapide &mdash; le document final se telecharge via <strong>Generer</strong>.</p>'
+      + corps + '</div>';
+    openDocModal('👁 Apercu — ' + (DOC_TITRES[ref] || ref), html, null, null);
+  } catch (err) {
+    showToast('Apercu impossible : ' + err.message, 'error');
+  }
+}
 
 function handleDragOver(e) {
   e.preventDefault();
