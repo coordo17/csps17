@@ -81,6 +81,30 @@ app.post('/api/claude', async (req, res) => {
   }
 });
 
+// Proxy annuaire officiel des entreprises (recherche-entreprises.api.gouv.fr).
+// Sert a rechercher/remplir ET a VERIFIER un SIRET fourni par une entreprise
+// (nom coherent ? entreprise active ou radiee ?) — utile avec la facturation
+// electronique. Public, sans cle. On passe par le serveur pour eviter tout CORS.
+app.get('/api/entreprise', (req, res) => {
+  const q = String((req.query || {}).q || '').trim();
+  if (!q) return res.status(400).json({ error: 'q manquant' });
+  const options = {
+    hostname: 'recherche-entreprises.api.gouv.fr',
+    path: '/search?page=1&per_page=5&q=' + encodeURIComponent(q),
+    method: 'GET',
+    headers: { 'Accept': 'application/json' },
+  };
+  const apiReq = https.request(options, (apiRes) => {
+    let data = '';
+    apiRes.on('data', (chunk) => { data += chunk; });
+    apiRes.on('end', () => {
+      res.status(apiRes.statusCode || 200).set('Content-Type', 'application/json').send(data);
+    });
+  });
+  apiReq.on('error', (err) => { res.status(502).json({ error: err.message }); });
+  apiReq.end();
+});
+
 // ============================================================================
 // Sauvegarde des affaires — Firestore (persistance reelle, survit aux
 // redemarrages/mises en veille de Render gratuit, contrairement a un fichier

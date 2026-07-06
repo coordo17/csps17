@@ -636,7 +636,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.31</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.32</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -1280,7 +1280,7 @@ function addEntreprise(type) {
   var div = document.createElement('div');
   div.className = 'entreprise-card';
   div.id = id;
-  var h = '<div class="entreprise-card-head" onclick="toggleEntCard(\''+id+'\')">'    + '<span>' + typeLabel + ' ' + entrepriseCount + '</span>'    + '<span class="ent-type-badge ' + typeBadgeClass + '">' + typeLabel + '</span>'    + '<button class="btn-remove-ent" onclick="removeEntreprise(event,\''+id+'\')">x</button>'    + '</div>'    + '<div class="entreprise-card-body" id="body-'+id+'">'    + '<input type="hidden" class="ent-type" value="'+type+'">'    + '<div class="form-row">'    + '<div class="field"><label>Raison sociale *</label><input type="text" class="ent-nom" placeholder="Ex : SAS Maconnerie Bretagne"></div>'    + '<div class="field"><label>Lot / Travaux confies</label><input type="text" class="ent-lot" placeholder="Ex : Gros oeuvre"></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Adresse</label><input type="text" class="ent-adresse" placeholder="Adresse complete"></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Tel portable</label><input type="tel" class="ent-tel" placeholder="06 xx xx xx xx"></div>'    + '<div class="field"><label>Tel fixe</label><input type="tel" class="ent-tel-fixe" placeholder="02 xx xx xx xx"></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Mail</label><input type="email" class="ent-mail" placeholder="contact@entreprise.fr"></div>'    + '<div class="field"><label>SIRET</label><input type="text" class="ent-siret" placeholder="000 000 000 00000"></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Signataire (nom + qualite)</label><input type="text" class="ent-contact" placeholder="Ex : COATMEUR Sebastien - Chef chantier"></div>'    + '<div class="field"><label>Effectif prevu</label><input type="number" class="ent-effectif" placeholder="Ex : 4" min="1"></div>'    + '</div>'    + '</div>';
+  var h = '<div class="entreprise-card-head" onclick="toggleEntCard(\''+id+'\')">'    + '<span>' + typeLabel + ' ' + entrepriseCount + '</span>'    + '<span class="ent-type-badge ' + typeBadgeClass + '">' + typeLabel + '</span>'    + '<button class="btn-remove-ent" onclick="removeEntreprise(event,\''+id+'\')">x</button>'    + '</div>'    + '<div class="entreprise-card-body" id="body-'+id+'">'    + '<input type="hidden" class="ent-type" value="'+type+'">'    + '<div class="form-row">'    + '<div class="field"><label>Raison sociale *</label><input type="text" class="ent-nom" placeholder="Ex : SAS Maconnerie Bretagne"></div>'    + '<div class="field"><label>Lot / Travaux confies</label><input type="text" class="ent-lot" placeholder="Ex : Gros oeuvre"></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Adresse</label><input type="text" class="ent-adresse" placeholder="Adresse complete"></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Tel portable</label><input type="tel" class="ent-tel" placeholder="06 xx xx xx xx"></div>'    + '<div class="field"><label>Tel fixe</label><input type="tel" class="ent-tel-fixe" placeholder="02 xx xx xx xx"></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Mail</label><input type="email" class="ent-mail" placeholder="contact@entreprise.fr"></div>'    + '<div class="field"><label>SIRET</label><input type="text" class="ent-siret" placeholder="000 000 000 00000"><button type="button" class="btn btn-outline btn-sm" style="margin-top:6px;width:100%;" onclick="verifierEntreprise(this)">&#128269; Verifier au registre officiel</button></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Signataire (nom + qualite)</label><input type="text" class="ent-contact" placeholder="Ex : COATMEUR Sebastien - Chef chantier"></div>'    + '<div class="field"><label>Effectif prevu</label><input type="number" class="ent-effectif" placeholder="Ex : 4" min="1"></div>'    + '</div>'    + '</div>';
   div.innerHTML = h;
   document.getElementById('entreprise-list').appendChild(div);
 }
@@ -1293,6 +1293,72 @@ function toggleEntCard(id) {
 function removeEntreprise(e, id) {
   e.stopPropagation();
   document.getElementById(id).remove();
+}
+
+// Verification d'une entreprise au registre officiel (annuaire des entreprises,
+// INSEE/RNE) via le proxy serveur /api/entreprise. Deux usages :
+//  - REMPLIR : on tape le SIRET (ou le nom), ca remplit raison sociale + adresse + SIRET.
+//  - VERIFIER : on controle que le SIRET fourni correspond bien a l'entreprise
+//    (nom coherent) et qu'elle est ACTIVE (pas cessee/radiee) -> alerte sinon.
+// Utile avec la facturation electronique : trace de controle face a la source officielle.
+function normNomEnt(s){
+  return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase()
+    .replace(/\b(SAS|SASU|SARL|EURL|SA|SCI|SNC|EI|EIRL|SELARL|SELAS|SCOP|GIE|ETS|ENTREPRISE)\b/g, '')
+    .replace(/[^A-Z0-9]/g, '');
+}
+async function verifierEntreprise(btn){
+  var card = btn.closest('.entreprise-card'); if(!card) return;
+  var elNom = card.querySelector('.ent-nom'), elAdr = card.querySelector('.ent-adresse'), elSiret = card.querySelector('.ent-siret');
+  var nom = elNom ? elNom.value.trim() : '';
+  var siretRaw = elSiret ? elSiret.value.replace(/\D/g, '') : '';
+  var q = siretRaw.length >= 9 ? siretRaw : nom;
+  if(!q){ showToast('Saisissez le SIRET ou le nom de l\'entreprise', 'error'); return; }
+  showToast('Recherche au registre officiel...');
+  try {
+    var r = await fetch('/api/entreprise?q=' + encodeURIComponent(q));
+    var j = await r.json();
+    var results = (j && j.results) || [];
+    if(!results.length){
+      openDocModal('🔍 Verification SIRET', '<div style="color:#b91c1c;font-weight:700;">🔴 Aucune entreprise trouvee au registre officiel pour "' + escHtml(q) + '".</div><p style="font-size:12px;color:var(--text-light);margin-top:8px;">A verifier aupres de l\'entreprise : un SIRET introuvable peut signaler une erreur de saisie ou une anomalie.</p>', null, null);
+      return;
+    }
+    var best = results[0];
+    if(siretRaw.length === 14){
+      var exact = results.find(function(e){ return (e.siege && e.siege.siret === siretRaw) || (e.matching_etablissements || []).some(function(m){ return m.siret === siretRaw; }); });
+      if(exact) best = exact;
+    }
+    var etab = (best.matching_etablissements || []).find(function(m){ return m.siret === siretRaw; }) || best.siege || {};
+    var raison = best.nom_raison_sociale || best.nom_complet || '';
+    var siretOff = etab.siret || (best.siege && best.siege.siret) || '';
+    var adrOff = etab.adresse || (best.siege && best.siege.adresse) || '';
+    var actif = (best.etat_administratif === 'A') && !best.date_fermeture && (etab.etat_administratif ? etab.etat_administratif === 'A' : true);
+    var d0 = (best.dirigeants && best.dirigeants[0]) || null;
+    var dir = d0 ? ((d0.prenoms || '') + ' ' + (d0.nom || '') + (d0.qualite ? ' (' + d0.qualite + ')' : '')).trim() : '';
+    var alertes = [];
+    if(!actif) alertes.push({ c: '#b91c1c', em: '🔴', t: 'Entreprise CESSEE / RADIEE au registre' + (best.date_fermeture ? ' (fermeture : ' + best.date_fermeture + ')' : '') + '.' });
+    if(siretRaw.length === 14 && siretOff && siretOff !== siretRaw) alertes.push({ c: '#b45309', em: '🟠', t: 'Le SIRET saisi ne correspond pas exactement a l\'etablissement trouve (' + siretOff + ').' });
+    if(nom && raison && normNomEnt(nom).indexOf(normNomEnt(raison)) < 0 && normNomEnt(raison).indexOf(normNomEnt(nom)) < 0) alertes.push({ c: '#b45309', em: '🟠', t: 'Le nom declare ("' + nom + '") ne correspond pas au registre ("' + raison + '").' });
+    var verdictHtml = alertes.length
+      ? alertes.map(function(a){ return '<div style="color:' + a.c + ';font-weight:700;margin-bottom:4px;">' + a.em + ' ' + escHtml(a.t) + '</div>'; }).join('')
+      : '<div style="color:#15803d;font-weight:700;">✅ Coherent : le SIRET correspond bien a cette entreprise, active au registre.</div>';
+    var infoHtml = '<div style="margin-top:10px;font-size:13px;line-height:1.6;text-align:left;">'
+      + '<div style="font-weight:700;color:var(--blue-dark);">Registre officiel :</div>'
+      + '<div>Raison sociale : ' + escHtml(raison || '-') + '</div>'
+      + '<div>SIRET (siege) : ' + escHtml(siretOff || '-') + '</div>'
+      + '<div>Adresse : ' + escHtml(adrOff || '-') + '</div>'
+      + (dir ? '<div>Dirigeant : ' + escHtml(dir) + '</div>' : '')
+      + '<div>Etat : ' + (actif ? 'Actif' : 'Cesse / Radie') + '</div>'
+      + '<div style="font-size:11px;color:var(--text-light);margin-top:8px;">Verifie le ' + formatDateFR(new Date().toISOString().split('T')[0]) + ' — annuaire des entreprises (INSEE / RNE). Controle factuel, ne vaut pas conseil juridique.</div>'
+      + '</div>';
+    openDocModal('🔍 Verification SIRET', verdictHtml + infoHtml, 'Remplir avec les donnees officielles', function(){
+      if(elNom && raison) elNom.value = raison;
+      if(elAdr && adrOff) elAdr.value = adrOff;
+      if(elSiret && siretOff) elSiret.value = siretOff;
+      showToast('Fiche remplie depuis le registre officiel (a valider)', 'success');
+    });
+  } catch(err){
+    showToast('Recherche indisponible : ' + err.message, 'error');
+  }
 }
 
 function collectFormData() {
