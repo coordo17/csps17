@@ -397,7 +397,16 @@ function dateFR(iso) {
 }
 
 function nomFichierSur(str, fallback) {
-  const s = (str || fallback || 'document').replace(/[\\/:*?"<>|]/g, '-').trim();
+  // Cle de stockage / nom de fichier SUR : on retire les accents et on remplace
+  // espaces + caracteres speciaux par "_". Supabase Storage refuse les cles
+  // non-ASCII (accents) : sans ca, un nom comme "...Ploneour signee.pdf" fait
+  // echouer le depot ET le telechargement (message rouge). Corrige le 06/07.
+  const s = String(str || fallback || 'document')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')     // enleve les accents
+    .replace(/[^A-Za-z0-9._-]+/g, '_')                    // espaces & speciaux -> _
+    .replace(/_+/g, '_')                                  // pas de doublons
+    .replace(/^[_.\-]+|[_.\-]+$/g, '')                    // rien d'inutile en bord
+    .trim();
   return s || fallback || 'document';
 }
 
