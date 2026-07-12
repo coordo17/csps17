@@ -636,7 +636,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.33</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.34</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -935,6 +935,7 @@
           <div class="docs-grid" id="pieces-grid" style="margin-top:0;"></div>
           <input type="file" id="piece-input-CONTRAT" accept=".pdf,.docx" style="display:none;" onchange="handlePieceUpload(event,'CONTRAT')">
           <input type="file" id="piece-input-PGC" accept=".pdf,.docx" style="display:none;" onchange="handlePieceUpload(event,'PGC')">
+          <input type="file" id="piece-input-ICR" accept=".pdf,.docx" style="display:none;" multiple onchange="handlePieceUpload(event,'ICR')">
           <input type="file" id="piece-input-DIAG" accept=".pdf,.docx" style="display:none;" multiple onchange="handlePieceUpload(event,'DIAG')">
           <input type="file" id="piece-input-PLAN" accept=".pdf,.docx" style="display:none;" onchange="handlePieceUpload(event,'PLAN')">
           <input type="file" id="insert-doc-input" accept=".pdf,.docx,.doc,.jpg,.jpeg,.png" style="display:none;" multiple onchange="handleInsertDoc(event)">
@@ -2091,6 +2092,7 @@ async function purgerEtArchiver(affaireId, nomZip) {
 var PIECES_DOSSIER = [
   { ref: 'CONTRAT', title: 'Contrat de coordination SPS (MOA)', icon: '&#128220;', note: 'Contrat signe avec le maitre d\'ouvrage \u2014 ouvre le registre-journal (R.4532-38)' },
   { ref: 'PGC',  title: 'PGC \u2014 Plan General de Coordination', icon: '&#128216;', note: 'PGC recu / diffuse' },
+  { ref: 'ICR',  title: 'Inspection commune realisee', icon: '&#128221;', note: 'IC signee deposee \u2014 analyse au depot (R.4532-14 a 19)' },
   { ref: 'DIAG', title: 'Rapports & diagnostics', icon: '&#129514;', note: 'RAAT, CREP, geotech... — analyse IA au depot' },
   { ref: 'PLAN', title: 'Planning', icon: '&#128197;', note: 'Analyse coordination : co-activite, phases critiques, alertes' },
 ];
@@ -2136,6 +2138,7 @@ async function deposerPieceDossier(affaire, file, type) {
     var natureDepot = type === 'PGC' ? 'Reception PGC'
       : type === 'PLAN' ? 'Reception planning'
       : type === 'CONTRAT' ? 'Contrat de coordination SPS (MOA)'
+      : type === 'ICR' ? 'Inspection commune realisee'
       : 'Reception rapport / diagnostic';
     var created = ajouterEntreeRJC(affaire, {
       date: new Date().toISOString().split('T')[0],
@@ -2159,8 +2162,44 @@ async function deposerPieceDossier(affaire, file, type) {
     else if (type === 'PGC') await analyserPGCDepose(affaire, file);
     else if (type === 'PLAN') await analyserPlanning(affaire, file);
     else if (type === 'CONTRAT') await analyserContratDepose(affaire, file);
+    else if (type === 'ICR') await analyserICDeposee(affaire, file);
   } catch (err) {
     showToast('Erreur depot : ' + err.message, 'error');
+  }
+}
+
+// Analyse au depot d'une INSPECTION COMMUNE REALISEE (fiche/CR signe). Synthese
+// aide-memoire (comme le PGC depose) : entreprises concernees, contraintes,
+// risques d'interference, mesures retenues. Tracee au RJC + carte Analyses.
+async function analyserICDeposee(affaire, file) {
+  try {
+    showToast('Analyse IA de l\'inspection commune ' + file.name + '...');
+    var texte = (await extraireTexteFichier(file)).slice(0, 12000);
+    if (texte.trim().length < 30) { showToast('IC illisible (scan/image ?) — depot conserve sans analyse', 'error'); return; }
+    var prompt = 'Voici le contenu d\'une fiche ou d\'un compte rendu d\'INSPECTION COMMUNE PREALABLE (realisee par le coordonnateur SPS avec une ou plusieurs entreprises) sur une operation BTP :\n\n' + texte
+      + '\n\nReponds UNIQUEMENT en JSON valide, sans markdown ni backtick :\n'
+      + '{"type_rapport":"IC","date_rapport":null,"bureau":null,"synthese":"...","points_vigilance_ic":"..."}\n'
+      + 'date_rapport=date de l\'inspection commune si trouvee. bureau=entreprise(s) et lot(s) concernes par l\'inspection. '
+      + 'synthese=5 phrases max : entreprise(s) et lot(s) concernes, contraintes du site relevees, risques d\'interference / co-activite, mesures de coordination retenues, remise du PPSPS attendue. '
+      + 'points_vigilance_ic=2 phrases max : ce qui reste a surveiller ou a rappeler apres cette inspection.';
+    var response = await fetch('/api/claude', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'llama-3.3-70b-versatile', max_tokens: 600, messages: [{ role: 'user', content: prompt }] })
+    });
+    var result = await response.json();
+    if (!response.ok) throw new Error('Serveur ' + response.status);
+    var text = (result.content && result.content[0] && result.content[0].text) ? result.content[0].text
+      : (result.choices && result.choices[0] && result.choices[0].message ? result.choices[0].message.content : '{}');
+    var parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+    parsed = nettoyerAnalyseFr(parsed);
+    parsed.type_rapport = 'IC';
+    if (!affaire.rapportsAnalyses) affaire.rapportsAnalyses = [];
+    affaire.rapportsAnalyses.push({ id: 'rap-' + Date.now(), date: new Date().toISOString().split('T')[0], fichier: file.name, analyse: parsed });
+    persistAffaires();
+    await attacherAnalyseAuRJC(affaire, parsed, file.name);
+    afficherAnalyseModal(parsed, affaire.missionPhase || '', file.name, affaire);
+  } catch (err) {
+    showToast('Analyse de l\'inspection commune impossible : ' + err.message, 'error');
   }
 }
 
