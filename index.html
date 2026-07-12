@@ -636,7 +636,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.34</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.35</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -937,7 +937,7 @@
           <input type="file" id="piece-input-PGC" accept=".pdf,.docx" style="display:none;" onchange="handlePieceUpload(event,'PGC')">
           <input type="file" id="piece-input-ICR" accept=".pdf,.docx" style="display:none;" multiple onchange="handlePieceUpload(event,'ICR')">
           <input type="file" id="piece-input-DIAG" accept=".pdf,.docx" style="display:none;" multiple onchange="handlePieceUpload(event,'DIAG')">
-          <input type="file" id="piece-input-PLAN" accept=".pdf,.docx" style="display:none;" onchange="handlePieceUpload(event,'PLAN')">
+          <input type="file" id="piece-input-PLAN" accept=".pdf,.docx" style="display:none;" multiple onchange="handlePieceUpload(event,'PLAN')">
           <input type="file" id="insert-doc-input" accept=".pdf,.docx,.doc,.jpg,.jpeg,.png" style="display:none;" multiple onchange="handleInsertDoc(event)">
         </div>
         <div class="docs-grid" id="docs-grid"></div>
@@ -2094,7 +2094,7 @@ var PIECES_DOSSIER = [
   { ref: 'PGC',  title: 'PGC \u2014 Plan General de Coordination', icon: '&#128216;', note: 'PGC recu / diffuse' },
   { ref: 'ICR',  title: 'Inspection commune realisee', icon: '&#128221;', note: 'IC signee deposee \u2014 analyse au depot (R.4532-14 a 19)' },
   { ref: 'DIAG', title: 'Rapports & diagnostics', icon: '&#129514;', note: 'RAAT, CREP, geotech... — analyse IA au depot' },
-  { ref: 'PLAN', title: 'Planning', icon: '&#128197;', note: 'Analyse coordination : co-activite, phases critiques, alertes' },
+  { ref: 'PLAN', title: 'Plannings (entreprises)', icon: '&#128197;', note: 'Deposez les plannings des entreprises — analyse coordination (co-activite, phases critiques, alertes) a chaque depot' },
 ];
 
 // Type de document d'une entree RJC : champ docRef (nouvelles entrees) ou
