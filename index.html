@@ -636,7 +636,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.35</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.36</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -938,6 +938,8 @@
           <input type="file" id="piece-input-ICR" accept=".pdf,.docx" style="display:none;" multiple onchange="handlePieceUpload(event,'ICR')">
           <input type="file" id="piece-input-DIAG" accept=".pdf,.docx" style="display:none;" multiple onchange="handlePieceUpload(event,'DIAG')">
           <input type="file" id="piece-input-PLAN" accept=".pdf,.docx" style="display:none;" multiple onchange="handlePieceUpload(event,'PLAN')">
+          <input type="file" id="piece-input-CONTRAINTES" accept=".pdf,.docx" style="display:none;" multiple onchange="handlePieceUpload(event,'CONTRAINTES')">
+          <input type="file" id="piece-input-PLANS" accept=".pdf,.docx" style="display:none;" multiple onchange="handlePieceUpload(event,'PLANS')">
           <input type="file" id="insert-doc-input" accept=".pdf,.docx,.doc,.jpg,.jpeg,.png" style="display:none;" multiple onchange="handleInsertDoc(event)">
         </div>
         <div class="docs-grid" id="docs-grid"></div>
@@ -2095,6 +2097,8 @@ var PIECES_DOSSIER = [
   { ref: 'ICR',  title: 'Inspection commune realisee', icon: '&#128221;', note: 'IC signee deposee \u2014 analyse au depot (R.4532-14 a 19)' },
   { ref: 'DIAG', title: 'Rapports & diagnostics', icon: '&#129514;', note: 'RAAT, CREP, geotech... — analyse IA au depot' },
   { ref: 'PLAN', title: 'Plannings (entreprises)', icon: '&#128197;', note: 'Deposez les plannings des entreprises — analyse coordination (co-activite, phases critiques, alertes) a chaque depot' },
+  { ref: 'CONTRAINTES', title: 'Contraintes du site', icon: '&#9888;', note: 'Fichier OU texte libre — servitudes, reseaux, voisinage, exploitation, acces... — analyse IA (element du PGC)' },
+  { ref: 'PLANS', title: 'Plans (masse, PIC, coupes)', icon: '&#128506;', note: 'Deposez les plans (PDF/DOCX) — extraction du texte + analyse IA (element du PGC)' },
 ];
 
 // Type de document d'une entree RJC : champ docRef (nouvelles entrees) ou
@@ -2139,6 +2143,8 @@ async function deposerPieceDossier(affaire, file, type) {
       : type === 'PLAN' ? 'Reception planning'
       : type === 'CONTRAT' ? 'Contrat de coordination SPS (MOA)'
       : type === 'ICR' ? 'Inspection commune realisee'
+      : type === 'CONTRAINTES' ? 'Contraintes du site (element PGC)'
+      : type === 'PLANS' ? 'Plans (element PGC)'
       : 'Reception rapport / diagnostic';
     var created = ajouterEntreeRJC(affaire, {
       date: new Date().toISOString().split('T')[0],
@@ -2163,6 +2169,8 @@ async function deposerPieceDossier(affaire, file, type) {
     else if (type === 'PLAN') await analyserPlanning(affaire, file);
     else if (type === 'CONTRAT') await analyserContratDepose(affaire, file);
     else if (type === 'ICR') await analyserICDeposee(affaire, file);
+    else if (type === 'CONTRAINTES') await analyserContraintesDeposee(affaire, file);
+    else if (type === 'PLANS') await analyserPlansDepose(affaire, file);
   } catch (err) {
     showToast('Erreur depot : ' + err.message, 'error');
   }
@@ -2507,6 +2515,22 @@ function htmlAnalyse(p) {
     l.push('<p style="margin-bottom:4px;"><strong>Plomb : ' + (p.plomb.presence ? '&#9888;&#65039; DETECTE' : 'non detecte') + '</strong>'
       + (p.plomb.localisation ? ' — ' + esc(p.plomb.localisation) : '') + '</p>');
   }
+  if (p.contraintes && p.contraintes.length) {
+    l.push('<div style="font-weight:700;color:var(--blue-dark);margin:8px 0 4px;">&#9888;&#65039; Contraintes du site</div>');
+    l.push(p.contraintes.map(function(c){
+      return '<div style="background:#f2f6fb;border-left:4px solid var(--blue);padding:6px 10px;margin-bottom:5px;border-radius:4px;font-size:13px;">'
+        + (c.categorie ? '<strong>' + esc(c.categorie).toUpperCase() + '</strong> — ' : '') + esc(c.detail || '')
+        + (c.mesure ? '<br>&#8594; ' + esc(c.mesure) : '') + '</div>';
+    }).join(''));
+  }
+  if (p.elements && p.elements.length) {
+    l.push('<div style="font-weight:700;color:var(--blue-dark);margin:8px 0 4px;">&#128506;&#65039; Elements du plan</div>');
+    l.push(p.elements.map(function(el){
+      return '<div style="background:#f2f6fb;border-left:4px solid var(--blue);padding:6px 10px;margin-bottom:5px;border-radius:4px;font-size:13px;">'
+        + (el.type ? '<strong>' + esc(el.type) + '</strong> — ' : '') + esc(el.observations || '') + '</div>';
+    }).join(''));
+  }
+  if (p.contraintes_implantation) l.push('<p style="margin-top:6px;"><strong>Implantation :</strong> ' + esc(p.contraintes_implantation) + '</p>');
   if (p.points_vigilance_ic) l.push('<p style="background:var(--orange);color:var(--orange-dark);padding:8px 10px;border-radius:6px;margin-top:8px;"><strong>Vigilance IC :</strong> ' + esc(p.points_vigilance_ic) + '</p>');
   return l.join('');
 }
@@ -2776,6 +2800,113 @@ async function analyserPlanning(affaire, file) {
   }
 }
 
+// ── ELEMENTS DU PGC : CONTRAINTES DU SITE ───────────────────────────────────
+// Point 4 (passe A) : une contrainte peut arriver par FICHIER ou par TEXTE LIBRE.
+// L'analyse degage les contraintes structurantes du site (reseaux, voisinage,
+// exploitation, acces, environnement, servitudes) qui alimenteront le PGC.
+async function analyserContraintesDeposee(affaire, file) {
+  try {
+    showToast('Analyse IA des contraintes ' + file.name + '...');
+    var texte = (await extraireTexteFichier(file)).slice(0, 12000);
+    if (texte.trim().length < 30) { showToast('Document illisible (scan/image ?) — depot conserve sans analyse', 'error'); return; }
+    await _analyserContraintesTexte(affaire, texte, file.name);
+  } catch (err) {
+    showToast('Analyse des contraintes impossible : ' + err.message, 'error');
+  }
+}
+
+// Saisie de contraintes en TEXTE LIBRE (sans fichier) : petite modale textarea.
+function saisirContraintesTexte() {
+  var affaire = currentAffaireObj();
+  if (!affaire) { showToast('Sauvegardez l\'affaire avant de saisir des contraintes', 'error'); return; }
+  var html = '<p style="margin-bottom:8px;font-size:13px;color:var(--text-light);">'
+    + 'Decrivez librement les contraintes du site : reseaux, voisinage, exploitation en cours, acces et circulation, '
+    + 'environnement, servitudes, horaires... L\'IA en fera une synthese structuree (element du PGC).</p>'
+    + '<textarea id="contraintes-txt" style="width:100%;min-height:160px;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:14px;" '
+    + 'placeholder="Ex : site en exploitation (negoce ouvert au public), zonage par grilles Heras a la charge du MOA ; anciens reseaux en limite a neutraliser (PV de coupure avant demolition) ; emprise trottoir a demander..."></textarea>';
+  openDocModal('Contraintes du site (texte libre)', html, 'Analyser', function(){
+    var el = document.getElementById('contraintes-txt');
+    var texte = el ? (el.value || '').trim() : '';
+    if (texte.length < 20) { showToast('Texte trop court — saisie ignoree', 'error'); return; }
+    // Trace au RJC comme une piece recue (sans fichier)
+    ajouterEntreeRJC(affaire, {
+      date: new Date().toISOString().split('T')[0],
+      nature: 'Contraintes du site (element PGC)',
+      objet: 'Saisie texte libre',
+      intervenants: '', ref: 'Contraintes (texte)', docRef: 'CONTRAINTES',
+    });
+    persistAffaires();
+    _analyserContraintesTexte(affaire, texte, 'Contraintes (saisie texte)').then(function(){ renderDocsGrid(); });
+  });
+}
+
+async function _analyserContraintesTexte(affaire, texte, sourceLabel) {
+  try {
+    showToast('Analyse IA des contraintes...');
+    var prompt = 'Tu es coordonnateur SPS. Voici des informations sur les CONTRAINTES d\'un chantier BTP (site, environnement, exploitation, reseaux, acces) :\n\n'
+      + texte
+      + '\n\nReponds UNIQUEMENT en JSON valide, sans markdown ni backtick :\n'
+      + '{"type_rapport":"contraintes","synthese":"...","contraintes":[{"categorie":"reseaux|voisinage|exploitation|acces|circulation|environnement|servitude|autre","detail":"...","mesure":"..."}],"points_vigilance_ic":"..."}\n'
+      + 'synthese=4 phrases max resumant les contraintes structurantes du site pour la coordination. '
+      + 'contraintes=liste des contraintes identifiees (categorie, detail concret, mesure de coordination associee). '
+      + 'points_vigilance_ic=1 a 2 phrases a rappeler aux entreprises lors de l\'inspection commune. '
+      + 'N\'invente rien : si une information n\'est pas presente, ne la cree pas. Ecris en francais, concret, oriente terrain.';
+    var response = await fetch('/api/claude', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'llama-3.3-70b-versatile', max_tokens: 1200, messages: [{ role: 'user', content: prompt }] })
+    });
+    var result = await response.json();
+    if (!response.ok) throw new Error('Serveur ' + response.status);
+    var text = (result.content && result.content[0] && result.content[0].text) ? result.content[0].text
+      : (result.choices && result.choices[0] && result.choices[0].message ? result.choices[0].message.content : '{}');
+    var parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+    parsed = nettoyerAnalyseFr(parsed);
+    parsed.type_rapport = 'contraintes';
+    if (!affaire.rapportsAnalyses) affaire.rapportsAnalyses = [];
+    affaire.rapportsAnalyses.push({ id: 'rap-' + Date.now(), date: new Date().toISOString().split('T')[0], fichier: sourceLabel, analyse: parsed });
+    persistAffaires();
+    await attacherAnalyseAuRJC(affaire, parsed, sourceLabel);
+    afficherAnalyseModal(parsed, affaire.missionPhase || '', sourceLabel, affaire);
+  } catch (err) {
+    showToast('Analyse des contraintes impossible : ' + err.message, 'error');
+  }
+}
+
+// ── ELEMENTS DU PGC : PLANS (masse, PIC, coupes) ────────────────────────────
+async function analyserPlansDepose(affaire, file) {
+  try {
+    showToast('Analyse IA du plan ' + file.name + '...');
+    var texte = (await extraireTexteFichier(file)).slice(0, 12000);
+    if (texte.trim().length < 30) { showToast('Plan sans texte exploitable (image/scan ?) — depot conserve sans analyse', 'error'); return; }
+    var prompt = 'Tu es coordonnateur SPS. Voici le texte extrait d\'un PLAN de chantier BTP (plan de masse, plan d\'installation de chantier, coupe, facade, reseaux...) :\n\n'
+      + texte
+      + '\n\nReponds UNIQUEMENT en JSON valide, sans markdown ni backtick :\n'
+      + '{"type_rapport":"plans","synthese":"...","elements":[{"type":"plan de masse|PIC|coupe|facade|reseau|autre","observations":"..."}],"contraintes_implantation":"...","points_vigilance_ic":"..."}\n'
+      + 'synthese=3 phrases max sur ce que montre le plan et son utilite pour la coordination (implantation, base vie, acces, zonage, clotures). '
+      + 'elements=liste des elements lisibles utiles au CSPS. contraintes_implantation=1 a 2 phrases sur les contraintes d\'implantation/circulation/co-activite reperables. '
+      + 'points_vigilance_ic=1 phrase a rappeler en inspection commune. N\'invente rien. Ecris en francais, concret.';
+    var response = await fetch('/api/claude', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'llama-3.3-70b-versatile', max_tokens: 1200, messages: [{ role: 'user', content: prompt }] })
+    });
+    var result = await response.json();
+    if (!response.ok) throw new Error('Serveur ' + response.status);
+    var text = (result.content && result.content[0] && result.content[0].text) ? result.content[0].text
+      : (result.choices && result.choices[0] && result.choices[0].message ? result.choices[0].message.content : '{}');
+    var parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+    parsed = nettoyerAnalyseFr(parsed);
+    parsed.type_rapport = 'plans';
+    if (parsed.contraintes_implantation && !parsed.points_vigilance_ic) parsed.points_vigilance_ic = parsed.contraintes_implantation;
+    if (!affaire.rapportsAnalyses) affaire.rapportsAnalyses = [];
+    affaire.rapportsAnalyses.push({ id: 'rap-' + Date.now(), date: new Date().toISOString().split('T')[0], fichier: file.name, analyse: parsed });
+    persistAffaires();
+    await attacherAnalyseAuRJC(affaire, parsed, file.name);
+    afficherAnalyseModal(parsed, affaire.missionPhase || '', file.name, affaire);
+  } catch (err) {
+    showToast('Analyse du plan impossible : ' + err.message, 'error');
+  }
+}
+
 function injecterAnalyseRapport(affaire, p) {
   // Risques particuliers de l'affaire (cases onglet Chantier)
   affaire.risques = affaire.risques || {};
@@ -3003,6 +3134,10 @@ function renderDocsGrid() {
       var btnAnalyses = (p.ref === 'DIAG' && affaire && affaire.rapportsAnalyses && affaire.rapportsAnalyses.length)
         ? '<button class="btn btn-outline btn-sm" onclick="voirAnalysesRapports()" title="' + affaire.rapportsAnalyses.length + ' analyse(s) IA consultables">&#128300; Analyses</button>'
         : '';
+      // Contraintes : possibilite de saisir en TEXTE LIBRE (sans fichier)
+      var btnTexte = (p.ref === 'CONTRAINTES')
+        ? '<button class="btn btn-outline btn-sm" onclick="saisirContraintesTexte()" title="Saisir des contraintes en texte libre">&#9998; Texte libre</button>'
+        : '';
       return '<div class="doc-card">'
         + badge
         + '<div class="doc-card-top"><div class="doc-icon">' + p.icon + '</div>'
@@ -3010,6 +3145,7 @@ function renderDocsGrid() {
         + '<div class="doc-ref">' + p.note + '</div></div></div>'
         + '<div class="doc-actions">'
         + '<button class="btn btn-primary btn-sm" onclick="document.getElementById(\'piece-input-' + p.ref + '\').click()">&#128229; Deposer</button>'
+        + btnTexte
         + btnTel
         + btnAnalyses
         + '</div></div>';
