@@ -636,7 +636,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.39</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.40</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -941,6 +941,7 @@
           <input type="file" id="piece-input-CONTRAINTES" accept=".pdf,.docx" style="display:none;" multiple onchange="handlePieceUpload(event,'CONTRAINTES')">
           <input type="file" id="piece-input-PLANS" accept=".pdf,.docx" style="display:none;" multiple onchange="handlePieceUpload(event,'PLANS')">
           <input type="file" id="piece-input-PPSPS" accept=".pdf,.docx" style="display:none;" multiple onchange="handlePieceUpload(event,'PPSPS')">
+          <input type="file" id="piece-input-CRMOA" accept=".pdf,.docx" style="display:none;" multiple onchange="handlePieceUpload(event,'CRMOA')">
           <input type="file" id="insert-doc-input" accept=".pdf,.docx,.doc,.jpg,.jpeg,.png" style="display:none;" multiple onchange="handleInsertDoc(event)">
         </div>
         <div class="docs-grid" id="docs-grid"></div>
@@ -2101,6 +2102,7 @@ var PIECES_DOSSIER = [
   { ref: 'CONTRAINTES', title: 'Contraintes du site', icon: '&#9888;', note: 'Fichier OU texte libre — servitudes, reseaux, voisinage, exploitation, acces... — analyse IA (element du PGC)' },
   { ref: 'PLANS', title: 'Plans (masse, PIC, coupes)', icon: '&#128506;', note: 'Deposez les plans (PDF/DOCX) — extraction du texte + analyse IA (element du PGC)' },
   { ref: 'PPSPS', title: 'PPSPS entreprises (harmonisation)', icon: '&#128203;', note: 'Deposez le PPSPS de chaque entreprise — analyse d\'harmonisation au depot : coherence PGC, coactivite, risques importes/exportes (R.4532-48)' },
+  { ref: 'CRMOA', title: 'CR de reunion / mise a jour MOA', icon: '&#128221;', note: 'Deposez le compte rendu de reunion (MOA) — l\'IA extrait les decisions et nouvelles mesures ; l\'harmonisation des PPSPS en tient compte' },
 ];
 
 // Type de document d'une entree RJC : champ docRef (nouvelles entrees) ou
@@ -2148,6 +2150,7 @@ async function deposerPieceDossier(affaire, file, type) {
       : type === 'CONTRAINTES' ? 'Contraintes du site (element PGC)'
       : type === 'PLANS' ? 'Plans (element PGC)'
       : type === 'PPSPS' ? 'Reception PPSPS (harmonisation)'
+      : type === 'CRMOA' ? 'CR de reunion / mise a jour MOA'
       : 'Reception rapport / diagnostic';
     var created = ajouterEntreeRJC(affaire, {
       date: new Date().toISOString().split('T')[0],
@@ -2175,6 +2178,7 @@ async function deposerPieceDossier(affaire, file, type) {
     else if (type === 'CONTRAINTES') await analyserContraintesDeposee(affaire, file);
     else if (type === 'PLANS') await analyserPlansDepose(affaire, file);
     else if (type === 'PPSPS') await analyserPPSPSDepose(affaire, file);
+    else if (type === 'CRMOA') await analyserCRReunion(affaire, file);
   } catch (err) {
     showToast('Erreur depot : ' + err.message, 'error');
   }
@@ -2504,6 +2508,7 @@ function htmlAnalyse(p) {
   if (p && p.type_rapport === 'planning') return htmlAnalysePlanning(p, esc);
   if (p && p.type_rapport === 'ppsps') return htmlAnalysePPSPS(p, esc);
   if (p && p.type_rapport === 'harmo') return htmlAnalyseHarmo(p, esc);
+  if (p && p.type_rapport === 'cr_reunion') return htmlAnalyseCR(p, esc);
   var l = [];
   l.push('<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">'
     + '<span style="background:var(--blue-xl);color:var(--blue-dark);font-weight:700;padding:2px 10px;border-radius:10px;font-size:12px;">' + esc(p.type_rapport || 'autre') + '</span>'
@@ -2609,6 +2614,28 @@ function htmlAnalysePlanning(p, esc) {
   return l.join('');
 }
 
+// Rendu d'un CR de reunion MOA : decisions, nouvelles mesures, impacts coord.
+function htmlAnalyseCR(p, esc) {
+  var l = [];
+  l.push('<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">'
+    + '<span style="background:#1F4E79;color:#fff;font-weight:700;padding:2px 10px;border-radius:10px;font-size:12px;">&#128221; CR REUNION</span>'
+    + (p.date_reunion ? '<span style="background:#eee;padding:2px 10px;border-radius:10px;font-size:12px;">' + esc(p.date_reunion) + '</span>' : '')
+    + (p.objet ? '<span style="font-weight:700;">' + esc(p.objet) + '</span>' : '')
+    + '</div>');
+  if (p.synthese) l.push('<p style="margin-bottom:6px;">' + esc(p.synthese) + '</p>');
+  function bl(titre, arr, col, bg){
+    if (!arr || !arr.length) return '';
+    return '<div style="font-weight:700;color:' + (col||'#1F4E79') + ';margin:8px 0 3px;">' + titre + '</div>'
+      + '<ul style="margin:0 0 4px 16px;padding:0;font-size:13px;' + (bg?'background:'+bg+';border-radius:6px;padding:6px 6px 6px 22px;':'') + '">'
+      + arr.map(function(x){ return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>';
+  }
+  l.push(bl('&#9989; Decisions', p.decisions, '#166534'));
+  l.push(bl('&#128295; Nouvelles mesures', p.nouvelles_mesures, '#C07000', '#FFF0CC'));
+  l.push(bl('&#128260; Impacts sur la coordination', p.impacts_coordination, '#b91c1c'));
+  if (p.points_vigilance_ic) l.push('<p style="background:var(--orange);color:var(--orange-dark);padding:8px 10px;border-radius:6px;margin-top:8px;"><strong>Vigilance IC :</strong> ' + esc(p.points_vigilance_ic) + '</p>');
+  return l.join('');
+}
+
 // Rendu de la NOTE D'HARMONISATION CONSOLIDEE (croisement inter-lots).
 function htmlAnalyseHarmo(p, esc) {
   var l = [];
@@ -2621,6 +2648,7 @@ function htmlAnalyseHarmo(p, esc) {
       + arr.map(function(x){ return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>';
   }
   l.push(bl('&#9888;&#65039; Incoherences entre lots', p.incoherences, '#b91c1c', '#fde8e8'));
+  l.push(bl('&#128260; PPSPS a re-harmoniser (dernieres mesures)', p.a_reharmoniser, '#b91c1c', '#fde8e8'));
   l.push(bl('&#128101; Coactivites a organiser', p.coactivites_croisees, '#C07000'));
   l.push(bl('&#128295; Moyens communs a harmoniser', p.moyens_communs, '#1F4E79'));
   if (p.actions && p.actions.length) {
@@ -2705,9 +2733,12 @@ function renderHarmoPPSPSCard(affaire) {
   var agg = agregerHarmoPPSPS(affaire);
   var n = agg.count;
   var nonConf = agg.fiches.filter(function(f){ return (f.coherence || '').toLowerCase() !== 'conforme'; }).length;
+  var dRef = dateDernieresMesures(affaire);
+  var nPerimes = dRef ? agg.fiches.filter(function(f){ return f.date && f.date < dRef; }).length : 0;
+  var alertePerimes = nPerimes ? ' ⚠️ ' + nPerimes + ' anterieur(s) au dernier planning/CR — a re-harmoniser.' : '';
   var note = n
-    ? n + ' PPSPS analyse(s)' + (nonConf ? ' — ' + nonConf + ' avec reserves/non conforme a harmoniser' : ' — tous conformes') + '. Croisez les lots : coactivite, moyens communs, incoherences, actions.'
-    : 'Aucun PPSPS analyse. Deposez les PPSPS des entreprises ci-dessus, puis harmonisez : le CSPS croise les lots et sort la note consolidee (R.4532-48).';
+    ? n + ' PPSPS analyse(s)' + (nonConf ? ' — ' + nonConf + ' avec reserves/non conforme a harmoniser' : ' — tous conformes') + '. Croisez les lots contre les dernieres mesures.' + alertePerimes
+    : 'Aucun PPSPS analyse. Deposez les PPSPS des entreprises ci-dessus, puis harmonisez : le CSPS croise les lots (dernier planning + CR) et sort la note consolidee (R.4532-48).';
   var badge = n ? '<span class="doc-badge" style="cursor:default;" title="' + n + ' PPSPS">' + n + '</span>' : '';
   return '<div class="doc-card" style="border:1.5px solid #7c3aed;background:#faf7ff;">'
     + badge
@@ -2724,6 +2755,11 @@ async function harmoniserPPSPS() {
   if (!affaire) { showToast('Sauvegardez l\'affaire avant d\'harmoniser', 'error'); return; }
   var agg = agregerHarmoPPSPS(affaire);
   if (!agg.count) { showToast('Aucun PPSPS analyse — deposez d\'abord les PPSPS des entreprises', 'error'); return; }
+  // Etat ACTUEL du chantier (dernier planning + dernier CR + PGC/contraintes) et
+  // reperage des PPSPS anterieurs aux dernieres mesures (a re-harmoniser).
+  var ctxActuel = contextePGCpourPPSPS(affaire);
+  var dateRef = dateDernieresMesures(affaire);
+  var perimes = dateRef ? agg.fiches.filter(function(f){ return f.date && f.date < dateRef; }) : [];
   function esc(x){ return (typeof escHtml === 'function') ? escHtml(String(x==null?'':x)) : String(x==null?'':x); }
   function cohBadge(c){
     var k=(c||'').toLowerCase();
@@ -2751,7 +2787,10 @@ async function harmoniserPPSPS() {
     + '<th style="border:1px solid var(--border);padding:5px 6px;font-size:11px;">Risques exportes</th>'
     + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
 
-  openDocModal('📋 Harmonisation des PPSPS', tableau + '<p style="text-align:center;color:var(--text-light);font-size:13px;">Croisement des lots par l\'IA en cours...</p>', null, null);
+  var perimesBanner = perimes.length
+    ? '<div style="background:#fff0cc;border:1px solid #C07000;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:13px;color:#8a5a00;"><strong>&#9888;&#65039; ' + perimes.length + ' PPSPS anterieur(s) aux dernieres mesures du ' + esc(dateRef) + '</strong> — a re-harmoniser : ' + perimes.map(function(f){ return esc(f.entreprise); }).join(', ') + '. Redeposez leur PPSPS a jour ou demandez la mise a jour.</div>'
+    : '';
+  openDocModal('📋 Harmonisation des PPSPS', perimesBanner + tableau + '<p style="text-align:center;color:var(--text-light);font-size:13px;">Croisement des lots par l\'IA en cours...</p>', null, null);
 
   // NOTE CONSOLIDEE par IA : croise les fiches pour degager les incoherences
   var resume = agg.fiches.map(function(f){
@@ -2763,10 +2802,13 @@ async function harmoniserPPSPS() {
   }).join('\n');
   var note = null;
   try {
-    var prompt = 'Tu es coordonnateur SPS. Voici la synthese des PPSPS analyses des entreprises d\'un meme chantier :\n\n' + resume
-      + '\n\nHARMONISE ces PPSPS (R.4532-48) : croise les lots pour reperer les INCOHERENCES et la coactivite. Reponds UNIQUEMENT en JSON valide, sans markdown ni backtick :\n'
-      + '{"synthese":"...","incoherences":["..."],"coactivites_croisees":["..."],"moyens_communs":["..."],"actions":[{"entreprise":"...","demande":"..."}]}\n'
-      + 'synthese=4 phrases max sur l\'etat d\'harmonisation global. '
+    var prompt = 'Tu es coordonnateur SPS. Tu dois HARMONISER les PPSPS des entreprises d\'un chantier EN TENANT COMPTE DES DERNIERES MESURES (dernier planning et dernier CR de reunion MOA).\n\n'
+      + (ctxActuel ? 'ETAT ACTUEL DU CHANTIER (dernieres mesures / decisions / planning a jour) :\n' + ctxActuel + '\n\n' : '')
+      + 'SYNTHESE DES PPSPS ANALYSES' + (dateRef ? ' (⚠ certains peuvent etre anterieurs aux dernieres mesures du ' + dateRef + ')' : '') + ' :\n\n' + resume
+      + '\n\nHARMONISE ces PPSPS (R.4532-48) : confronte chaque PPSPS a l\'ETAT ACTUEL ci-dessus, croise les lots pour reperer les INCOHERENCES et la coactivite. Reponds UNIQUEMENT en JSON valide, sans markdown ni backtick :\n'
+      + '{"synthese":"...","incoherences":["..."],"coactivites_croisees":["..."],"moyens_communs":["..."],"a_reharmoniser":["..."],"actions":[{"entreprise":"...","demande":"..."}]}\n'
+      + 'synthese=4 phrases max sur l\'etat d\'harmonisation global au regard des dernieres mesures. '
+      + 'a_reharmoniser=liste des entreprises dont le PPSPS ne tient pas compte des dernieres mesures/decisions (planning ou CR) et doit etre mis a jour. '
       + 'incoherences=contradictions ou lacunes ENTRE lots (ex : un lot exporte un risque qu\'un autre lot n\'a pas pris en compte ; mesures divergentes sur une zone commune). '
       + 'coactivites_croisees=situations de coactivite a organiser entre lots identifies (qui/quand/zone). '
       + 'moyens_communs=points a harmoniser sur les moyens communs (echafaudages, levage, base vie, acces). '
@@ -2795,6 +2837,7 @@ async function harmoniserPPSPS() {
     noteHtml += '<div style="border-top:2px solid var(--blue);margin-top:10px;padding-top:8px;"><div style="font-weight:800;color:var(--blue-dark);margin-bottom:6px;">Note d\'harmonisation consolidee</div>';
     if (note.synthese) noteHtml += '<p style="margin-bottom:6px;font-size:13px;">' + esc(note.synthese) + '</p>';
     noteHtml += bl('&#9888;&#65039; Incoherences entre lots', note.incoherences, '#b91c1c', '#fde8e8');
+    noteHtml += bl('&#128260; PPSPS a re-harmoniser (dernieres mesures)', note.a_reharmoniser, '#b91c1c', '#fde8e8');
     noteHtml += bl('&#128101; Coactivites a organiser', note.coactivites_croisees, '#C07000');
     noteHtml += bl('&#128295; Moyens communs a harmoniser', note.moyens_communs, '#1F4E79');
     if (note.actions && note.actions.length) {
@@ -3199,8 +3242,28 @@ function contextePGCpourPPSPS(affaire) {
       bits.push('Co-activites relevees au planning : ' + a.coactivites.map(function(c){ return (c.periode || '') + ' ' + (c.corps_etat || ''); }).join(' ; ') + '.');
     }
     if (a.type_rapport === 'contraintes' && a.synthese) bits.push('Contraintes du site : ' + a.synthese);
+    if (a.type_rapport === 'cr_reunion') {
+      var crParts = [];
+      if (a.decisions && a.decisions.length) crParts.push('Decisions : ' + a.decisions.join(' ; '));
+      if (a.nouvelles_mesures && a.nouvelles_mesures.length) crParts.push('Nouvelles mesures : ' + a.nouvelles_mesures.join(' ; '));
+      if (a.impacts_coordination && a.impacts_coordination.length) crParts.push('Impacts coordination : ' + a.impacts_coordination.join(' ; '));
+      if (crParts.length) bits.push('CR de reunion MOA' + (a.date_reunion ? ' du ' + a.date_reunion : '') + ' — ' + crParts.join('. ') + '.');
+    }
   });
-  return bits.join('\n').slice(0, 3000);
+  return bits.join('\n').slice(0, 3500);
+}
+
+// Date des DERNIERES MESURES connues = dernier planning ou dernier CR de reunion
+// analyse. Sert a reperer les PPSPS anterieurs (a re-harmoniser).
+function dateDernieresMesures(affaire) {
+  var d = '';
+  if (affaire && affaire.rapportsAnalyses) {
+    affaire.rapportsAnalyses.forEach(function(ra){
+      var a = (ra && ra.analyse) ? ra.analyse : (ra || {});
+      if ((a.type_rapport === 'planning' || a.type_rapport === 'cr_reunion') && ra.date && ra.date > d) d = ra.date;
+    });
+  }
+  return d;
 }
 
 async function analyserPPSPSDepose(affaire, file) {
@@ -3243,6 +3306,46 @@ async function analyserPPSPSDepose(affaire, file) {
       '🖨 Imprimer', function(){ imprimerAnalyses(affaire, { fichier: file.name, analyse: parsed }); });
   } catch (err) {
     showToast('Analyse du PPSPS impossible : ' + err.message, 'error');
+  }
+}
+
+// ── CR DE REUNION / MISE A JOUR MOA ─────────────────────────────────────────
+// Le CSPS recoit les comptes rendus de reunion : ils portent des DECISIONS et de
+// NOUVELLES MESURES qui doivent redescendre dans la coordination (et donc dans
+// l'harmonisation des PPSPS). L'IA en extrait l'essentiel ; le harmoniserPPSPS
+// s'en sert comme "etat actuel" du chantier.
+async function analyserCRReunion(affaire, file) {
+  try {
+    showToast('Analyse du CR de reunion ' + file.name + '...');
+    var texte = (await extraireTexteFichier(file)).slice(0, 14000);
+    if (texte.trim().length < 30) { showToast('CR illisible (scan/image ?) — depot conserve sans analyse', 'error'); return; }
+    var prompt = 'Tu es coordonnateur SPS. Voici un COMPTE RENDU DE REUNION (maitrise d\'ouvrage / chantier) BTP :\n\n' + texte
+      + '\n\nExtrais ce qui impacte la coordination securite. Reponds UNIQUEMENT en JSON valide, sans markdown ni backtick :\n'
+      + '{"type_rapport":"cr_reunion","date_reunion":null,"objet":null,"decisions":["..."],"nouvelles_mesures":["..."],"impacts_coordination":["..."],"synthese":"...","points_vigilance_ic":"..."}\n'
+      + 'date_reunion=date de la reunion si trouvee. objet=objet de la reunion. '
+      + 'decisions=decisions prises actees au CR. nouvelles_mesures=nouvelles mesures de securite / organisation / phasage / delais introduites. '
+      + 'impacts_coordination=en quoi ces decisions changent la coordination (coactivite, moyens communs, acces, phasage, PPSPS a mettre a jour). '
+      + 'synthese=3 phrases max. points_vigilance_ic=1 a 2 phrases a rappeler. N\'invente rien : liste vide si absent. Ecris en francais, concret.';
+    var response = await fetch('/api/claude', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'llama-3.3-70b-versatile', max_tokens: 1600, messages: [{ role: 'user', content: prompt }] })
+    });
+    var result = await response.json();
+    if (!response.ok) throw new Error('Serveur ' + response.status);
+    var text = (result.content && result.content[0] && result.content[0].text) ? result.content[0].text
+      : (result.choices && result.choices[0] && result.choices[0].message ? result.choices[0].message.content : '{}');
+    var parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+    parsed = nettoyerAnalyseFr(parsed);
+    parsed.type_rapport = 'cr_reunion';
+    if (!affaire.rapportsAnalyses) affaire.rapportsAnalyses = [];
+    affaire.rapportsAnalyses.push({ id: 'rap-' + Date.now(), date: new Date().toISOString().split('T')[0], fichier: file.name, analyse: parsed });
+    persistAffaires();
+    await attacherAnalyseAuRJC(affaire, parsed, file.name);
+    openDocModal('📝 CR de reunion MOA — ' + (parsed.objet || file.name), htmlAnalyse(parsed)
+      + '<p style="font-size:12px;color:var(--text-light);margin-top:10px;">Ces decisions seront prises en compte par « Harmoniser les PPSPS » (etat actuel du chantier).</p>',
+      '🖨 Imprimer', function(){ imprimerAnalyses(affaire, { fichier: file.name, analyse: parsed }); });
+  } catch (err) {
+    showToast('Analyse du CR impossible : ' + err.message, 'error');
   }
 }
 
