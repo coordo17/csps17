@@ -636,7 +636,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.36</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.37</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -2613,6 +2613,69 @@ function afficherAnalyseModal(parsed, phase, nomFichier, affaire) {
     '🖨 Imprimer', function(){ imprimerAnalyses(affaire || currentAffaireObj(), { fichier: nomFichier, analyse: parsed }); });
 }
 
+// ── PASSE B : carte "Realiser le PGC (pre-rempli)" ──────────────────────────
+// Affiche le nombre d'elements-source deposes (diagnostics, plannings,
+// contraintes, plans) et un bouton qui genere le PGC en injectant leurs
+// analyses dans la trame. L'IA propose, le CSPS relit et valide.
+function renderPGCPrefillCard(affaire) {
+  var agg = agregerElementsPGC(affaire);
+  var s = agg.sources;
+  var total = s.diag + s.planning + s.contraintes + s.plans;
+  var pieces = [];
+  if (s.diag) pieces.push(s.diag + ' diagnostic(s)');
+  if (s.planning) pieces.push(s.planning + ' planning(s)');
+  if (s.contraintes) pieces.push(s.contraintes + ' contrainte(s)');
+  if (s.plans) pieces.push(s.plans + ' plan(s)');
+  var note = total
+    ? 'Elements pris en compte : ' + pieces.join(', ') + '. Le PGC sera pre-rempli (co-activite, phasage, environnement, reseaux...) — a relire et valider.'
+    : 'Aucun element analyse pour l\'instant. Deposez diagnostics, plannings, contraintes et plans ci-dessus, puis generez : le PGC reprendra leurs analyses.';
+  var badge = total ? '<span class="doc-badge" style="cursor:default;" title="' + total + ' element(s)-source">' + total + '</span>' : '';
+  return '<div class="doc-card" style="border:1.5px solid var(--blue);background:#f7fbff;">'
+    + badge
+    + '<div class="doc-card-top"><div class="doc-icon">&#128221;</div>'
+    + '<div class="doc-info"><div class="doc-title">Realiser le PGC (pre-rempli)</div>'
+    + '<div class="doc-ref">' + note + '</div></div></div>'
+    + '<div class="doc-actions">'
+    + '<button class="btn btn-primary btn-sm" onclick="genererPGCPrerempli()">&#9881; Generer le PGC pre-rempli</button>'
+    + '</div></div>';
+}
+
+function genererPGCPrerempli() {
+  var affaire = currentAffaireObj();
+  if (!affaire) { showToast('Sauvegardez l\'affaire avant de generer le PGC', 'error'); return; }
+  var agg = agregerElementsPGC(affaire);
+  var s = agg.sources;
+  var total = s.diag + s.planning + s.contraintes + s.plans;
+  var cat = affaire.cat || currentCat || 2;
+  var ref = (String(cat) === '3') ? 'PGC3R' : 'PGCR';
+  function esc(x){ return (typeof escHtml === 'function') ? escHtml(String(x==null?'':x)) : String(x==null?'':x); }
+  function bloc(titre, txt){ return txt ? '<div style="margin:6px 0;"><strong>' + titre + '</strong><br><span style="white-space:pre-line;font-size:13px;">' + esc(txt) + '</span></div>' : ''; }
+  var apercu = ''
+    + bloc('Co-activite (planning)', agg.coactivite)
+    + (agg.alertes.length ? '<div style="background:#fde8e8;border-radius:6px;padding:6px 10px;margin:6px 0;font-size:13px;"><strong>&#9888;&#65039; Alertes :</strong><br>• ' + agg.alertes.map(esc).join('<br>• ') + '</div>' : '')
+    + bloc('Phasage', agg.phasage)
+    + bloc('Environnement / site', agg.environnement)
+    + bloc('Reseaux / servitudes', agg.reseaux)
+    + bloc('Interferences (exploitation)', agg.interferences)
+    + bloc('Acces / circulation', agg.acces)
+    + bloc('Installation de chantier / base vie', agg.base_vie)
+    + (agg.travaux_dangereux.length ? bloc('Travaux dangereux', agg.travaux_dangereux.join(', ')) : '');
+  var pieces = [];
+  if (s.diag) pieces.push(s.diag + ' diagnostic(s)');
+  if (s.planning) pieces.push(s.planning + ' planning(s)');
+  if (s.contraintes) pieces.push(s.contraintes + ' contrainte(s)');
+  if (s.plans) pieces.push(s.plans + ' plan(s)');
+  var entete = total
+    ? '<p style="margin-bottom:8px;">Le PGC <strong>' + (ref === 'PGC3R' ? 'simplifie (Cat.3)' : 'complet') + '</strong> va etre genere en injectant les analyses de : <strong>' + esc(pieces.join(', ')) + '</strong>.</p>'
+    : '<p style="margin-bottom:8px;">Aucun element-source analyse : le PGC sortira avec le socle par defaut (a completer). Vous pouvez d\'abord deposer diagnostics, plannings, contraintes et plans.</p>';
+  var corps = entete
+    + (apercu ? '<div style="max-height:300px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:10px;background:#fff;">' + apercu + '</div>' : '')
+    + '<p style="font-size:12px;color:var(--text-light);margin-top:10px;">L\'IA propose ce pre-remplissage — vous relisez et validez le PGC genere. Rien n\'est fige : le document Word reste entierement modifiable.</p>';
+  openDocModal('&#9881; Generer le PGC pre-rempli', corps, 'Generer le PGC', function(){
+    generateDocAvecCheck(ref);
+  });
+}
+
 // Carte "Analyse des diagnostics" (demande d'Alain 05/07) : les Word d'analyse
 // (docRef ANALYSE, generes a chaque depot de diagnostic) listes comme un vrai
 // document — Apercu / Telecharger / Details — en plus de leur trace au RJC.
@@ -3149,7 +3212,7 @@ function renderDocsGrid() {
         + btnTel
         + btnAnalyses
         + '</div></div>';
-    }).join('') + renderAnalyseCard(affaire);
+    }).join('') + renderAnalyseCard(affaire) + renderPGCPrefillCard(affaire);
   }
   grid.innerHTML = DOCS.map(function(doc){
     var active = doc.cats.includes(currentCat);
@@ -4497,6 +4560,77 @@ var PGC_RISQUES_LIB = {
   r27: { label: 'Intempéries', mesures: 'Arrêt des travaux en hauteur ou de levage si vent > 50-60 km/h ou vigilance orange/rouge. Suivi Météo-France. Report des travaux extérieurs en cas de verglas, neige, fortes pluies.' },
 };
 
+// ── PASSE B : agregation des elements deposes (diagnostics + plannings +
+// contraintes + plans) pour PRE-REMPLIR le PGC. Lit affaire.rapportsAnalyses
+// (rempli par les analyses IA au depot) et compose des textes prets a injecter
+// dans la trame. L'IA propose, le CSPS relit et valide (rien n'est fige).
+function agregerElementsPGC(affaire) {
+  var out = {
+    coactivite: '', phasage: '', environnement: '', reseaux: '', interferences: '',
+    base_vie: '', acces: '', travaux_dangereux: [], alertes: [],
+    sources: { diag: 0, planning: 0, contraintes: 0, plans: 0 }
+  };
+  if (!affaire || !affaire.rapportsAnalyses || !affaire.rapportsAnalyses.length) return out;
+  var envParts = [], reseauxParts = [], interfParts = [], accesParts = [], baseVieParts = [];
+  var coactParts = [], phaseParts = [];
+  affaire.rapportsAnalyses.forEach(function(ra){
+    var a = (ra && ra.analyse) ? ra.analyse : (ra || {});
+    var t = a.type_rapport || '';
+    if (t === 'planning') {
+      out.sources.planning++;
+      (a.phases || []).forEach(function(ph){
+        if (ph && ph.nom) phaseParts.push(ph.nom + (ph.periode ? ' (' + ph.periode + ')' : '') + (ph.corps_etat ? ' — ' + ph.corps_etat : ''));
+      });
+      (a.coactivites || []).forEach(function(co){
+        if (!co) return;
+        var g = co.gravite ? co.gravite.toUpperCase() + ' — ' : '';
+        coactParts.push('• ' + g + (co.periode || '') + (co.corps_etat ? ' : ' + co.corps_etat : '') + (co.zone ? ' [' + co.zone + ']' : '') + (co.risque ? ' → ' + co.risque : ''));
+      });
+      (a.phases_dangereuses || []).forEach(function(pd){
+        if (!pd) return;
+        if (pd.nature) out.travaux_dangereux.push(pd.nature);
+        coactParts.push('• Phase dangereuse : ' + (pd.phase || '') + (pd.nature ? ' [' + pd.nature + ']' : '') + (pd.incompatibilite ? ' — ' + pd.incompatibilite : '') + (pd.mesure ? ' → ' + pd.mesure : ''));
+      });
+      (a.alertes_rouges || []).forEach(function(al){ if (al) out.alertes.push(al); });
+    } else if (t === 'contraintes') {
+      out.sources.contraintes++;
+      (a.contraintes || []).forEach(function(co){
+        if (!co || !co.detail) return;
+        var cat = (co.categorie || '').toLowerCase();
+        var ligne = co.detail + (co.mesure ? ' → ' + co.mesure : '');
+        if (cat.indexOf('reseau') >= 0 || cat.indexOf('servitude') >= 0) reseauxParts.push(ligne);
+        else if (cat.indexOf('exploit') >= 0) interfParts.push(ligne);
+        else if (cat.indexOf('acces') >= 0 || cat.indexOf('circul') >= 0) accesParts.push(ligne);
+        else envParts.push(ligne);
+      });
+      if (a.synthese && !a.contraintes) envParts.push(a.synthese);
+    } else if (t === 'plans') {
+      out.sources.plans++;
+      if (a.contraintes_implantation) accesParts.push(a.contraintes_implantation);
+      (a.elements || []).forEach(function(el){
+        if (!el) return;
+        var ty = (el.type || '').toLowerCase();
+        if (ty.indexOf('pic') >= 0 || ty.indexOf('installation') >= 0) baseVieParts.push((el.type || 'PIC') + (el.observations ? ' : ' + el.observations : ''));
+        else if (el.observations) envParts.push((el.type ? el.type + ' : ' : '') + el.observations);
+      });
+    } else {
+      // diagnostics et autres rapports techniques
+      out.sources.diag++;
+    }
+  });
+  function joinLn(arr) { return arr.filter(Boolean).join('\n'); }
+  out.coactivite = joinLn(coactParts);
+  out.phasage = phaseParts.length ? phaseParts.join(' ; ') : '';
+  out.environnement = joinLn(envParts);
+  out.reseaux = joinLn(reseauxParts);
+  out.interferences = joinLn(interfParts);
+  out.acces = joinLn(accesParts);
+  out.base_vie = joinLn(baseVieParts);
+  // Dedoublonne les natures de travaux dangereux
+  out.travaux_dangereux = out.travaux_dangereux.filter(function(v, i, s){ return v && s.indexOf(v) === i; });
+  return out;
+}
+
 function buildTagsPGC(data) {
   function ou(v, def) { return (v && String(v).trim()) ? String(v).trim() : def; }
   var c = data.chantier || {};
@@ -4536,6 +4670,7 @@ function buildTagsPGC(data) {
 
   // Detail amiante : import PGC + analyses IA des diagnostics deposes (conception)
   var aff = (typeof currentAffaireObj === 'function') ? currentAffaireObj() : null;
+  var agg = agregerElementsPGC(aff);
   var amiante = !!(rp.amiante || am.raat_date || am.bureau);
   var amDetails = [];
   if (am.raat_date || am.bureau) amDetails.push('RAAT du ' + ou(am.raat_date, '?') + (am.bureau ? ' etabli par ' + am.bureau : '') + (am.ss4_obligatoire ? ' — entreprise certifiee exigee' : '') + '.');
@@ -4577,20 +4712,20 @@ function buildTagsPGC(data) {
     pgc_date: new Date().toLocaleDateString('fr-FR'),
     pgc_type_marche: ou(c.marche, AC),
     pgc_demarches: AC + ' (voirie, emprise, autorisations particulieres...)',
-    pgc_interferences: (amiante || rp.demolition) ? AC + ' — chantier avec demolition : verifier les activites voisines / site en exploitation.' : 'Sans objet au jour de la redaction. ' + AC,
-    pgc_reseaux: AC + ' (presence de reseaux, PV de coupure, servitudes...)',
-    pgc_phasage: ou(c.duree, AC) === AC ? AC : 'Duree previsible ' + c.duree + '. Phasage detaille : ' + AC,
-    pgc_base_vie: ou(c3.hygiene, 'Vestiaire — refectoire — sanitaires mis en place par le lot principal des le demarrage, y compris raccordements. ' + AC),
-    pgc_acces: ou(c3.acces, AC),
+    pgc_interferences: agg.interferences ? agg.interferences : ((amiante || rp.demolition) ? AC + ' — chantier avec demolition : verifier les activites voisines / site en exploitation.' : 'Sans objet au jour de la redaction. ' + AC),
+    pgc_reseaux: agg.reseaux ? agg.reseaux : AC + ' (presence de reseaux, PV de coupure, servitudes...)',
+    pgc_phasage: agg.phasage ? (agg.phasage + (agg.alertes.length ? '\n\nPoints critiques du planning : ' + agg.alertes.join(' ; ') : '')) : (ou(c.duree, AC) === AC ? AC : 'Duree previsible ' + c.duree + '. Phasage detaille : ' + AC),
+    pgc_base_vie: agg.base_vie ? agg.base_vie : ou(c3.hygiene, 'Vestiaire — refectoire — sanitaires mis en place par le lot principal des le demarrage, y compris raccordements. ' + AC),
+    pgc_acces: agg.acces ? agg.acces : ou(c3.acces, AC),
     pgc_securisation: ou(c3.securisation, 'Cloture type HERAS h=2,00 m avec colliers anti-vandalisme, portail verrouille. ' + AC),
     pgc_energie: ou(c3.energie, AC),
     pgc_stockages: ou(c3.stockages, ''),
     pgc_dechets: ou(c3.dechets, ''),
     pgc_hygiene: ou(c3.hygiene, AC),
     pgc_effectif: ou(c.nbEnt ? c.nbEnt + ' entreprises — effectif de pointe a preciser' : '', AC),
-    pgc_coactivite: AC + ' (suivant planning MOE phase DCE)',
-    pgc_environnement: AC + ' (site en exploitation, voisinage, affluence, reseaux aeriens...)',
-    pgc_travaux_dangereux: travauxDang.length ? travauxDang.join(', ') : AC,
+    pgc_coactivite: agg.coactivite ? (agg.coactivite + (agg.alertes.length ? '\n\nALERTES A NE PAS RATER :\n• ' + agg.alertes.join('\n• ') : '')) : AC + ' (suivant planning MOE phase DCE)',
+    pgc_environnement: agg.environnement ? agg.environnement : AC + ' (site en exploitation, voisinage, affluence, reseaux aeriens...)',
+    pgc_travaux_dangereux: (travauxDang.concat(agg.travaux_dangereux)).filter(function(v,i,s){return v && s.indexOf(v)===i;}).join(', ') || AC,
     a_amiante: amiante,
     amiante_detail: amDetails.join('\n'),
     secours_hopital: ou(sec.hopital, AC) + (sec.distance ? ' (' + sec.distance + ')' : ''),
