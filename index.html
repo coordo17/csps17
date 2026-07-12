@@ -636,7 +636,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.38</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.39</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -2503,6 +2503,7 @@ function htmlAnalyse(p) {
   function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   if (p && p.type_rapport === 'planning') return htmlAnalysePlanning(p, esc);
   if (p && p.type_rapport === 'ppsps') return htmlAnalysePPSPS(p, esc);
+  if (p && p.type_rapport === 'harmo') return htmlAnalyseHarmo(p, esc);
   var l = [];
   l.push('<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">'
     + '<span style="background:var(--blue-xl);color:var(--blue-dark);font-weight:700;padding:2px 10px;border-radius:10px;font-size:12px;">' + esc(p.type_rapport || 'autre') + '</span>'
@@ -2608,6 +2609,29 @@ function htmlAnalysePlanning(p, esc) {
   return l.join('');
 }
 
+// Rendu de la NOTE D'HARMONISATION CONSOLIDEE (croisement inter-lots).
+function htmlAnalyseHarmo(p, esc) {
+  var l = [];
+  l.push('<div style="font-weight:800;color:var(--blue-dark);margin-bottom:6px;">&#128203; Note d\'harmonisation des PPSPS (R.4532-48)</div>');
+  if (p.synthese) l.push('<p style="margin-bottom:6px;">' + esc(p.synthese) + '</p>');
+  function bl(titre, arr, col, bg){
+    if (!arr || !arr.length) return '';
+    return '<div style="font-weight:700;color:' + (col||'#1F4E79') + ';margin:8px 0 3px;">' + titre + '</div>'
+      + '<ul style="margin:0 0 4px 16px;padding:0;font-size:13px;' + (bg?'background:'+bg+';border-radius:6px;padding:6px 6px 6px 22px;':'') + '">'
+      + arr.map(function(x){ return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>';
+  }
+  l.push(bl('&#9888;&#65039; Incoherences entre lots', p.incoherences, '#b91c1c', '#fde8e8'));
+  l.push(bl('&#128101; Coactivites a organiser', p.coactivites_croisees, '#C07000'));
+  l.push(bl('&#128295; Moyens communs a harmoniser', p.moyens_communs, '#1F4E79'));
+  if (p.actions && p.actions.length) {
+    l.push('<div style="font-weight:700;color:#166534;margin:8px 0 3px;">&#9993; Actions / retours aux entreprises</div>');
+    l.push(p.actions.map(function(a){
+      return '<div style="background:#f2f6fb;border-left:4px solid var(--blue);padding:6px 10px;margin-bottom:4px;border-radius:4px;font-size:13px;"><strong>' + esc(a.entreprise || '') + ' :</strong> ' + esc(a.demande || '') + '</div>';
+    }).join(''));
+  }
+  return l.join('');
+}
+
 // Rendu d'une FICHE D'HARMONISATION PPSPS : en-tete entreprise/lot + statut de
 // coherence, points PGC couverts/absents, risques importes/exportes, observations.
 function htmlAnalysePPSPS(p, esc) {
@@ -2654,6 +2678,155 @@ function afficherAnalyseModal(parsed, phase, nomFichier, affaire) {
 // Affiche le nombre d'elements-source deposes (diagnostics, plannings,
 // contraintes, plans) et un bouton qui genere le PGC en injectant leurs
 // analyses dans la trame. L'IA propose, le CSPS relit et valide.
+// ── HARMONISATION PPSPS — PASSE B : croisement inter-lots ────────────────────
+// Rassemble toutes les fiches PPSPS analysees (passe A) et produit le TABLEAU DE
+// SYNTHESE (lots x points) + la NOTE CONSOLIDEE (incoherences inter-lots,
+// coactivite croisee, moyens communs, actions). Trace au RJC — preuve de coord.
+function agregerHarmoPPSPS(affaire) {
+  var fiches = [];
+  if (affaire && affaire.rapportsAnalyses) {
+    affaire.rapportsAnalyses.forEach(function(ra){
+      var a = (ra && ra.analyse) ? ra.analyse : (ra || {});
+      if (a.type_rapport !== 'ppsps') return;
+      fiches.push({
+        entreprise: a.entreprise || (ra.fichier || 'Entreprise'),
+        lot: a.lot || '', coherence: a.coherence || 'a_valider', statut: a.statut || 'a_valider',
+        points_absents: a.points_pgc_absents || [], points_couverts: a.points_pgc_couverts || [],
+        risques_importes: a.risques_importes || [], risques_exportes: a.risques_exportes || [],
+        coactivite: a.coactivite || '', moyens_communs: a.moyens_communs || '',
+        observations: a.observations || '', date: ra.date || ''
+      });
+    });
+  }
+  return { fiches: fiches, count: fiches.length };
+}
+
+function renderHarmoPPSPSCard(affaire) {
+  var agg = agregerHarmoPPSPS(affaire);
+  var n = agg.count;
+  var nonConf = agg.fiches.filter(function(f){ return (f.coherence || '').toLowerCase() !== 'conforme'; }).length;
+  var note = n
+    ? n + ' PPSPS analyse(s)' + (nonConf ? ' — ' + nonConf + ' avec reserves/non conforme a harmoniser' : ' — tous conformes') + '. Croisez les lots : coactivite, moyens communs, incoherences, actions.'
+    : 'Aucun PPSPS analyse. Deposez les PPSPS des entreprises ci-dessus, puis harmonisez : le CSPS croise les lots et sort la note consolidee (R.4532-48).';
+  var badge = n ? '<span class="doc-badge" style="cursor:default;" title="' + n + ' PPSPS">' + n + '</span>' : '';
+  return '<div class="doc-card" style="border:1.5px solid #7c3aed;background:#faf7ff;">'
+    + badge
+    + '<div class="doc-card-top"><div class="doc-icon">&#128203;</div>'
+    + '<div class="doc-info"><div class="doc-title">Harmoniser les PPSPS</div>'
+    + '<div class="doc-ref">' + note + '</div></div></div>'
+    + '<div class="doc-actions">'
+    + '<button class="btn btn-primary btn-sm" onclick="harmoniserPPSPS()">&#128203; Harmoniser les PPSPS</button>'
+    + '</div></div>';
+}
+
+async function harmoniserPPSPS() {
+  var affaire = currentAffaireObj();
+  if (!affaire) { showToast('Sauvegardez l\'affaire avant d\'harmoniser', 'error'); return; }
+  var agg = agregerHarmoPPSPS(affaire);
+  if (!agg.count) { showToast('Aucun PPSPS analyse — deposez d\'abord les PPSPS des entreprises', 'error'); return; }
+  function esc(x){ return (typeof escHtml === 'function') ? escHtml(String(x==null?'':x)) : String(x==null?'':x); }
+  function cohBadge(c){
+    var k=(c||'').toLowerCase();
+    var col = k==='non_conforme'?'#b91c1c':k==='reserves'?'#C07000':k==='conforme'?'#166534':'#555';
+    var bg  = k==='non_conforme'?'#fde8e8':k==='reserves'?'#FFF0CC':k==='conforme'?'#dcfce7':'#eee';
+    var txt = k==='non_conforme'?'Non conforme':k==='reserves'?'Sous reserves':k==='conforme'?'Conforme':'A valider';
+    return '<span style="background:'+bg+';color:'+col+';font-weight:700;padding:1px 8px;border-radius:8px;font-size:11px;">'+txt+'</span>';
+  }
+  // TABLEAU DE SYNTHESE (lots x points)
+  var rows = agg.fiches.map(function(f){
+    return '<tr>'
+      + '<td style="border:1px solid var(--border);padding:4px 6px;font-size:12px;"><strong>' + esc(f.entreprise) + '</strong>' + (f.lot ? '<br><span style="color:var(--text-light);">' + esc(f.lot) + '</span>' : '') + '</td>'
+      + '<td style="border:1px solid var(--border);padding:4px 6px;text-align:center;">' + cohBadge(f.coherence) + '</td>'
+      + '<td style="border:1px solid var(--border);padding:4px 6px;font-size:12px;">' + (f.points_absents.length ? '&#10060; ' + f.points_absents.map(esc).join('<br>&#10060; ') : '<span style="color:#166534;">&#10003; complet</span>') + '</td>'
+      + '<td style="border:1px solid var(--border);padding:4px 6px;font-size:12px;">' + (f.risques_importes.length ? esc(f.risques_importes.join(' ; ')) : '—') + '</td>'
+      + '<td style="border:1px solid var(--border);padding:4px 6px;font-size:12px;">' + (f.risques_exportes.length ? esc(f.risques_exportes.join(' ; ')) : '—') + '</td>'
+      + '</tr>';
+  }).join('');
+  var tableau = '<div style="overflow:auto;"><table style="border-collapse:collapse;width:100%;margin-bottom:10px;">'
+    + '<thead><tr style="background:var(--blue-xl);">'
+    + '<th style="border:1px solid var(--border);padding:5px 6px;font-size:11px;">Entreprise / lot</th>'
+    + '<th style="border:1px solid var(--border);padding:5px 6px;font-size:11px;">Coherence PGC</th>'
+    + '<th style="border:1px solid var(--border);padding:5px 6px;font-size:11px;">Points PGC manquants</th>'
+    + '<th style="border:1px solid var(--border);padding:5px 6px;font-size:11px;">Risques importes</th>'
+    + '<th style="border:1px solid var(--border);padding:5px 6px;font-size:11px;">Risques exportes</th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+
+  openDocModal('📋 Harmonisation des PPSPS', tableau + '<p style="text-align:center;color:var(--text-light);font-size:13px;">Croisement des lots par l\'IA en cours...</p>', null, null);
+
+  // NOTE CONSOLIDEE par IA : croise les fiches pour degager les incoherences
+  var resume = agg.fiches.map(function(f){
+    return '- ' + f.entreprise + (f.lot ? ' (' + f.lot + ')' : '') + ' | coherence: ' + f.coherence
+      + ' | manquant PGC: ' + (f.points_absents.join(', ') || 'aucun')
+      + ' | risques importes: ' + (f.risques_importes.join(', ') || 'aucun')
+      + ' | risques exportes: ' + (f.risques_exportes.join(', ') || 'aucun')
+      + ' | coactivite: ' + (f.coactivite || 'n/c') + ' | moyens communs: ' + (f.moyens_communs || 'n/c');
+  }).join('\n');
+  var note = null;
+  try {
+    var prompt = 'Tu es coordonnateur SPS. Voici la synthese des PPSPS analyses des entreprises d\'un meme chantier :\n\n' + resume
+      + '\n\nHARMONISE ces PPSPS (R.4532-48) : croise les lots pour reperer les INCOHERENCES et la coactivite. Reponds UNIQUEMENT en JSON valide, sans markdown ni backtick :\n'
+      + '{"synthese":"...","incoherences":["..."],"coactivites_croisees":["..."],"moyens_communs":["..."],"actions":[{"entreprise":"...","demande":"..."}]}\n'
+      + 'synthese=4 phrases max sur l\'etat d\'harmonisation global. '
+      + 'incoherences=contradictions ou lacunes ENTRE lots (ex : un lot exporte un risque qu\'un autre lot n\'a pas pris en compte ; mesures divergentes sur une zone commune). '
+      + 'coactivites_croisees=situations de coactivite a organiser entre lots identifies (qui/quand/zone). '
+      + 'moyens_communs=points a harmoniser sur les moyens communs (echafaudages, levage, base vie, acces). '
+      + 'actions=liste concrete : pour chaque entreprise concernee, la demande de mise a jour du PPSPS. N\'invente rien. Ecris en francais, concret, oriente coordination.';
+    var response = await fetch('/api/claude', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'llama-3.3-70b-versatile', max_tokens: 1800, messages: [{ role: 'user', content: prompt }] })
+    });
+    var result = await response.json();
+    if (response.ok) {
+      var text = (result.content && result.content[0] && result.content[0].text) ? result.content[0].text
+        : (result.choices && result.choices[0] && result.choices[0].message ? result.choices[0].message.content : '{}');
+      note = JSON.parse(text.replace(/```json|```/g, '').trim());
+      note = nettoyerAnalyseFr(note);
+    }
+  } catch (err) { note = null; }
+
+  var noteHtml = '';
+  if (note) {
+    function bl(titre, arr, col, bg){
+      if (!arr || !arr.length) return '';
+      return '<div style="font-weight:700;color:' + (col||'#1F4E79') + ';margin:8px 0 3px;">' + titre + '</div>'
+        + '<ul style="margin:0 0 4px 16px;padding:0;font-size:13px;' + (bg?'background:'+bg+';border-radius:6px;padding:6px 6px 6px 22px;':'') + '">'
+        + arr.map(function(x){ return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>';
+    }
+    noteHtml += '<div style="border-top:2px solid var(--blue);margin-top:10px;padding-top:8px;"><div style="font-weight:800;color:var(--blue-dark);margin-bottom:6px;">Note d\'harmonisation consolidee</div>';
+    if (note.synthese) noteHtml += '<p style="margin-bottom:6px;font-size:13px;">' + esc(note.synthese) + '</p>';
+    noteHtml += bl('&#9888;&#65039; Incoherences entre lots', note.incoherences, '#b91c1c', '#fde8e8');
+    noteHtml += bl('&#128101; Coactivites a organiser', note.coactivites_croisees, '#C07000');
+    noteHtml += bl('&#128295; Moyens communs a harmoniser', note.moyens_communs, '#1F4E79');
+    if (note.actions && note.actions.length) {
+      noteHtml += '<div style="font-weight:700;color:#166534;margin:8px 0 3px;">&#9993; Actions / retours aux entreprises</div>';
+      noteHtml += note.actions.map(function(a){
+        return '<div style="background:#f2f6fb;border-left:4px solid var(--blue);padding:6px 10px;margin-bottom:4px;border-radius:4px;font-size:13px;"><strong>' + esc(a.entreprise || '') + ' :</strong> ' + esc(a.demande || '') + '</div>';
+      }).join('');
+    }
+    noteHtml += '</div>';
+    // Trace au RJC + stockage
+    try {
+      note.type_rapport = 'harmo';
+      if (!affaire.rapportsAnalyses) affaire.rapportsAnalyses = [];
+      affaire.rapportsAnalyses.push({ id: 'rap-' + Date.now(), date: new Date().toISOString().split('T')[0], fichier: 'Harmonisation PPSPS (' + agg.count + ' lots)', analyse: note });
+      ajouterEntreeRJC(affaire, {
+        date: new Date().toISOString().split('T')[0],
+        nature: 'Note d\'harmonisation des PPSPS (R.4532-48)',
+        objet: agg.count + ' PPSPS croises', intervenants: '', ref: 'Harmonisation PPSPS', docRef: 'HARMO',
+      });
+      persistAffaires();
+    } catch (eR) {}
+  } else {
+    noteHtml = '<p style="color:var(--orange-dark);font-size:13px;margin-top:8px;">La note consolidee IA n\'a pas pu etre generee (reseau ?). Le tableau de synthese ci-dessus reste exploitable.</p>';
+  }
+
+  var corps = tableau + noteHtml
+    + '<p style="font-size:12px;color:var(--text-light);margin-top:10px;">Harmonisation assistee par IA (R.4532-48) — a relire et valider. Tracee au registre-journal.</p>';
+  openDocModal('📋 Harmonisation des PPSPS', corps, '🖨 Imprimer', function(){
+    imprimerAnalyses(affaire, { fichier: 'Harmonisation PPSPS', analyse: (note || { type_rapport:'harmo', synthese:'Tableau de synthese des PPSPS' }) });
+  });
+}
+
 function renderPGCPrefillCard(affaire) {
   var agg = agregerElementsPGC(affaire);
   var s = agg.sources;
@@ -3315,7 +3488,7 @@ function renderDocsGrid() {
         + btnTel
         + btnAnalyses
         + '</div></div>';
-    }).join('') + renderAnalyseCard(affaire) + renderPGCPrefillCard(affaire);
+    }).join('') + renderAnalyseCard(affaire) + renderPGCPrefillCard(affaire) + renderHarmoPPSPSCard(affaire);
   }
   grid.innerHTML = DOCS.map(function(doc){
     var active = doc.cats.includes(currentCat);
