@@ -636,7 +636,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.37</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.38</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -940,6 +940,7 @@
           <input type="file" id="piece-input-PLAN" accept=".pdf,.docx" style="display:none;" multiple onchange="handlePieceUpload(event,'PLAN')">
           <input type="file" id="piece-input-CONTRAINTES" accept=".pdf,.docx" style="display:none;" multiple onchange="handlePieceUpload(event,'CONTRAINTES')">
           <input type="file" id="piece-input-PLANS" accept=".pdf,.docx" style="display:none;" multiple onchange="handlePieceUpload(event,'PLANS')">
+          <input type="file" id="piece-input-PPSPS" accept=".pdf,.docx" style="display:none;" multiple onchange="handlePieceUpload(event,'PPSPS')">
           <input type="file" id="insert-doc-input" accept=".pdf,.docx,.doc,.jpg,.jpeg,.png" style="display:none;" multiple onchange="handleInsertDoc(event)">
         </div>
         <div class="docs-grid" id="docs-grid"></div>
@@ -2099,6 +2100,7 @@ var PIECES_DOSSIER = [
   { ref: 'PLAN', title: 'Plannings (entreprises)', icon: '&#128197;', note: 'Deposez les plannings des entreprises — analyse coordination (co-activite, phases critiques, alertes) a chaque depot' },
   { ref: 'CONTRAINTES', title: 'Contraintes du site', icon: '&#9888;', note: 'Fichier OU texte libre — servitudes, reseaux, voisinage, exploitation, acces... — analyse IA (element du PGC)' },
   { ref: 'PLANS', title: 'Plans (masse, PIC, coupes)', icon: '&#128506;', note: 'Deposez les plans (PDF/DOCX) — extraction du texte + analyse IA (element du PGC)' },
+  { ref: 'PPSPS', title: 'PPSPS entreprises (harmonisation)', icon: '&#128203;', note: 'Deposez le PPSPS de chaque entreprise — analyse d\'harmonisation au depot : coherence PGC, coactivite, risques importes/exportes (R.4532-48)' },
 ];
 
 // Type de document d'une entree RJC : champ docRef (nouvelles entrees) ou
@@ -2145,6 +2147,7 @@ async function deposerPieceDossier(affaire, file, type) {
       : type === 'ICR' ? 'Inspection commune realisee'
       : type === 'CONTRAINTES' ? 'Contraintes du site (element PGC)'
       : type === 'PLANS' ? 'Plans (element PGC)'
+      : type === 'PPSPS' ? 'Reception PPSPS (harmonisation)'
       : 'Reception rapport / diagnostic';
     var created = ajouterEntreeRJC(affaire, {
       date: new Date().toISOString().split('T')[0],
@@ -2171,6 +2174,7 @@ async function deposerPieceDossier(affaire, file, type) {
     else if (type === 'ICR') await analyserICDeposee(affaire, file);
     else if (type === 'CONTRAINTES') await analyserContraintesDeposee(affaire, file);
     else if (type === 'PLANS') await analyserPlansDepose(affaire, file);
+    else if (type === 'PPSPS') await analyserPPSPSDepose(affaire, file);
   } catch (err) {
     showToast('Erreur depot : ' + err.message, 'error');
   }
@@ -2498,6 +2502,7 @@ function nettoyerAnalyseFr(o) {
 function htmlAnalyse(p) {
   function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   if (p && p.type_rapport === 'planning') return htmlAnalysePlanning(p, esc);
+  if (p && p.type_rapport === 'ppsps') return htmlAnalysePPSPS(p, esc);
   var l = [];
   l.push('<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">'
     + '<span style="background:var(--blue-xl);color:var(--blue-dark);font-weight:700;padding:2px 10px;border-radius:10px;font-size:12px;">' + esc(p.type_rapport || 'autre') + '</span>'
@@ -2600,6 +2605,38 @@ function htmlAnalysePlanning(p, esc) {
       + '<strong>Points de vigilance :</strong><ul style="margin:4px 0 0 16px;padding:0;">'
       + p.points_vigilance.map(function(v){ return '<li>' + esc(v) + '</li>'; }).join('') + '</ul></div>');
   }
+  return l.join('');
+}
+
+// Rendu d'une FICHE D'HARMONISATION PPSPS : en-tete entreprise/lot + statut de
+// coherence, points PGC couverts/absents, risques importes/exportes, observations.
+function htmlAnalysePPSPS(p, esc) {
+  var coh = (p.coherence || '').toLowerCase();
+  var cohCol = coh === 'non_conforme' ? '#b91c1c' : coh === 'reserves' ? '#C07000' : '#166534';
+  var cohBg  = coh === 'non_conforme' ? '#fde8e8' : coh === 'reserves' ? '#FFF0CC' : '#dcfce7';
+  var cohTxt = coh === 'non_conforme' ? 'NON CONFORME' : coh === 'reserves' ? 'SOUS RESERVES' : 'CONFORME';
+  var l = [];
+  l.push('<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">'
+    + '<span style="background:#1F4E79;color:#fff;font-weight:700;padding:2px 10px;border-radius:10px;font-size:12px;">&#128203; PPSPS</span>'
+    + (p.entreprise ? '<span style="font-weight:700;">' + esc(p.entreprise) + '</span>' : '')
+    + (p.lot ? '<span style="background:#eee;padding:2px 10px;border-radius:10px;font-size:12px;">' + esc(p.lot) + '</span>' : '')
+    + '<span style="background:' + cohBg + ';color:' + cohCol + ';font-weight:700;padding:2px 10px;border-radius:10px;font-size:12px;">' + cohTxt + '</span>'
+    + '</div>');
+  function liste(titre, arr, col, bg) {
+    if (!arr || !arr.length) return '';
+    return '<div style="font-weight:700;color:' + (col || '#1F4E79') + ';margin:8px 0 3px;">' + titre + '</div>'
+      + '<ul style="margin:0 0 4px 16px;padding:0;font-size:13px;' + (bg ? 'background:' + bg + ';border-radius:6px;padding:6px 6px 6px 22px;' : '') + '">'
+      + arr.map(function(x){ return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>';
+  }
+  l.push(liste('&#9989; Points du PGC repris', p.points_pgc_couverts, '#166534'));
+  l.push(liste('&#10060; Points du PGC manquants / a completer', p.points_pgc_absents, '#b91c1c', '#fde8e8'));
+  l.push(liste('&#8681; Risques importes (subis des autres lots)', p.risques_importes, '#C07000'));
+  l.push(liste('&#8679; Risques exportes (vers les autres lots)', p.risques_exportes, '#C07000'));
+  l.push(liste('&#128736; Taches principales', p.taches, '#555'));
+  l.push(liste('&#128737; Mesures de prevention', p.mesures, '#555'));
+  if (p.coactivite) l.push('<p style="margin:4px 0;font-size:13px;"><strong>Co-activite :</strong> ' + esc(p.coactivite) + '</p>');
+  if (p.moyens_communs) l.push('<p style="margin:4px 0;font-size:13px;"><strong>Moyens communs :</strong> ' + esc(p.moyens_communs) + '</p>');
+  if (p.observations) l.push('<div style="background:var(--blue-xl);color:var(--blue-dark);padding:8px 10px;border-radius:6px;margin-top:8px;font-size:13px;"><strong>Observations du CSPS (retour entreprise) :</strong> ' + esc(p.observations) + '</div>');
   return l.join('');
 }
 
@@ -2967,6 +3004,72 @@ async function analyserPlansDepose(affaire, file) {
     afficherAnalyseModal(parsed, affaire.missionPhase || '', file.name, affaire);
   } catch (err) {
     showToast('Analyse du plan impossible : ' + err.message, 'error');
+  }
+}
+
+// ── HARMONISATION DES PPSPS (mission CSPS — R.4532-48, fiche CRAMIF FAC SPS 1) ─
+// A chaque PPSPS depose : analyse d'harmonisation = le PPSPS reprend-il
+// l'organisation du PGC ? tâches, risques importes/exportes, mesures, coactivite,
+// moyens communs. Produit une FICHE par PPSPS (reception / observations / statut).
+// Le croisement inter-lots (tableau + note consolidee) = passe B (harmoniserPPSPS).
+function contextePGCpourPPSPS(affaire) {
+  var bits = [];
+  if (!affaire) return '';
+  var rp = affaire.risques_pgc || {};
+  var risquesActifs = Object.keys(rp).filter(function(k){ return rp[k]; })
+    .map(function(k){ return (typeof PGC_RISQUES_LIB !== 'undefined' && PGC_RISQUES_LIB[k]) ? PGC_RISQUES_LIB[k].label : k; });
+  if (risquesActifs.length) bits.push('Risques particuliers du chantier : ' + risquesActifs.join(', ') + '.');
+  (affaire.rapportsAnalyses || []).forEach(function(ra){
+    var a = (ra && ra.analyse) ? ra.analyse : (ra || {});
+    if (a.type_rapport === 'PGC' && a.synthese) bits.push('PGC : ' + a.synthese);
+    if (a.type_rapport === 'planning' && a.coactivites && a.coactivites.length) {
+      bits.push('Co-activites relevees au planning : ' + a.coactivites.map(function(c){ return (c.periode || '') + ' ' + (c.corps_etat || ''); }).join(' ; ') + '.');
+    }
+    if (a.type_rapport === 'contraintes' && a.synthese) bits.push('Contraintes du site : ' + a.synthese);
+  });
+  return bits.join('\n').slice(0, 3000);
+}
+
+async function analyserPPSPSDepose(affaire, file) {
+  try {
+    showToast('Analyse d\'harmonisation du PPSPS ' + file.name + '...');
+    var texte = (await extraireTexteFichier(file)).slice(0, 14000);
+    if (texte.trim().length < 30) { showToast('PPSPS illisible (scan/image ?) — depot conserve sans analyse', 'error'); return; }
+    var contexte = contextePGCpourPPSPS(affaire);
+    var prompt = 'Tu es coordonnateur SPS (CSPS). Tu dois HARMONISER un PPSPS (Plan Particulier de Securite et de Protection de la Sante) d\'une entreprise avec le PGC du chantier, conformement a la mission d\'harmonisation (R.4532-48). '
+      + (contexte ? '\n\nCONTEXTE DU CHANTIER / PGC :\n' + contexte : '')
+      + '\n\nVoici le PPSPS a analyser :\n\n' + texte
+      + '\n\nVerifie que le PPSPS reprend l\'organisation du PGC et analyse-le. Reponds UNIQUEMENT en JSON valide, sans markdown ni backtick :\n'
+      + '{"type_rapport":"ppsps","entreprise":null,"lot":null,"points_pgc_couverts":["..."],"points_pgc_absents":["..."],"taches":["..."],"risques_importes":["..."],"risques_exportes":["..."],"mesures":["..."],"coactivite":null,"moyens_communs":null,"coherence":"conforme","observations":"...","statut":"a_valider"}\n'
+      + 'entreprise=raison sociale de l\'entreprise qui a redige le PPSPS. lot=lot / corps d\'etat. '
+      + 'points_pgc_couverts=points d\'organisation du PGC bien repris dans le PPSPS (base vie / moyens communs, coactivite, acces-circulation, secours, EPC, dechets, phasage, risques particuliers). '
+      + 'points_pgc_absents=points du PGC qui DEVRAIENT figurer au PPSPS et qui manquent ou sont insuffisants (c\'est le coeur des observations du CSPS). '
+      + 'taches=principales taches/phases de travaux de cette entreprise. '
+      + 'risques_importes=risques subis par cette entreprise du fait des AUTRES lots (co-activite). risques_exportes=risques que cette entreprise fait courir aux AUTRES lots. '
+      + 'mesures=mesures de prevention notables prevues. coactivite=1 phrase sur la gestion de la co-activite dans ce PPSPS. moyens_communs=1 phrase sur l\'usage des moyens communs (echafaudages, levage, base vie). '
+      + 'coherence=conforme|reserves|non_conforme (par rapport au PGC et a la coactivite). '
+      + 'observations=2 a 4 phrases : ce que le CSPS demande de corriger/completer pour harmoniser (retour a l\'entreprise). statut=a_valider|conforme|a_reprendre. '
+      + 'N\'invente rien : si une information n\'est pas dans le PPSPS, mets-la dans points_pgc_absents ou laisse vide. Ecris en francais, concret, oriente coordination.';
+    var response = await fetch('/api/claude', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'llama-3.3-70b-versatile', max_tokens: 2000, messages: [{ role: 'user', content: prompt }] })
+    });
+    var result = await response.json();
+    if (!response.ok) throw new Error('Serveur ' + response.status);
+    var text = (result.content && result.content[0] && result.content[0].text) ? result.content[0].text
+      : (result.choices && result.choices[0] && result.choices[0].message ? result.choices[0].message.content : '{}');
+    var parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+    parsed = nettoyerAnalyseFr(parsed);
+    parsed.type_rapport = 'ppsps';
+    if (!affaire.rapportsAnalyses) affaire.rapportsAnalyses = [];
+    affaire.rapportsAnalyses.push({ id: 'rap-' + Date.now(), date: new Date().toISOString().split('T')[0], fichier: file.name, analyse: parsed });
+    persistAffaires();
+    await attacherAnalyseAuRJC(affaire, parsed, file.name);
+    openDocModal('📋 Harmonisation PPSPS — ' + (parsed.entreprise || file.name), htmlAnalyse(parsed)
+      + '<p style="font-size:12px;color:var(--text-light);margin-top:10px;">Fiche d\'harmonisation assistee par IA — a relire et valider. Utilisez « Harmoniser les PPSPS » pour croiser tous les lots.</p>',
+      '🖨 Imprimer', function(){ imprimerAnalyses(affaire, { fichier: file.name, analyse: parsed }); });
+  } catch (err) {
+    showToast('Analyse du PPSPS impossible : ' + err.message, 'error');
   }
 }
 
