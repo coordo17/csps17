@@ -84,6 +84,7 @@
   }
 
   .main { flex: 1; padding: 24px; overflow-y: auto; }
+  .sidebar.collapsed { display: none !important; }
 
   .sidebar-label {
     font-size: 11px;
@@ -1000,7 +1001,7 @@
 
   <!-- PAGE TERRAIN -->
   <div class="page" id="page-terrain">
-    <div style="max-width:720px;">
+    <div style="max-width:1100px;">
 
       <!-- STEP 1 : SELECTION AFFAIRE + DOC -->
       <div id="terrain-step-select">
@@ -1203,7 +1204,7 @@ function switchTab(tab) {
   if (tab === 'rjc') renderRJCTab();
 }
 
-function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
+function toggleSidebar() { var sb=document.getElementById('sidebar'); if(window.innerWidth<=680){ sb.classList.toggle('open'); } else { sb.classList.toggle('collapsed'); } }
 function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); }
 
 // Numerotation SANS TROU ni collision (choix d'Alain 05/07) : on prend le plus
@@ -7834,7 +7835,10 @@ function setObsType(id, type, btn) {}
     <button class="asst-btn" id="asst-test" style="height:30px;padding:0 10px;font-size:13px">🔊 Tester la voix</button>
   </div>
   <div id="asst-msgs"></div>
+  <div id="asst-photo-badge" style="display:none;align-items:center;gap:8px;padding:6px 10px;border-top:1px solid #2D6A4F;background:#0f151c;font-size:12px;color:#7ee2b8"></div>
   <div id="asst-bar">
+    <input type="file" id="asst-photo-in" accept="image/*" capture="environment" style="display:none">
+    <button class="asst-btn" id="asst-photo" title="Joindre / prendre une photo">📷</button>
     <textarea id="asst-input" placeholder="Posez une question sur ce dossier…" rows="1"></textarea>
     <button id="asst-send" class="asst-btn">Envoyer</button>
   </div>
@@ -7926,25 +7930,44 @@ function setObsType(id, type, btn) {}
   }
 
   /* ---- Soumettre : commande locale OU question au modèle ---- */
+  /* ---- Photo (visite chantier -> vision) ---- */
+  var currentPhoto = null;
+  function showPhotoBadge() {
+    var b = $('asst-photo-badge'); if (!b) return;
+    if (!currentPhoto) { b.style.display = 'none'; b.innerHTML = ''; return; }
+    b.style.display = 'flex';
+    b.innerHTML = '<img src="' + currentPhoto.url + '" style="height:36px;border-radius:5px"> Photo jointe';
+    var x = document.createElement('button'); x.className = 'asst-btn'; x.textContent = '✕';
+    x.style.cssText = 'height:26px;padding:0 8px;margin-left:auto;font-size:13px'; x.onclick = clearPhoto; b.appendChild(x);
+  }
+  function clearPhoto() { currentPhoto = null; var f = $('asst-photo-in'); if (f) f.value = ''; showPhotoBadge(); var pb = $('asst-photo'); if (pb) pb.style.background = '#21262d'; }
+  function onPhoto(file) { if (!file) return; var r = new FileReader(); r.onload = function (e) { currentPhoto = { url: e.target.result, mime: file.type || 'image/jpeg' }; showPhotoBadge(); var pb = $('asst-photo'); if (pb) pb.style.background = '#40916C'; }; r.readAsDataURL(file); }
+
+  /* ---- Soumettre : commande locale, OU question (avec photo éventuelle) au modèle ---- */
   async function soumettre(txt, fromVoice) {
-    txt = (txt || '').trim(); if (!txt || busy) return;
-    bulle('user', txt); $('asst-input').value = '';
+    txt = (txt || '').trim(); var photo = currentPhoto;
+    if ((!txt && !photo) || busy) return;
+    if (!txt && photo) txt = 'Commente cette photo de visite de chantier : sécurité, risques visibles, non-conformités et observations pour le compte rendu.';
+    var ud = bulle('user', txt); $('asst-input').value = '';
+    if (photo) { var im = document.createElement('img'); im.src = photo.url; im.style.cssText = 'display:block;max-width:200px;border-radius:8px;margin-top:6px'; ud.appendChild(im); }
     if (fromVoice) { busyVoice = true; if (rec) { try { rec.stop(); } catch (e) {} } recActive = false; }
     function apres(text) { busyVoice = false; if (fromVoice && voiceMode) parle(text, function () { if (voiceMode) setTimeout(ecoute, 250); }); }
-    var cmd = commande(txt);
-    if (cmd !== null) { bulle('ai', cmd); apres(cmd); return; }
+    if (!photo) { var cmd = commande(txt); if (cmd !== null) { bulle('ai', cmd); apres(cmd); return; } }
     busy = true; $('asst-send').disabled = true;
     var hist = loadHist(); hist.push({ role: 'user', content: txt });
     var msgs = hist.slice(-12).map(function (m) { return { role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }; });
+    if (photo) { msgs[msgs.length - 1] = { role: 'user', content: [{ type: 'image_url', image_url: { url: photo.url } }, { type: 'text', text: txt }] }; }
     var typing = bulle('ai', '…'); var text = '';
     try {
-      var r = await fetch('/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ system: systemPrompt(), messages: msgs, max_tokens: 1200 }) });
+      var payload = { system: systemPrompt(), messages: msgs, max_tokens: 1200 };
+      if (photo) payload.model = 'meta-llama/llama-4-scout-17b-16e-instruct';
+      var r = await fetch('/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       var j = await r.json();
       if (!r.ok) throw new Error(j.error || ('Serveur ' + r.status));
       text = (j.content && j.content[0] && j.content[0].text) || (j.choices && j.choices[0] && j.choices[0].message.content) || '(pas de réponse)';
       typing.textContent = text; hist.push({ role: 'assistant', content: text }); saveHist(hist);
     } catch (e) { typing.remove(); bulle('err', 'Erreur : ' + e.message); text = ''; }
-    busy = false; $('asst-send').disabled = false; apres(text);
+    busy = false; $('asst-send').disabled = false; clearPhoto(); apres(text);
   }
 
   function purge() {
@@ -8035,6 +8058,8 @@ function setObsType(id, type, btn) {}
   $('asst-send').onclick = function () { soumettre($('asst-input').value, false); };
   $('asst-mic').onclick = toggleVoix;
   $('asst-purge').onclick = purge;
+  $('asst-photo').onclick = function () { $('asst-photo-in').click(); };
+  $('asst-photo-in').addEventListener('change', function () { onPhoto(this.files[0]); });
   $('asst-set').onclick = function () { var c = $('asst-cfg'); c.style.display = c.style.display === 'block' ? 'none' : 'block'; remplirVoix(); };
   $('asst-input').addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); soumettre($('asst-input').value, false); } });
 

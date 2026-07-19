@@ -33,9 +33,18 @@ app.post('/api/claude', async (req, res) => {
     return res.status(500).json({ error: 'Cle API Groq non configuree' });
   }
   try {
-    // Adapter le body Anthropic vers Groq
+    // Adapter le body Anthropic vers Groq.
+    // Modele texte par defaut ; on autorise un modele VISION si le client le demande
+    // (Sami : commentaire de photos de visite). Liste blanche = securite.
+    const MODELES_OK = [
+      'llama-3.3-70b-versatile',
+      'llama-3.1-8b-instant',
+      'meta-llama/llama-4-scout-17b-16e-instruct',
+      'meta-llama/llama-4-maverick-17b-128e-instruct'
+    ];
+    const modele = MODELES_OK.indexOf(req.body.model) !== -1 ? req.body.model : 'llama-3.3-70b-versatile';
     const body = {
-      model: 'llama-3.3-70b-versatile',
+      model: modele,
       max_tokens: req.body.max_tokens || 4096,
       messages: req.body.messages || [],
     };
