@@ -7952,14 +7952,17 @@ function setObsType(id, type, btn) {}
   function affairesActives() { try { return (typeof affaires !== 'undefined' ? affaires : []).filter(function (a) { return a && !a.archive; }); } catch (e) { return []; } }
   function nomAff(a) { return (a.chantier && a.chantier.nom) || a.nom || a.num || ''; }
   function trouverAffaire(nom) {
-    var q = normaliser(nom), mots = q.split(' ').filter(function (w) { return w.length > 2; }), best = null, bs = 0;
-    affairesActives().forEach(function (a) {
-      var n = normaliser(nomAff(a)); if (!n) return; var sc = 0;
-      if (q && n.indexOf(q) >= 0) sc += 3;
-      mots.forEach(function (w) { if (n.indexOf(w) >= 0) sc++; });
-      if (sc > bs) { bs = sc; best = a; }
-    });
-    return bs >= 1 ? best : null;
+    var q = normaliser(nom); if (!q) return null;
+    var mots = q.split(' ').filter(function (w) { return w.length > 2; });
+    var scored = affairesActives().map(function (a) {
+      var n = normaliser(nomAff(a)); var sc = 0;
+      if (n && n.indexOf(q) >= 0) sc += 5;
+      mots.forEach(function (w) { if (n && n.indexOf(w) >= 0) sc++; });
+      return { a: a, s: sc };
+    }).sort(function (x, y) { return y.s - x.s; });
+    if (!scored.length || scored[0].s < 1) return null;
+    if (scored.length > 1 && scored[1].s >= scored[0].s) return null; // ambigu -> ne devine pas
+    return scored[0].a;
   }
   var DOC_LABELS = { VIS: 'le CR de visite', FIC: 'la Fiche IC', IC: 'le Courrier CSPS', OBS: 'une Observation', DGI: 'un Danger grave imminent', RCO: 'le CR de réunion', PPP: 'la Grille PPSPS' };
   function ouvrirDocTerrain(ref, entNom) {
@@ -7990,7 +7993,7 @@ function setObsType(id, type, btn) {}
     if (/\b(ouvre|ouvrir|prepare|preparer|fais|faire|lance|lancer|cree|creer|demarre|demarrer|redige|rediger|remplis|remplir|nouvelle|nouveau|commence|commencer)\b/.test(t)) {
       var DOCS = [
         { re: /\bvisite\b/, ref: 'VIS' },
-        { re: /\binspection commune\b|\bfiche ic\b|\bic\b/, ref: 'FIC' },
+        { re: /\binspection\b|\bfiche ic\b|\bic\b/, ref: 'FIC' },
         { re: /\bcourrier\b/, ref: 'IC' },
         { re: /\bdanger grave\b|\bdgi\b/, ref: 'DGI' },
         { re: /\bobservation\b|\bnotification\b/, ref: 'OBS' },
@@ -8018,7 +8021,7 @@ function setObsType(id, type, btn) {}
       if (reste.length >= 3) {
         var best = trouverAffaire(reste);
         if (best) { if (typeof loadAffaire === 'function') loadAffaire(best.id); majDossier(); return 'J\'ouvre le dossier « ' + nomAff(best) + ' ».'; }
-        if (/(dossier|chantier|affaire)/.test(t)) { var noms = affairesActives().map(nomAff).filter(Boolean); return 'Je ne trouve pas « ' + reste + ' ». Tes dossiers actifs : ' + (noms.join(' · ') || 'aucun') + '.'; }
+        if (/(dossier|chantier|affaire)/.test(t)) { var noms = affairesActives().map(nomAff).filter(Boolean); return 'Lequel ? Tes dossiers : ' + (noms.join(' · ') || 'aucun') + '.'; }
       }
     }
     return null;
@@ -8084,7 +8087,7 @@ function setObsType(id, type, btn) {}
     if (a === 'ouvrir_dossier') {
       var best = trouverAffaire(p.cible || '');
       if (best) { if (typeof loadAffaire === 'function') loadAffaire(best.id); majDossier(); return 'J\'ouvre le dossier « ' + nomAff(best) + ' ».'; }
-      return 'Je ne trouve pas « ' + (p.cible || '') + ' ». Tes dossiers : ' + (affairesActives().map(nomAff).join(' · ') || 'aucun') + '.';
+      return 'Quel dossier veux-tu ? ' + (affairesActives().map(nomAff).join(' · ') || 'aucun dossier') + '.';
     }
     return null;
   }
@@ -8097,6 +8100,8 @@ function setObsType(id, type, btn) {}
       + 'Format exact : {"action":"...","cible":"","entreprise":"","reponse":""}\n'
       + "action parmi : ouvrir_dossier, ouvrir_visite, ouvrir_ic, ouvrir_courrier, ouvrir_observation, ouvrir_danger, ouvrir_reunion, ouvrir_grille, nouveau_dossier, onglet, aucune.\n"
       + "- Si Alain demande une ACTION dans l'appli : mets l'action, laisse reponse vide. ouvrir_dossier -> cible=nom du dossier. onglet -> cible parmi chantier|intervenants|organismes|documents|rjc. Documents (ic, courrier, observation, danger, reunion, grille) -> entreprise=nom si cité.\n"
+      + "IMPORTANT : « inspection commune » ou « IC » = ouvrir_ic (JAMAIS ouvrir_visite). « visite » / « CR de visite » = ouvrir_visite.\n"
+      + "Pour ouvrir_dossier, cible DOIT être EXACTEMENT le nom d'un dossier de la liste ci-dessous — ne jamais inventer ni fusionner deux noms. Si Alain ne désigne pas clairement UN seul dossier, action=aucune et demande lequel dans reponse en listant les dossiers.\n"
       + "- Sinon (question, conseil réglementaire, discussion) : action=aucune et mets ta réponse (factuelle, concise, sans fioriture) dans reponse.\n"
       + "Dossiers en cours : " + JSON.stringify(aff) + "\nEntreprises du dossier ouvert : " + JSON.stringify(ents);
     var hist = loadHist();
@@ -8178,7 +8183,9 @@ function setObsType(id, type, btn) {}
 
   /* ---- Voix : reconnaissance (mains-libres + réveil) ---- */
   function micUI(on) { var b = $('asst-mic'); if (!b) return; b.style.background = on ? '#7f1d1d' : '#21262d'; b.textContent = on ? '🔴' : '🎤'; }
-  function stopVoix(msg) { voiceMode = false; recActive = false; awaitingCmd = false; micUI(false); if (rec) { try { rec.abort(); } catch (e) {} } try { window.speechSynthesis.cancel(); } catch (e) {} if (msg) bulle('err', msg); }
+  var finalBuf = '', phraseTimer = null;
+  function planifierTraitement() { if (phraseTimer) clearTimeout(phraseTimer); phraseTimer = setTimeout(function () { var txt = finalBuf.trim(); finalBuf = ''; if (txt) onPhrase(txt); }, 1300); }
+  function stopVoix(msg) { voiceMode = false; recActive = false; awaitingCmd = false; if (phraseTimer) { clearTimeout(phraseTimer); phraseTimer = null; } finalBuf = ''; micUI(false); if (rec) { try { rec.abort(); } catch (e) {} } try { window.speechSynthesis.cancel(); } catch (e) {} if (msg) bulle('err', msg); }
   function traiter(cmd) { awaitingCmd = false; soumettre(cmd, true); }
   function onPhrase(raw) {
     var text = (raw || '').trim(); if (!text || busyVoice || !voiceMode) return;
@@ -8196,20 +8203,30 @@ function setObsType(id, type, btn) {}
   function ecoute() {
     if (!voiceMode || !SR || recActive) return;
     var r; try { r = new SR(); } catch (e) { return; }
-    rec = r; recActive = true; r.lang = 'fr-FR'; r.interimResults = true; r.continuous = true;
+    rec = r; recActive = true; finalBuf = ''; r.lang = 'fr-FR'; r.interimResults = true; r.continuous = true;
     var t0 = Date.now();
     r.onresult = function (e) {
       for (var i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) onPhrase(e.results[i][0].transcript);
-        else if (!wakeWord) $('asst-input').value = e.results[i][0].transcript;
+        if (e.results[i].isFinal) { finalBuf += (finalBuf ? ' ' : '') + e.results[i][0].transcript; }
+        else if (!wakeWord) { $('asst-input').value = (finalBuf ? finalBuf + ' ' : '') + e.results[i][0].transcript; }
       }
+      planifierTraitement();
     };
     r.onerror = function (e) {
       recActive = false; var er = e && e.error;
       if (er === 'not-allowed' || er === 'service-not-allowed' || er === 'audio-capture') { stopVoix("Micro non autorisé. Clique sur l'icône à gauche de l'adresse (🔒/🎤), autorise le micro pour ce site, puis réactive le 🎤."); return; }
       if (voiceMode && !busyVoice) { if (Date.now() - t0 < 600 && ++failCount >= 4) { stopVoix("Le micro ne démarre pas correctement ici. Vérifie qu'aucune autre appli ne l'utilise, puis réessaie."); return; } setTimeout(ecoute, 800); }
     };
-    r.onend = function () { recActive = false; if (voiceMode && !busyVoice) { if (Date.now() - t0 < 600 && ++failCount >= 4) { stopVoix('Micro instable ici — écoute arrêtée. Réessaie plus tard.'); return; } setTimeout(ecoute, 500); } };
+    r.onend = function () {
+      recActive = false;
+      if (phraseTimer) { clearTimeout(phraseTimer); phraseTimer = null; }
+      var txt = finalBuf.trim(); finalBuf = '';
+      if (voiceMode && !busyVoice) {
+        if (txt) { onPhrase(txt); return; }
+        if (Date.now() - t0 < 600 && ++failCount >= 4) { stopVoix('Micro instable ici — écoute arrêtée. Réessaie plus tard.'); return; }
+        setTimeout(ecoute, 500);
+      }
+    };
     try { r.start(); } catch (e) { recActive = false; if (voiceMode) setTimeout(ecoute, 800); }
   }
   function toggleVoix() {
