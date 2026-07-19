@@ -7790,5 +7790,162 @@ function removeObs(id) { var el=document.getElementById(id); if(el) el.remove();
 function setObsType(id, type, btn) {}
 
 </script>
+<!-- ===================== ASSISTANT CSPS INTÉGRÉ (Sami) ===================== -->
+<style>
+  #asst-fab{position:fixed;right:18px;bottom:18px;width:56px;height:56px;border-radius:50%;
+    background:linear-gradient(135deg,#1B4332,#40916C);color:#fff;font-size:26px;border:none;cursor:pointer;
+    box-shadow:0 4px 14px rgba(0,0,0,.35);z-index:9998;display:flex;align-items:center;justify-content:center}
+  #asst-panel{position:fixed;right:18px;bottom:84px;width:min(94vw,420px);height:min(72vh,620px);
+    background:#0d1117;color:#e6edf3;border:1px solid #2D6A4F;border-radius:14px;z-index:9999;display:none;
+    flex-direction:column;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.5);font-family:-apple-system,Segoe UI,sans-serif}
+  #asst-panel.open{display:flex}
+  #asst-head{padding:10px 12px;background:#161b22;border-bottom:1px solid #2D6A4F;display:flex;align-items:center;gap:8px}
+  #asst-head b{color:#D8F3DC}
+  #asst-dossier{flex:1;font-size:12px;color:#7ee2b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #asst-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:9px}
+  .asst-m{max-width:88%;padding:9px 12px;border-radius:13px;white-space:pre-wrap;line-height:1.4;font-size:14px}
+  .asst-u{align-self:flex-end;background:#1B4332;color:#D8F3DC;border-bottom-right-radius:4px}
+  .asst-a{align-self:flex-start;background:#22303c;border-bottom-left-radius:4px}
+  .asst-e{align-self:center;background:#7f1d1d;color:#fecaca;font-size:12px}
+  #asst-bar{display:flex;gap:6px;padding:9px;border-top:1px solid #2D6A4F;background:#161b22;align-items:flex-end}
+  #asst-input{flex:1;resize:none;max-height:120px;min-height:40px;background:#0d1117;color:#e6edf3;
+    border:1px solid #2D6A4F;border-radius:10px;padding:9px;font-family:inherit;outline:none}
+  .asst-btn{background:#21262d;border:1px solid #2D6A4F;color:#e6edf3;border-radius:10px;padding:0 12px;height:40px;cursor:pointer;font-size:16px}
+  #asst-send{background:linear-gradient(135deg,#40916C,#52b788);color:#08120c;font-weight:800;border:none}
+</style>
+<button id="asst-fab" title="Sami — Assistant CSPS">🤖</button>
+<div id="asst-panel">
+  <div id="asst-head">
+    <b>Sami</b><span style="font-size:11px;color:#8b949e;margin-left:4px">CSPS</span><span id="asst-dossier">—</span>
+    <button class="asst-btn" id="asst-mic" title="Mains-libres" style="height:32px;padding:0 10px">🎤</button>
+    <button class="asst-btn" id="asst-close" title="Fermer" style="height:32px;padding:0 10px">✕</button>
+  </div>
+  <div id="asst-msgs"></div>
+  <div id="asst-bar">
+    <textarea id="asst-input" placeholder="Posez une question sur ce dossier…" rows="1"></textarea>
+    <button class="asst-btn" id="asst-send-btn" style="display:none"></button>
+    <button id="asst-send" class="asst-btn">Envoyer</button>
+  </div>
+</div>
+<script>
+/* ===== Assistant CSPS — chat dossier-aware + voix, branché sur /api/claude ===== */
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var busy = false, voiceMode = false, rec = null, voiceReady = false;
+
+  function affaire() { try { return (typeof currentAffaireObj === 'function') ? currentAffaireObj() : null; } catch (e) { return null; } }
+  function histKey() { var a = affaire(); return 'csps17_asst_' + (a && a.id ? a.id : 'general'); }
+  function loadHist() { try { return JSON.parse(localStorage.getItem(histKey()) || '[]'); } catch (e) { return []; } }
+  function saveHist(h) { try { localStorage.setItem(histKey(), JSON.stringify(h.slice(-40))); } catch (e) {} }
+
+  function contexte() {
+    var a = affaire();
+    if (!a) return "Aucun dossier ouvert actuellement. Si l'utilisateur pose une question sur un chantier précis, invite-le à ouvrir le dossier concerné.";
+    var ch = a.chantier || {}, L = [];
+    function add(k, v) { if (v) L.push(k + ' : ' + v); }
+    add('Opération', a.nom || ch.nom); add('Adresse', a.adresse || ch.adresse); add('Commune', a.commune || ch.commune);
+    add('MOA', a.moa); add('MOE', a.moe); add('CSPS conception', a.cspsc); add('CSPS réalisation', a.cspsr);
+    add('Catégorie', a.categorie || a.cat); add('Phase de mission', a.missionPhase || a.phase);
+    var ents = (a.entreprises || a.intervenants || []);
+    if (Array.isArray(ents) && ents.length) {
+      add('Entreprises', ents.map(function (e) { return typeof e === 'string' ? e : (e.nom || e.raisonSociale || ''); }).filter(Boolean).slice(0, 15).join(', '));
+    }
+    if (Array.isArray(a.risques) && a.risques.length) add('Risques identifiés', a.risques.slice(0, 20).join(', '));
+    if (Array.isArray(a.rapportsAnalyses) && a.rapportsAnalyses.length) add('Rapports/diagnostics déposés', a.rapportsAnalyses.length + ' (dont amiante/plomb à vérifier)');
+    return L.join('\n') || '(dossier sans détails renseignés)';
+  }
+  function systemPrompt() {
+    return "Tu es Sami, l'assistant CSPS d'Alain SUZANNE, coordonnateur SPS (CSPS17), Niveau 1 C+R, en Charente-Maritime. "
+      + "Tu maîtrises le Code du travail (Art. R.4532-1 à R.4532-98) et les documents SPS (PGC, PPSPS, DIUO, Registre-Journal, "
+      + "Inspection Commune, CISSCT, Déclaration Préalable, DHOL). Tu réponds en français, directement, avec le vocabulaire "
+      + "réglementaire exact, sans formule inutile, et sans jamais parler de tes limites techniques. Tes réponses concernent "
+      + "le dossier ci-dessous et rien d'autre.\n\n[DOSSIER OUVERT]\n" + contexte() + "\n[/DOSSIER OUVERT]";
+  }
+
+  function bulle(role, txt) {
+    var d = document.createElement('div');
+    d.className = 'asst-m ' + (role === 'user' ? 'asst-u' : role === 'err' ? 'asst-e' : 'asst-a');
+    d.textContent = txt; var c = $('asst-msgs'); c.appendChild(d); c.scrollTop = c.scrollHeight; return d;
+  }
+  function majDossier() {
+    var a = affaire(); $('asst-dossier').textContent = a ? ('📁 ' + (a.nom || a.chantier && a.chantier.nom || 'dossier')) : '— aucun dossier ouvert —';
+  }
+
+  async function envoyer(auto) {
+    if (busy) return '';
+    var inp = $('asst-input'), txt = inp.value.trim(); if (!txt) return '';
+    busy = true; $('asst-send').disabled = true; inp.value = '';
+    var hist = loadHist();
+    bulle('user', txt); hist.push({ role: 'user', content: txt });
+    var msgs = hist.slice(-12).map(function (m) { return { role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }; });
+    var typing = bulle('ai', '…');
+    try {
+      var r = await fetch('/api/claude', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ system: systemPrompt(), messages: msgs, max_tokens: 1200 })
+      });
+      var j = await r.json();
+      if (!r.ok) throw new Error(j.error || ('Serveur ' + r.status));
+      var text = (j.content && j.content[0] && j.content[0].text) || (j.choices && j.choices[0] && j.choices[0].message.content) || '(pas de réponse)';
+      typing.textContent = text;
+      hist.push({ role: 'assistant', content: text }); saveHist(hist);
+      busy = false; $('asst-send').disabled = false;
+      return text;
+    } catch (e) { typing.remove(); bulle('err', 'Erreur : ' + e.message); busy = false; $('asst-send').disabled = false; return ''; }
+  }
+
+  /* ---- Voix (mains-libres) ---- */
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+  function parle(txt, apres) {
+    if (!window.speechSynthesis) { if (apres) apres(); return; }
+    window.speechSynthesis.cancel();
+    var u = new SpeechSynthesisUtterance(String(txt).replace(/```[\s\S]*?```/g, ' ').replace(/[#*_`>|]/g, '').substring(0, 3000));
+    u.lang = 'fr-FR'; u.rate = 0.98; u.onend = function () { if (apres) apres(); }; u.onerror = function () { if (apres) apres(); };
+    window.speechSynthesis.speak(u);
+  }
+  function ecoute() {
+    if (!voiceMode || !SR) return;
+    var r = new SR(); rec = r; r.lang = 'fr-FR'; r.interimResults = true; r.continuous = false;
+    var fin = '', done = false;
+    function settle(t) { if (done) return; done = true; if (!voiceMode) return;
+      if (!t) { setTimeout(ecoute, 400); return; }
+      $('asst-input').value = t;
+      envoyer(true).then(function (rep) { if (voiceMode && rep) parle(rep, ecoute); else if (voiceMode) setTimeout(ecoute, 300); });
+    }
+    r.onresult = function (e) { var f = ''; for (var i = 0; i < e.results.length; i++) { if (e.results[i].isFinal) f += e.results[i][0].transcript; else $('asst-input').value = e.results[i][0].transcript; } if (f) fin += f; };
+    r.onerror = function () { settle((fin || '').trim()); };
+    r.onend = function () { settle((fin || '').trim()); };
+    try { r.start(); } catch (e) {}
+  }
+  function toggleVoix() {
+    if (!SR) { bulle('err', 'Reconnaissance vocale indisponible ici (Chrome / Android recommandé).'); return; }
+    voiceMode = !voiceMode;
+    $('asst-mic').style.background = voiceMode ? '#7f1d1d' : '#21262d';
+    $('asst-mic').textContent = voiceMode ? '🔴' : '🎤';
+    if (voiceMode) { bulle('ai', '🎙️ Mains-libres : parlez, je réponds à voix haute puis je vous réécoute.'); ecoute(); }
+    else { if (rec) try { rec.abort(); } catch (e) {} window.speechSynthesis && window.speechSynthesis.cancel(); }
+  }
+
+  /* ---- Ouverture / câblage ---- */
+  function ouvrir() {
+    majDossier();
+    if (!$('asst-msgs').children.length) {
+      loadHist().forEach(function (m) { bulle(m.role, m.content); });
+      if (!$('asst-msgs').children.length) bulle('ai', "Bonjour Alain, c'est Sami. Ouvrez un dossier et posez-moi vos questions — je raisonne sur ce chantier précis, et sur celui-là seulement.");
+    }
+    $('asst-panel').classList.add('open'); $('asst-input').focus();
+  }
+  $('asst-fab').onclick = function () { $('asst-panel').classList.contains('open') ? $('asst-panel').classList.remove('open') : ouvrir(); };
+  $('asst-close').onclick = function () { $('asst-panel').classList.remove('open'); };
+  $('asst-send').onclick = function () { envoyer(false); };
+  $('asst-mic').onclick = toggleVoix;
+  $('asst-input').addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); envoyer(false); } });
+  // recharge l'historique du bon dossier quand on change d'affaire
+  window.asstMajDossier = function () { majDossier(); $('asst-msgs').innerHTML = ''; };
+})();
+</script>
+<!-- =================== FIN ASSISTANT CSPS INTÉGRÉ =================== -->
+
 </body>
 </html>
