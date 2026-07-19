@@ -7924,10 +7924,12 @@ function setObsType(id, type, btn) {}
     return L.join('\n') || '(dossier sans détails renseignés)';
   }
   function systemPrompt() {
-    return "Tu es Sami, l'assistant CSPS d'Alain SUZANNE, coordonnateur SPS (CSPS17), Niveau 1 C+R, en Charente-Maritime. "
-      + "Tu maîtrises le Code du travail (Art. R.4532-1 à R.4532-98) et les documents SPS (PGC, PPSPS, DIUO, Registre-Journal, "
-      + "Inspection Commune, CISSCT, Déclaration Préalable, DHOL). Réponds en français, directement, avec le vocabulaire réglementaire "
-      + "exact. Sois FACTUEL et CONCIS : pas de politesse, pas de fioriture, pas de reformulation de la question. Va droit à l'information utile. En mode vocal, réponses courtes. Tes réponses concernent le dossier ci-dessous et rien d'autre."
+    return "Tu es Sami, l'assistant CSPS d'Alain SUZANNE, coordonnateur SPS (CSPS17), Niveau 1 C+R, en Charente-Maritime, intégré dans son application csps17. "
+      + "Tu maîtrises le Code du travail (R.4532-1 à R.4532-98) et les documents SPS (PGC, PPSPS, DIUO, Registre-Journal, Inspection Commune, CISSCT, Déclaration Préalable). "
+      + "Tu es un OPÉRATEUR de l'application, pas un bavard : quand Alain demande une action, on l'EXÉCUTE — tu ne décris jamais la marche à suivre, tu fais. "
+      + "Sois FACTUEL et CONCIS : pas de politesse, pas de fioriture, pas de reformulation ; droit au but. En vocal, réponses courtes. "
+      + "Workflow d'Alain (sur tablette, en chantier) : ouvrir un dossier ; faire des CR de visite (observations avec photos qui remplissent la description, puis signatures sur place) ; faire des Inspections Communes (IC), une par entreprise, signées sur place. "
+      + "Tes réponses concernent le dossier ci-dessous et rien d'autre."
       + "\n\n[DOSSIER OUVERT]\n" + contexte() + "\n[/DOSSIER OUVERT]";
   }
 
@@ -8056,6 +8058,56 @@ function setObsType(id, type, btn) {}
   }
 
   /* ---- Soumettre : commande locale, OU question (avec photo éventuelle) au modèle ---- */
+  function parseAction(raw) {
+    if (!raw) return null;
+    var m = String(raw).match(/\{[\s\S]*\}/);
+    if (!m) return null;
+    try { return JSON.parse(m[0]); } catch (e) { return null; }
+  }
+  function executerIntention(p) {
+    var a = p && p.action;
+    if (a === 'ouvrir_visite') return ouvrirDocTerrain('VIS', p.entreprise);
+    if (a === 'ouvrir_ic') return ouvrirDocTerrain('FIC', p.entreprise);
+    if (a === 'ouvrir_courrier') return ouvrirDocTerrain('IC', p.entreprise);
+    if (a === 'ouvrir_observation') return ouvrirDocTerrain('OBS', p.entreprise);
+    if (a === 'ouvrir_danger') return ouvrirDocTerrain('DGI', p.entreprise);
+    if (a === 'ouvrir_reunion') return ouvrirDocTerrain('RCO', p.entreprise);
+    if (a === 'ouvrir_grille') return ouvrirDocTerrain('PPP', p.entreprise);
+    if (a === 'nouveau_dossier') { if (typeof showNewAffaire === 'function') { showNewAffaire(); return "J'ouvre le formulaire de nouvelle affaire."; } return null; }
+    if (a === 'onglet') {
+      var k = normaliser(p.cible || '');
+      var map = { chantier: 'chantier', intervenants: 'intervenants', intervenant: 'intervenants', organismes: 'organismes', organisme: 'organismes', documents: 'documents', document: 'documents', rjc: 'rjc' };
+      var key = map[k];
+      if (key && typeof currentAffaireObj === 'function' && currentAffaireObj() && typeof switchTab === 'function') { switchTab(key); return 'Onglet ' + key + ' affiché.'; }
+      return null;
+    }
+    if (a === 'ouvrir_dossier') {
+      var best = trouverAffaire(p.cible || '');
+      if (best) { if (typeof loadAffaire === 'function') loadAffaire(best.id); majDossier(); return 'J\'ouvre le dossier « ' + nomAff(best) + ' ».'; }
+      return 'Je ne trouve pas « ' + (p.cible || '') + ' ». Tes dossiers : ' + (affairesActives().map(nomAff).join(' · ') || 'aucun') + '.';
+    }
+    return null;
+  }
+  async function routerIA(txt) {
+    var aff = affairesActives().map(function (a) { return { id: a.id, nom: nomAff(a) }; });
+    var cur = (typeof currentAffaireObj === 'function') ? currentAffaireObj() : null;
+    var ents = cur ? (cur.entreprises || cur.intervenants || []).map(function (e) { return typeof e === 'string' ? e : (e.nom || ''); }).filter(Boolean) : [];
+    var sys = systemPrompt()
+      + "\n\n[ROUTEUR — TU RÉPONDS UNIQUEMENT PAR UN OBJET JSON VALIDE, RIEN D'AUTRE]\n"
+      + 'Format exact : {"action":"...","cible":"","entreprise":"","reponse":""}\n'
+      + "action parmi : ouvrir_dossier, ouvrir_visite, ouvrir_ic, ouvrir_courrier, ouvrir_observation, ouvrir_danger, ouvrir_reunion, ouvrir_grille, nouveau_dossier, onglet, aucune.\n"
+      + "- Si Alain demande une ACTION dans l'appli : mets l'action, laisse reponse vide. ouvrir_dossier -> cible=nom du dossier. onglet -> cible parmi chantier|intervenants|organismes|documents|rjc. Documents (ic, courrier, observation, danger, reunion, grille) -> entreprise=nom si cité.\n"
+      + "- Sinon (question, conseil réglementaire, discussion) : action=aucune et mets ta réponse (factuelle, concise, sans fioriture) dans reponse.\n"
+      + "Dossiers en cours : " + JSON.stringify(aff) + "\nEntreprises du dossier ouvert : " + JSON.stringify(ents);
+    var hist = loadHist();
+    var msgs = hist.slice(-6).map(function (m) { return { role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }; });
+    msgs.push({ role: 'user', content: txt });
+    var r = await fetch('/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ system: sys, messages: msgs, max_tokens: 900 }) });
+    var j = await r.json();
+    if (!r.ok) throw new Error(j.error || ('Serveur ' + r.status));
+    return nettoyerReponse((j.content && j.content[0] && j.content[0].text) || '');
+  }
+
   async function soumettre(txt, fromVoice) {
     txt = (txt || '').trim(); var photo = currentPhoto;
     if ((!txt && !photo) || busy) return;
@@ -8064,21 +8116,33 @@ function setObsType(id, type, btn) {}
     if (photo) { var im = document.createElement('img'); im.src = photo.url; im.style.cssText = 'display:block;max-width:200px;border-radius:8px;margin-top:6px'; ud.appendChild(im); }
     if (fromVoice) { busyVoice = true; if (rec) { try { rec.stop(); } catch (e) {} } recActive = false; }
     function apres(text) { busyVoice = false; if (fromVoice && voiceMode) parle(text, function () { if (voiceMode) setTimeout(ecoute, 250); }); }
+
+    // 1) Commande instantanée (mots-clés, hors-ligne)
     if (!photo) { var cmd = commande(txt); if (cmd !== null) { bulle('ai', cmd); apres(cmd); return; } }
+
     busy = true; $('asst-send').disabled = true;
-    var hist = loadHist(); hist.push({ role: 'user', content: txt });
-    var msgs = hist.slice(-12).map(function (m) { return { role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }; });
-    if (photo) { msgs[msgs.length - 1] = { role: 'user', content: [{ type: 'image_url', image_url: { url: photo.url } }, { type: 'text', text: txt }] }; }
     var typing = bulle('ai', '…'); var text = '';
     try {
-      var payload = { system: systemPrompt(), messages: msgs, max_tokens: 1200 };
-      if (photo) { payload.model = 'qwen/qwen3.6-27b'; payload.reasoning_effort = 'none'; }
-      var r = await fetch('/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      var j = await r.json();
-      if (!r.ok) throw new Error(j.error || ('Serveur ' + r.status));
-      text = (j.content && j.content[0] && j.content[0].text) || (j.choices && j.choices[0] && j.choices[0].message.content) || '(pas de réponse)';
-      text = nettoyerReponse(text);
-      typing.textContent = text; hist.push({ role: 'assistant', content: text }); saveHist(hist);
+      if (photo) {
+        var histP = loadHist(); histP.push({ role: 'user', content: txt });
+        var msgsP = histP.slice(-12).map(function (m) { return { role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }; });
+        msgsP[msgsP.length - 1] = { role: 'user', content: [{ type: 'image_url', image_url: { url: photo.url } }, { type: 'text', text: txt }] };
+        var rp = await fetch('/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ system: systemPrompt(), messages: msgsP, max_tokens: 1200, model: 'qwen/qwen3.6-27b', reasoning_effort: 'none' }) });
+        var jp = await rp.json(); if (!rp.ok) throw new Error(jp.error || ('Serveur ' + rp.status));
+        text = nettoyerReponse((jp.content && jp.content[0] && jp.content[0].text) || '(pas de réponse)');
+        typing.textContent = text; histP.push({ role: 'assistant', content: text }); saveHist(histP);
+      } else {
+        var raw = await routerIA(txt);
+        var p = parseAction(raw);
+        if (p && p.action && p.action !== 'aucune') {
+          var mm = executerIntention(p);
+          text = (mm !== null) ? mm : ((p.reponse && p.reponse.trim()) ? p.reponse : "Je n'ai pas pu faire ça. Reformule (ex : « ouvre une visite », « prépare une IC pour X »).");
+        } else {
+          text = (p && p.reponse && p.reponse.trim()) ? p.reponse : raw;
+        }
+        typing.textContent = text;
+        var histC = loadHist(); histC.push({ role: 'user', content: txt }); histC.push({ role: 'assistant', content: text }); saveHist(histC);
+      }
     } catch (e) { typing.remove(); bulle('err', 'Erreur : ' + e.message); text = ''; }
     busy = false; $('asst-send').disabled = false; clearPhoto(); apres(text);
   }
