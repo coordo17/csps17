@@ -6393,6 +6393,8 @@ function visAjouterObs() {
   div.querySelector('input[type=file]').addEventListener('change', function() {
     var preview = document.getElementById(id + '-preview');
     preview.innerHTML = '';
+    // AUTO : photo ajoutee -> remplir la Description (si vide) via l'IA vision
+    setTimeout(function () { var _d = document.getElementById(id + '-desc'); var _p = document.getElementById(id + '-photos'); if (_p && _p.files && _p.files.length && _d && !_d.value.trim() && typeof visDecrirePhoto === 'function') visDecrirePhoto(id, null); }, 60);
     Array.from(this.files).forEach(function(file) {
       var reader = new FileReader();
       reader.onload = function(ev) {
