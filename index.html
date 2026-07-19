@@ -7957,8 +7957,49 @@ function setObsType(id, type, btn) {}
     });
     return bs >= 1 ? best : null;
   }
+  var DOC_LABELS = { VIS: 'le CR de visite', FIC: 'la Fiche IC', IC: 'le Courrier CSPS', OBS: 'une Observation', DGI: 'un Danger grave imminent', RCO: 'le CR de réunion', PPP: 'la Grille PPSPS' };
+  function ouvrirDocTerrain(ref, entNom) {
+    var aff = (typeof currentAffaireObj === 'function') ? currentAffaireObj() : null;
+    if (!aff) return "Ouvre d'abord un dossier, puis redemande (ex : « ouvre le dossier … »).";
+    if (typeof showPage !== 'function' || typeof ouvrirFormulaireDoc !== 'function') return "Le module Terrain n'est pas disponible ici.";
+    showPage('terrain');
+    if (typeof populateTerrainSelect === 'function') populateTerrainSelect();
+    if (typeof terrainSelectAffaire === 'function') terrainSelectAffaire(aff.id);
+    var entLabel = '';
+    if (entNom && aff.entreprises && aff.entreprises.length) {
+      var q = normaliser(entNom);
+      for (var i = 0; i < aff.entreprises.length; i++) {
+        var n = normaliser(aff.entreprises[i].nom || '');
+        if (n && (n.indexOf(q) >= 0 || q.indexOf(n) >= 0)) {
+          if (typeof terrainPreselectEntreprise === 'function') terrainPreselectEntreprise(i);
+          entLabel = ' pour ' + (aff.entreprises[i].nom || ''); break;
+        }
+      }
+    }
+    setTimeout(function () { try { ouvrirFormulaireDoc(ref); } catch (e) {} }, 180);
+    return 'J\'ouvre ' + (DOC_LABELS[ref] || ref) + entLabel + '. Remplis, signe sur place, puis Générer — c\'est enregistré dans le dossier.';
+  }
+
   function commande(texte) {
     var t = normaliser(texte);
+    // 0) DOCUMENTS TERRAIN (visite, IC, courrier, observation, danger, réunion, grille)
+    if (/\b(ouvre|ouvrir|prepare|preparer|fais|faire|lance|lancer|cree|creer|demarre|demarrer|redige|rediger|remplis|remplir|nouvelle|nouveau|commence|commencer)\b/.test(t)) {
+      var DOCS = [
+        { re: /\bvisite\b/, ref: 'VIS' },
+        { re: /\binspection commune\b|\bfiche ic\b|\bic\b/, ref: 'FIC' },
+        { re: /\bcourrier\b/, ref: 'IC' },
+        { re: /\bdanger grave\b|\bdgi\b/, ref: 'DGI' },
+        { re: /\bobservation\b|\bnotification\b/, ref: 'OBS' },
+        { re: /\breunion\b/, ref: 'RCO' },
+        { re: /\bgrille\b|\bppsps\b/, ref: 'PPP' }
+      ];
+      for (var di = 0; di < DOCS.length; di++) {
+        if (DOCS[di].re.test(t)) {
+          var ent = ''; var mp = t.match(/\bpour\s+(?:l[ae'] )?(?:entreprise |societe |la societe )?(.+)$/); if (mp) ent = mp[1];
+          return ouvrirDocTerrain(DOCS[di].ref, ent);
+        }
+      }
+    }
     var mn = t.match(/\b(va|passe|affiche|montre|ouvre|ouvrir|bascule)\b[^]*\b(chantier|intervenants?|organismes?|documents?|rjc)\b/);
     if (mn && (typeof currentAffaireObj === 'function') && currentAffaireObj() && typeof switchTab === 'function') {
       var map = { chantier: 'chantier', intervenant: 'intervenants', intervenants: 'intervenants', organisme: 'organismes', organismes: 'organismes', document: 'documents', documents: 'documents', rjc: 'rjc' };
