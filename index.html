@@ -7886,6 +7886,13 @@ function setObsType(id, type, btn) {}
       + "\n\n[DOSSIER OUVERT]\n" + contexte() + "\n[/DOSSIER OUVERT]";
   }
 
+  function nettoyerReponse(t) {
+    t = String(t || '');
+    t = t.replace(/<think>[\s\S]*?<\/think>/gi, '');
+    var i = t.lastIndexOf('</think>'); if (i >= 0) t = t.slice(i + 8);
+    t = t.replace(/<\/?think>/gi, '').trim();
+    return t || '(pas de réponse)';
+  }
   function bulle(role, txt) {
     var d = document.createElement('div');
     d.className = 'asst-m ' + (role === 'user' ? 'asst-u' : role === 'err' ? 'asst-e' : 'asst-a');
@@ -7984,6 +7991,7 @@ function setObsType(id, type, btn) {}
       var j = await r.json();
       if (!r.ok) throw new Error(j.error || ('Serveur ' + r.status));
       text = (j.content && j.content[0] && j.content[0].text) || (j.choices && j.choices[0] && j.choices[0].message.content) || '(pas de réponse)';
+      text = nettoyerReponse(text);
       typing.textContent = text; hist.push({ role: 'assistant', content: text }); saveHist(hist);
     } catch (e) { typing.remove(); bulle('err', 'Erreur : ' + e.message); text = ''; }
     busy = false; $('asst-send').disabled = false; clearPhoto(); apres(text);
