@@ -7951,8 +7951,18 @@ function setObsType(id, type, btn) {}
   function normaliser(x) { return (x || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim(); }
   function affairesActives() { try { return (typeof affaires !== 'undefined' ? affaires : []).filter(function (a) { return a && !a.archive; }); } catch (e) { return []; } }
   function nomAff(a) { return (a.chantier && a.chantier.nom) || a.nom || a.num || ''; }
+  function affaireNum(a) { var m = String(a.num || '').match(/(\d+)\s*$/); return m ? parseInt(m[1], 10) : null; }
+  function numeroDe(q) {
+    var m = q.match(/\b0*(\d{1,4})\b/); if (m) return parseInt(m[1], 10);
+    var mots = { un: 1, une: 1, deux: 2, trois: 3, quatre: 4, cinq: 5, six: 6, sept: 7, huit: 8, neuf: 9, dix: 10, premier: 1, premiere: 1, deuxieme: 2, troisieme: 3 };
+    var m2 = q.match(/(?:numero|dossier|affaire)\s+([a-zàâçéèêëîïôûùüÿ]+)/);
+    if (m2 && mots[m2[1]] !== undefined) return mots[m2[1]];
+    return null;
+  }
   function trouverAffaire(nom) {
     var q = normaliser(nom); if (!q) return null;
+    var num = numeroDe(q);
+    if (num !== null) { var byNum = affairesActives().filter(function (a) { return affaireNum(a) === num; }); if (byNum.length === 1) return byNum[0]; }
     var mots = q.split(' ').filter(function (w) { return w.length > 2; });
     var scored = affairesActives().map(function (a) {
       var n = normaliser(nomAff(a)); var sc = 0;
@@ -8018,7 +8028,7 @@ function setObsType(id, type, btn) {}
     var mo = t.match(/\b(ouvre|ouvrir|charge|charger|bascule|selectionne|selectionner|reviens|retourne)\b(.*)$/);
     if (mo) {
       var reste = (' ' + mo[2] + ' ').replace(/\b(moi|le|la|l|les|mon|ma|sur|a|au|aux|du|de|des|dossier|chantier|affaire|affaires|operation|ope|celui|celle|vers)\b/g, ' ').replace(/\s+/g, ' ').trim();
-      if (reste.length >= 3) {
+      if (reste.length >= 3 || /^\d+$/.test(reste)) {
         var best = trouverAffaire(reste);
         if (best) { if (typeof loadAffaire === 'function') loadAffaire(best.id); majDossier(); return 'J\'ouvre le dossier « ' + nomAff(best) + ' ».'; }
         if (/(dossier|chantier|affaire)/.test(t)) { var noms = affairesActives().map(nomAff).filter(Boolean); return 'Lequel ? Tes dossiers : ' + (noms.join(' · ') || 'aucun') + '.'; }
@@ -8092,7 +8102,7 @@ function setObsType(id, type, btn) {}
     return null;
   }
   async function routerIA(txt) {
-    var aff = affairesActives().map(function (a) { return { id: a.id, nom: nomAff(a) }; });
+    var aff = affairesActives().map(function (a) { return { id: a.id, num: a.num || '', nom: nomAff(a) }; });
     var cur = (typeof currentAffaireObj === 'function') ? currentAffaireObj() : null;
     var ents = cur ? (cur.entreprises || cur.intervenants || []).map(function (e) { return typeof e === 'string' ? e : (e.nom || ''); }).filter(Boolean) : [];
     var sys = systemPrompt()
@@ -8101,7 +8111,7 @@ function setObsType(id, type, btn) {}
       + "action parmi : ouvrir_dossier, ouvrir_visite, ouvrir_ic, ouvrir_courrier, ouvrir_observation, ouvrir_danger, ouvrir_reunion, ouvrir_grille, nouveau_dossier, onglet, aucune.\n"
       + "- Si Alain demande une ACTION dans l'appli : mets l'action, laisse reponse vide. ouvrir_dossier -> cible=nom du dossier. onglet -> cible parmi chantier|intervenants|organismes|documents|rjc. Documents (ic, courrier, observation, danger, reunion, grille) -> entreprise=nom si cité.\n"
       + "IMPORTANT : « inspection commune » ou « IC » = ouvrir_ic (JAMAIS ouvrir_visite). « visite » / « CR de visite » = ouvrir_visite.\n"
-      + "Pour ouvrir_dossier, cible DOIT être EXACTEMENT le nom d'un dossier de la liste ci-dessous — ne jamais inventer ni fusionner deux noms. Si Alain ne désigne pas clairement UN seul dossier, action=aucune et demande lequel dans reponse en listant les dossiers.\n"
+      + "Pour ouvrir_dossier, cible = le nom EXACT d'un dossier de la liste, OU son numéro (ex : « dossier 2 », « numéro 1 » -> cible=\"2\" ou \"1\"). Ne jamais inventer ni fusionner deux noms. Si Alain ne désigne pas clairement UN seul dossier, action=aucune et demande lequel dans reponse en listant les dossiers.\n"
       + "- Sinon (question, conseil réglementaire, discussion) : action=aucune et mets ta réponse (factuelle, concise, sans fioriture) dans reponse.\n"
       + "Dossiers en cours : " + JSON.stringify(aff) + "\nEntreprises du dossier ouvert : " + JSON.stringify(ents);
     var hist = loadHist();
