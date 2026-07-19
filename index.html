@@ -7795,13 +7795,16 @@ function setObsType(id, type, btn) {}
   #asst-fab{position:fixed;right:18px;bottom:18px;width:56px;height:56px;border-radius:50%;
     background:linear-gradient(135deg,#1B4332,#40916C);color:#fff;font-size:26px;border:none;cursor:pointer;
     box-shadow:0 4px 14px rgba(0,0,0,.35);z-index:9998;display:flex;align-items:center;justify-content:center}
-  #asst-panel{position:fixed;right:18px;bottom:84px;width:min(94vw,420px);height:min(72vh,620px);
+  #asst-panel{position:fixed;right:18px;bottom:84px;width:min(94vw,420px);height:min(74vh,640px);
     background:#0d1117;color:#e6edf3;border:1px solid #2D6A4F;border-radius:14px;z-index:9999;display:none;
     flex-direction:column;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.5);font-family:-apple-system,Segoe UI,sans-serif}
   #asst-panel.open{display:flex}
-  #asst-head{padding:10px 12px;background:#161b22;border-bottom:1px solid #2D6A4F;display:flex;align-items:center;gap:8px}
+  #asst-head{padding:10px 12px;background:#161b22;border-bottom:1px solid #2D6A4F;display:flex;align-items:center;gap:6px}
   #asst-head b{color:#D8F3DC}
   #asst-dossier{flex:1;font-size:12px;color:#7ee2b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #asst-cfg{display:none;padding:11px 12px;border-bottom:1px solid #2D6A4F;background:#0f151c;font-size:13px}
+  #asst-cfg label{color:#c9d4df}
+  #asst-cfg select,#asst-cfg input[type=range]{background:#0d1117;color:#e6edf3;border:1px solid #2D6A4F;border-radius:6px}
   #asst-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:9px}
   .asst-m{max-width:88%;padding:9px 12px;border-radius:13px;white-space:pre-wrap;line-height:1.4;font-size:14px}
   .asst-u{align-self:flex-end;background:#1B4332;color:#D8F3DC;border-bottom-right-radius:4px}
@@ -7816,23 +7819,41 @@ function setObsType(id, type, btn) {}
 <button id="asst-fab" title="Sami — Assistant CSPS">🤖</button>
 <div id="asst-panel">
   <div id="asst-head">
-    <b>Sami</b><span style="font-size:11px;color:#8b949e;margin-left:4px">CSPS</span><span id="asst-dossier">—</span>
-    <button class="asst-btn" id="asst-mic" title="Mains-libres" style="height:32px;padding:0 10px">🎤</button>
-    <button class="asst-btn" id="asst-close" title="Fermer" style="height:32px;padding:0 10px">✕</button>
+    <b>Sami</b><span style="font-size:11px;color:#8b949e;margin-left:2px">CSPS</span><span id="asst-dossier">—</span>
+    <button class="asst-btn" id="asst-set" title="Réglages voix" style="height:32px;padding:0 8px;font-size:14px">⚙️</button>
+    <button class="asst-btn" id="asst-purge" title="Vider la conversation" style="height:32px;padding:0 8px;font-size:14px">🗑️</button>
+    <button class="asst-btn" id="asst-mic" title="Mains-libres" style="height:32px;padding:0 9px">🎤</button>
+    <button class="asst-btn" id="asst-close" title="Fermer" style="height:32px;padding:0 8px;font-size:14px">✕</button>
+  </div>
+  <div id="asst-cfg">
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:9px;cursor:pointer">
+      <input type="checkbox" id="asst-wake"> Réveil par le mot « <b>Sami</b> » (mains-libres : n'agit que si tu dis son nom)
+    </label>
+    <div style="margin-bottom:9px">Voix : <select id="asst-voice" style="max-width:220px;padding:3px 6px"></select></div>
+    <div style="margin-bottom:9px">Vitesse : <input type="range" id="asst-rate" min="0.7" max="1.3" step="0.02" style="vertical-align:middle;width:150px"> <span id="asst-rate-v" style="color:#7ee2b8"></span></div>
+    <button class="asst-btn" id="asst-test" style="height:30px;padding:0 10px;font-size:13px">🔊 Tester la voix</button>
   </div>
   <div id="asst-msgs"></div>
   <div id="asst-bar">
     <textarea id="asst-input" placeholder="Posez une question sur ce dossier…" rows="1"></textarea>
-    <button class="asst-btn" id="asst-send-btn" style="display:none"></button>
     <button id="asst-send" class="asst-btn">Envoyer</button>
   </div>
 </div>
 <script>
-/* ===== Assistant CSPS — chat dossier-aware + voix, branché sur /api/claude ===== */
+/* ===== Assistant CSPS "Sami" — chat dossier-aware + voix (réveil, calibrage, purge) ===== */
 (function () {
   "use strict";
   var $ = function (id) { return document.getElementById(id); };
-  var busy = false, voiceMode = false, rec = null, voiceReady = false;
+  var busy = false, voiceMode = false, wakeWord = false, rec = null, recActive = false, failCount = 0, busyVoice = false, awaitingCmd = false;
+
+  /* ---- réglages voix persistés ---- */
+  var CFG_KEY = 'csps17_asst_voix';
+  var cfg = (function () { try { return JSON.parse(localStorage.getItem(CFG_KEY) || '{}'); } catch (e) { return {}; } })();
+  if (typeof cfg.rate !== 'number') cfg.rate = 0.98;
+  if (typeof cfg.wake !== 'boolean') cfg.wake = false;
+  if (typeof cfg.voiceURI !== 'string') cfg.voiceURI = '';
+  wakeWord = cfg.wake;
+  function saveCfg() { try { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); } catch (e) {} }
 
   function affaire() { try { return (typeof currentAffaireObj === 'function') ? currentAffaireObj() : null; } catch (e) { return null; } }
   function histKey() { var a = affaire(); return 'csps17_asst_' + (a && a.id ? a.id : 'general'); }
@@ -7848,19 +7869,17 @@ function setObsType(id, type, btn) {}
     add('MOA', a.moa); add('MOE', a.moe); add('CSPS conception', a.cspsc); add('CSPS réalisation', a.cspsr);
     add('Catégorie', a.categorie || a.cat); add('Phase de mission', a.missionPhase || a.phase);
     var ents = (a.entreprises || a.intervenants || []);
-    if (Array.isArray(ents) && ents.length) {
-      add('Entreprises', ents.map(function (e) { return typeof e === 'string' ? e : (e.nom || e.raisonSociale || ''); }).filter(Boolean).slice(0, 15).join(', '));
-    }
+    if (Array.isArray(ents) && ents.length) add('Entreprises', ents.map(function (e) { return typeof e === 'string' ? e : (e.nom || e.raisonSociale || ''); }).filter(Boolean).slice(0, 15).join(', '));
     if (Array.isArray(a.risques) && a.risques.length) add('Risques identifiés', a.risques.slice(0, 20).join(', '));
-    if (Array.isArray(a.rapportsAnalyses) && a.rapportsAnalyses.length) add('Rapports/diagnostics déposés', a.rapportsAnalyses.length + ' (dont amiante/plomb à vérifier)');
+    if (Array.isArray(a.rapportsAnalyses) && a.rapportsAnalyses.length) add('Rapports/diagnostics déposés', a.rapportsAnalyses.length);
     return L.join('\n') || '(dossier sans détails renseignés)';
   }
   function systemPrompt() {
     return "Tu es Sami, l'assistant CSPS d'Alain SUZANNE, coordonnateur SPS (CSPS17), Niveau 1 C+R, en Charente-Maritime. "
       + "Tu maîtrises le Code du travail (Art. R.4532-1 à R.4532-98) et les documents SPS (PGC, PPSPS, DIUO, Registre-Journal, "
-      + "Inspection Commune, CISSCT, Déclaration Préalable, DHOL). Tu réponds en français, directement, avec le vocabulaire "
-      + "réglementaire exact, sans formule inutile, et sans jamais parler de tes limites techniques. Tes réponses concernent "
-      + "le dossier ci-dessous et rien d'autre.\n\n[DOSSIER OUVERT]\n" + contexte() + "\n[/DOSSIER OUVERT]";
+      + "Inspection Commune, CISSCT, Déclaration Préalable, DHOL). Réponds en français, directement, avec le vocabulaire réglementaire "
+      + "exact, sans formule inutile. En mode vocal, fais des réponses concises. Tes réponses concernent le dossier ci-dessous et rien d'autre."
+      + "\n\n[DOSSIER OUVERT]\n" + contexte() + "\n[/DOSSIER OUVERT]";
   }
 
   function bulle(role, txt) {
@@ -7868,11 +7887,9 @@ function setObsType(id, type, btn) {}
     d.className = 'asst-m ' + (role === 'user' ? 'asst-u' : role === 'err' ? 'asst-e' : 'asst-a');
     d.textContent = txt; var c = $('asst-msgs'); c.appendChild(d); c.scrollTop = c.scrollHeight; return d;
   }
-  function majDossier() {
-    var a = affaire(); $('asst-dossier').textContent = a ? ('📁 ' + (a.nom || a.chantier && a.chantier.nom || 'dossier')) : '— aucun dossier ouvert —';
-  }
+  function majDossier() { var a = affaire(); $('asst-dossier').textContent = a ? ('📁 ' + (a.nom || (a.chantier && a.chantier.nom) || 'dossier')) : '— aucun dossier ouvert —'; }
 
-  async function envoyer(auto) {
+  async function envoyer() {
     if (busy) return '';
     var inp = $('asst-input'), txt = inp.value.trim(); if (!txt) return '';
     busy = true; $('asst-send').disabled = true; inp.value = '';
@@ -7881,78 +7898,91 @@ function setObsType(id, type, btn) {}
     var msgs = hist.slice(-12).map(function (m) { return { role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }; });
     var typing = bulle('ai', '…');
     try {
-      var r = await fetch('/api/claude', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ system: systemPrompt(), messages: msgs, max_tokens: 1200 })
-      });
+      var r = await fetch('/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ system: systemPrompt(), messages: msgs, max_tokens: 1200 }) });
       var j = await r.json();
       if (!r.ok) throw new Error(j.error || ('Serveur ' + r.status));
       var text = (j.content && j.content[0] && j.content[0].text) || (j.choices && j.choices[0] && j.choices[0].message.content) || '(pas de réponse)';
-      typing.textContent = text;
-      hist.push({ role: 'assistant', content: text }); saveHist(hist);
-      busy = false; $('asst-send').disabled = false;
-      return text;
+      typing.textContent = text; hist.push({ role: 'assistant', content: text }); saveHist(hist);
+      busy = false; $('asst-send').disabled = false; return text;
     } catch (e) { typing.remove(); bulle('err', 'Erreur : ' + e.message); busy = false; $('asst-send').disabled = false; return ''; }
   }
 
-  /* ---- Voix (mains-libres) — version robuste (anti bip-bip) ---- */
+  function purge() {
+    try { localStorage.removeItem(histKey()); } catch (e) {}
+    $('asst-msgs').innerHTML = '';
+    bulle('ai', "Conversation vidée. On repart à zéro sur ce dossier.");
+  }
+
+  /* ---- Voix : synthèse (calibrage) ---- */
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-  var recActive = false, failCount = 0;
-  function micUI(on) { var b = $('asst-mic'); if (!b) return; b.style.background = on ? '#7f1d1d' : '#21262d'; b.textContent = on ? '🔴' : '🎤'; }
+  function voixFr() {
+    var vs = (window.speechSynthesis && window.speechSynthesis.getVoices()) || [];
+    return vs.filter(function (v) { return /fr/i.test(v.lang); });
+  }
+  function remplirVoix() {
+    var sel = $('asst-voice'); if (!sel) return; var vs = voixFr(); sel.innerHTML = '';
+    if (!vs.length) { var o = document.createElement('option'); o.value = ''; o.textContent = '(voix par défaut)'; sel.appendChild(o); return; }
+    vs.forEach(function (v) { var o = document.createElement('option'); o.value = v.voiceURI; o.textContent = v.name + ' (' + v.lang + ')'; if (v.voiceURI === cfg.voiceURI) o.selected = true; sel.appendChild(o); });
+  }
   function parle(txt, apres) {
     if (!window.speechSynthesis) { if (apres) apres(); return; }
     try { window.speechSynthesis.cancel(); } catch (e) {}
     var u = new SpeechSynthesisUtterance(String(txt).replace(/```[\s\S]*?```/g, ' ').replace(/[#*_`>|]/g, '').substring(0, 3000));
-    u.lang = 'fr-FR'; u.rate = 0.98; u.onend = function () { if (apres) apres(); }; u.onerror = function () { if (apres) apres(); };
+    u.lang = 'fr-FR'; u.rate = cfg.rate || 0.98;
+    var vs = voixFr(), chosen = null;
+    for (var i = 0; i < vs.length; i++) if (vs[i].voiceURI === cfg.voiceURI) chosen = vs[i];
+    if (chosen) u.voice = chosen;
+    u.onend = function () { if (apres) apres(); }; u.onerror = function () { if (apres) apres(); };
     window.speechSynthesis.speak(u);
   }
-  function stopVoix(msg) {
-    voiceMode = false; recActive = false; micUI(false);
-    if (rec) { try { rec.abort(); } catch (e) {} }
-    try { window.speechSynthesis.cancel(); } catch (e) {}
-    if (msg) bulle('err', msg);
+
+  /* ---- Voix : reconnaissance (mains-libres + réveil) ---- */
+  function micUI(on) { var b = $('asst-mic'); if (!b) return; b.style.background = on ? '#7f1d1d' : '#21262d'; b.textContent = on ? '🔴' : '🎤'; }
+  function stopVoix(msg) { voiceMode = false; recActive = false; awaitingCmd = false; micUI(false); if (rec) { try { rec.abort(); } catch (e) {} } try { window.speechSynthesis.cancel(); } catch (e) {} if (msg) bulle('err', msg); }
+  function traiter(cmd) {
+    busyVoice = true; awaitingCmd = false;
+    if (rec) { try { rec.stop(); } catch (e) {} } recActive = false;
+    $('asst-input').value = cmd;
+    envoyer().then(function (rep) { busyVoice = false; if (!voiceMode) return; if (rep) parle(rep, function () { if (voiceMode) setTimeout(ecoute, 250); }); else setTimeout(ecoute, 400); });
+  }
+  function onPhrase(raw) {
+    var text = (raw || '').trim(); if (!text || busyVoice || !voiceMode) return;
+    failCount = 0;
+    if (wakeWord && !awaitingCmd) {
+      var low = text.toLowerCase(), idx = low.lastIndexOf('sami');
+      if (idx === -1) { idx = low.lastIndexOf('samy'); }
+      if (idx === -1) return; // pas de réveil : on ignore
+      var cmd = text.slice(idx + 4).replace(/^[\s,.:!?…\-]+/, '').trim();
+      if (cmd.length < 2) { awaitingCmd = true; parle('Oui ?'); return; }
+      traiter(cmd); return;
+    }
+    traiter(text);
   }
   function ecoute() {
     if (!voiceMode || !SR || recActive) return;
     var r; try { r = new SR(); } catch (e) { return; }
-    rec = r; recActive = true;
-    r.lang = 'fr-FR'; r.interimResults = true; r.continuous = true;
-    var t0 = Date.now(), handled = false;
+    rec = r; recActive = true; r.lang = 'fr-FR'; r.interimResults = true; r.continuous = true;
+    var t0 = Date.now();
     r.onresult = function (e) {
-      var f = '';
       for (var i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) f += e.results[i][0].transcript; else $('asst-input').value = e.results[i][0].transcript;
-      }
-      if (f.trim() && !handled) {
-        handled = true; failCount = 0; try { r.stop(); } catch (x) {}
-        $('asst-input').value = f.trim();
-        envoyer(true).then(function (rep) { recActive = false; if (!voiceMode) return; if (rep) parle(rep, function () { if (voiceMode) setTimeout(ecoute, 250); }); else setTimeout(ecoute, 400); });
+        if (e.results[i].isFinal) onPhrase(e.results[i][0].transcript);
+        else if (!wakeWord) $('asst-input').value = e.results[i][0].transcript;
       }
     };
     r.onerror = function (e) {
       recActive = false; var er = e && e.error;
-      if (er === 'not-allowed' || er === 'service-not-allowed' || er === 'audio-capture') {
-        stopVoix("Micro non autorisé. Clique sur l'icône à gauche de l'adresse (🔒/🎤), autorise le micro pour ce site, puis réactive le 🎤."); return;
-      }
-      if (!handled && voiceMode) {
-        if (Date.now() - t0 < 600 && ++failCount >= 4) { stopVoix("Le micro ne démarre pas correctement ici. Vérifie qu'aucune autre appli ne l'utilise, puis réessaie."); return; }
-        setTimeout(ecoute, 800);
-      }
+      if (er === 'not-allowed' || er === 'service-not-allowed' || er === 'audio-capture') { stopVoix("Micro non autorisé. Clique sur l'icône à gauche de l'adresse (🔒/🎤), autorise le micro pour ce site, puis réactive le 🎤."); return; }
+      if (voiceMode && !busyVoice) { if (Date.now() - t0 < 600 && ++failCount >= 4) { stopVoix("Le micro ne démarre pas correctement ici. Vérifie qu'aucune autre appli ne l'utilise, puis réessaie."); return; } setTimeout(ecoute, 800); }
     };
-    r.onend = function () {
-      if (handled) return; recActive = false;
-      if (voiceMode) {
-        if (Date.now() - t0 < 600 && ++failCount >= 4) { stopVoix('Micro instable ici — écoute arrêtée. Réessaie plus tard.'); return; }
-        setTimeout(ecoute, 600);
-      }
-    };
+    r.onend = function () { recActive = false; if (voiceMode && !busyVoice) { if (Date.now() - t0 < 600 && ++failCount >= 4) { stopVoix('Micro instable ici — écoute arrêtée. Réessaie plus tard.'); return; } setTimeout(ecoute, 500); } };
     try { r.start(); } catch (e) { recActive = false; if (voiceMode) setTimeout(ecoute, 800); }
   }
   function toggleVoix() {
     if (!SR) { bulle('err', 'Reconnaissance vocale indisponible ici (Chrome / Android recommandé).'); return; }
     if (voiceMode) { stopVoix(null); return; }
-    voiceMode = true; failCount = 0; micUI(true);
-    bulle('ai', '🎙️ Mains-libres : parlez, je réponds à voix haute puis je vous réécoute. Re-cliquez 🔴 pour arrêter.');
+    voiceMode = true; failCount = 0; busyVoice = false; awaitingCmd = false; micUI(true);
+    bulle('ai', wakeWord ? '🎙️ Mains-libres avec réveil : dites « Sami … » suivi de votre question. Re-cliquez 🔴 pour arrêter.'
+                         : '🎙️ Mains-libres : parlez, je réponds à voix haute puis je vous réécoute. Re-cliquez 🔴 pour arrêter.');
     ecoute();
   }
 
@@ -7967,9 +7997,21 @@ function setObsType(id, type, btn) {}
   }
   $('asst-fab').onclick = function () { $('asst-panel').classList.contains('open') ? $('asst-panel').classList.remove('open') : ouvrir(); };
   $('asst-close').onclick = function () { $('asst-panel').classList.remove('open'); };
-  $('asst-send').onclick = function () { envoyer(false); };
+  $('asst-send').onclick = function () { envoyer(); };
   $('asst-mic').onclick = toggleVoix;
-  $('asst-input').addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); envoyer(false); } });
+  $('asst-purge').onclick = purge;
+  $('asst-set').onclick = function () { var c = $('asst-cfg'); c.style.display = c.style.display === 'block' ? 'none' : 'block'; remplirVoix(); };
+  $('asst-input').addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); envoyer(); } });
+
+  // réglages voix
+  $('asst-wake').checked = wakeWord;
+  $('asst-wake').addEventListener('change', function () { wakeWord = this.checked; cfg.wake = wakeWord; saveCfg(); });
+  $('asst-rate').value = cfg.rate; $('asst-rate-v').textContent = Number(cfg.rate).toFixed(2);
+  $('asst-rate').addEventListener('input', function () { cfg.rate = parseFloat(this.value); $('asst-rate-v').textContent = cfg.rate.toFixed(2); saveCfg(); });
+  $('asst-voice').addEventListener('change', function () { cfg.voiceURI = this.value; saveCfg(); });
+  $('asst-test').onclick = function () { parle('Bonjour Alain, c\'est Sami. Voici ma voix à cette vitesse.'); };
+  if (window.speechSynthesis) { window.speechSynthesis.onvoiceschanged = remplirVoix; setTimeout(remplirVoix, 300); }
+
   // recharge l'historique du bon dossier quand on change d'affaire
   window.asstMajDossier = function () { majDossier(); $('asst-msgs').innerHTML = ''; };
 })();
