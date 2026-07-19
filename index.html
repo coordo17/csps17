@@ -7882,7 +7882,7 @@ function setObsType(id, type, btn) {}
     return "Tu es Sami, l'assistant CSPS d'Alain SUZANNE, coordonnateur SPS (CSPS17), Niveau 1 C+R, en Charente-Maritime. "
       + "Tu maîtrises le Code du travail (Art. R.4532-1 à R.4532-98) et les documents SPS (PGC, PPSPS, DIUO, Registre-Journal, "
       + "Inspection Commune, CISSCT, Déclaration Préalable, DHOL). Réponds en français, directement, avec le vocabulaire réglementaire "
-      + "exact, sans formule inutile. En mode vocal, fais des réponses concises. Tes réponses concernent le dossier ci-dessous et rien d'autre."
+      + "exact. Sois FACTUEL et CONCIS : pas de politesse, pas de fioriture, pas de reformulation de la question. Va droit à l'information utile. En mode vocal, réponses courtes. Tes réponses concernent le dossier ci-dessous et rien d'autre."
       + "\n\n[DOSSIER OUVERT]\n" + contexte() + "\n[/DOSSIER OUVERT]";
   }
 
@@ -7941,7 +7941,26 @@ function setObsType(id, type, btn) {}
     x.style.cssText = 'height:26px;padding:0 8px;margin-left:auto;font-size:13px'; x.onclick = clearPhoto; b.appendChild(x);
   }
   function clearPhoto() { currentPhoto = null; var f = $('asst-photo-in'); if (f) f.value = ''; showPhotoBadge(); var pb = $('asst-photo'); if (pb) pb.style.background = '#21262d'; }
-  function onPhoto(file) { if (!file) return; var r = new FileReader(); r.onload = function (e) { currentPhoto = { url: e.target.result, mime: file.type || 'image/jpeg' }; showPhotoBadge(); var pb = $('asst-photo'); if (pb) pb.style.background = '#40916C'; }; r.readAsDataURL(file); }
+  function onPhoto(file) {
+    if (!file) return;
+    var r = new FileReader();
+    r.onload = function (e) {
+      var img = new Image();
+      img.onload = function () {
+        var max = 1280, w = img.width, h = img.height;
+        if (w > max || h > max) { if (w >= h) { h = Math.round(h * max / w); w = max; } else { w = Math.round(w * max / h); h = max; } }
+        try {
+          var cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+          cv.getContext('2d').drawImage(img, 0, 0, w, h);
+          currentPhoto = { url: cv.toDataURL('image/jpeg', 0.72), mime: 'image/jpeg' };
+        } catch (ex) { currentPhoto = { url: e.target.result, mime: file.type || 'image/jpeg' }; }
+        showPhotoBadge(); var pb = $('asst-photo'); if (pb) pb.style.background = '#40916C';
+      };
+      img.onerror = function () { currentPhoto = { url: e.target.result, mime: file.type || 'image/jpeg' }; showPhotoBadge(); var pb = $('asst-photo'); if (pb) pb.style.background = '#40916C'; };
+      img.src = e.target.result;
+    };
+    r.readAsDataURL(file);
+  }
 
   /* ---- Soumettre : commande locale, OU question (avec photo éventuelle) au modèle ---- */
   async function soumettre(txt, fromVoice) {
@@ -7960,7 +7979,7 @@ function setObsType(id, type, btn) {}
     var typing = bulle('ai', '…'); var text = '';
     try {
       var payload = { system: systemPrompt(), messages: msgs, max_tokens: 1200 };
-      if (photo) payload.model = 'meta-llama/llama-4-scout-17b-16e-instruct';
+      if (photo) payload.model = 'qwen/qwen3.6-27b';
       var r = await fetch('/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       var j = await r.json();
       if (!r.ok) throw new Error(j.error || ('Serveur ' + r.status));
