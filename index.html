@@ -7895,36 +7895,65 @@ function setObsType(id, type, btn) {}
     } catch (e) { typing.remove(); bulle('err', 'Erreur : ' + e.message); busy = false; $('asst-send').disabled = false; return ''; }
   }
 
-  /* ---- Voix (mains-libres) ---- */
+  /* ---- Voix (mains-libres) — version robuste (anti bip-bip) ---- */
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+  var recActive = false, failCount = 0;
+  function micUI(on) { var b = $('asst-mic'); if (!b) return; b.style.background = on ? '#7f1d1d' : '#21262d'; b.textContent = on ? '🔴' : '🎤'; }
   function parle(txt, apres) {
     if (!window.speechSynthesis) { if (apres) apres(); return; }
-    window.speechSynthesis.cancel();
+    try { window.speechSynthesis.cancel(); } catch (e) {}
     var u = new SpeechSynthesisUtterance(String(txt).replace(/```[\s\S]*?```/g, ' ').replace(/[#*_`>|]/g, '').substring(0, 3000));
     u.lang = 'fr-FR'; u.rate = 0.98; u.onend = function () { if (apres) apres(); }; u.onerror = function () { if (apres) apres(); };
     window.speechSynthesis.speak(u);
   }
+  function stopVoix(msg) {
+    voiceMode = false; recActive = false; micUI(false);
+    if (rec) { try { rec.abort(); } catch (e) {} }
+    try { window.speechSynthesis.cancel(); } catch (e) {}
+    if (msg) bulle('err', msg);
+  }
   function ecoute() {
-    if (!voiceMode || !SR) return;
-    var r = new SR(); rec = r; r.lang = 'fr-FR'; r.interimResults = true; r.continuous = false;
-    var fin = '', done = false;
-    function settle(t) { if (done) return; done = true; if (!voiceMode) return;
-      if (!t) { setTimeout(ecoute, 400); return; }
-      $('asst-input').value = t;
-      envoyer(true).then(function (rep) { if (voiceMode && rep) parle(rep, ecoute); else if (voiceMode) setTimeout(ecoute, 300); });
-    }
-    r.onresult = function (e) { var f = ''; for (var i = 0; i < e.results.length; i++) { if (e.results[i].isFinal) f += e.results[i][0].transcript; else $('asst-input').value = e.results[i][0].transcript; } if (f) fin += f; };
-    r.onerror = function () { settle((fin || '').trim()); };
-    r.onend = function () { settle((fin || '').trim()); };
-    try { r.start(); } catch (e) {}
+    if (!voiceMode || !SR || recActive) return;
+    var r; try { r = new SR(); } catch (e) { return; }
+    rec = r; recActive = true;
+    r.lang = 'fr-FR'; r.interimResults = true; r.continuous = true;
+    var t0 = Date.now(), handled = false;
+    r.onresult = function (e) {
+      var f = '';
+      for (var i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) f += e.results[i][0].transcript; else $('asst-input').value = e.results[i][0].transcript;
+      }
+      if (f.trim() && !handled) {
+        handled = true; failCount = 0; try { r.stop(); } catch (x) {}
+        $('asst-input').value = f.trim();
+        envoyer(true).then(function (rep) { recActive = false; if (!voiceMode) return; if (rep) parle(rep, function () { if (voiceMode) setTimeout(ecoute, 250); }); else setTimeout(ecoute, 400); });
+      }
+    };
+    r.onerror = function (e) {
+      recActive = false; var er = e && e.error;
+      if (er === 'not-allowed' || er === 'service-not-allowed' || er === 'audio-capture') {
+        stopVoix("Micro non autorisé. Clique sur l'icône à gauche de l'adresse (🔒/🎤), autorise le micro pour ce site, puis réactive le 🎤."); return;
+      }
+      if (!handled && voiceMode) {
+        if (Date.now() - t0 < 600 && ++failCount >= 4) { stopVoix("Le micro ne démarre pas correctement ici. Vérifie qu'aucune autre appli ne l'utilise, puis réessaie."); return; }
+        setTimeout(ecoute, 800);
+      }
+    };
+    r.onend = function () {
+      if (handled) return; recActive = false;
+      if (voiceMode) {
+        if (Date.now() - t0 < 600 && ++failCount >= 4) { stopVoix('Micro instable ici — écoute arrêtée. Réessaie plus tard.'); return; }
+        setTimeout(ecoute, 600);
+      }
+    };
+    try { r.start(); } catch (e) { recActive = false; if (voiceMode) setTimeout(ecoute, 800); }
   }
   function toggleVoix() {
     if (!SR) { bulle('err', 'Reconnaissance vocale indisponible ici (Chrome / Android recommandé).'); return; }
-    voiceMode = !voiceMode;
-    $('asst-mic').style.background = voiceMode ? '#7f1d1d' : '#21262d';
-    $('asst-mic').textContent = voiceMode ? '🔴' : '🎤';
-    if (voiceMode) { bulle('ai', '🎙️ Mains-libres : parlez, je réponds à voix haute puis je vous réécoute.'); ecoute(); }
-    else { if (rec) try { rec.abort(); } catch (e) {} window.speechSynthesis && window.speechSynthesis.cancel(); }
+    if (voiceMode) { stopVoix(null); return; }
+    voiceMode = true; failCount = 0; micUI(true);
+    bulle('ai', '🎙️ Mains-libres : parlez, je réponds à voix haute puis je vous réécoute. Re-cliquez 🔴 pour arrêter.');
+    ecoute();
   }
 
   /* ---- Ouverture / câblage ---- */
