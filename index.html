@@ -7889,22 +7889,62 @@ function setObsType(id, type, btn) {}
   }
   function majDossier() { var a = affaire(); $('asst-dossier').textContent = a ? ('📁 ' + (a.nom || (a.chantier && a.chantier.nom) || 'dossier')) : '— aucun dossier ouvert —'; }
 
-  async function envoyer() {
-    if (busy) return '';
-    var inp = $('asst-input'), txt = inp.value.trim(); if (!txt) return '';
-    busy = true; $('asst-send').disabled = true; inp.value = '';
-    var hist = loadHist();
-    bulle('user', txt); hist.push({ role: 'user', content: txt });
+  /* ---- Commandes : AGIR dans l'appli (ouvrir un dossier, un onglet...) ---- */
+  function normaliser(x) { return (x || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim(); }
+  function affairesActives() { try { return (typeof affaires !== 'undefined' ? affaires : []).filter(function (a) { return a && !a.archive; }); } catch (e) { return []; } }
+  function nomAff(a) { return (a.chantier && a.chantier.nom) || a.nom || a.num || ''; }
+  function trouverAffaire(nom) {
+    var q = normaliser(nom), mots = q.split(' ').filter(function (w) { return w.length > 2; }), best = null, bs = 0;
+    affairesActives().forEach(function (a) {
+      var n = normaliser(nomAff(a)); if (!n) return; var sc = 0;
+      if (q && n.indexOf(q) >= 0) sc += 3;
+      mots.forEach(function (w) { if (n.indexOf(w) >= 0) sc++; });
+      if (sc > bs) { bs = sc; best = a; }
+    });
+    return bs >= 1 ? best : null;
+  }
+  function commande(texte) {
+    var t = normaliser(texte);
+    var mn = t.match(/\b(va|passe|affiche|montre|ouvre|ouvrir|bascule)\b[^]*\b(chantier|intervenants?|organismes?|documents?|rjc)\b/);
+    if (mn && (typeof currentAffaireObj === 'function') && currentAffaireObj() && typeof switchTab === 'function') {
+      var map = { chantier: 'chantier', intervenant: 'intervenants', intervenants: 'intervenants', organisme: 'organismes', organismes: 'organismes', document: 'documents', documents: 'documents', rjc: 'rjc' };
+      var key = map[mn[2]] || map[mn[2].replace(/s$/, '')] || 'chantier'; switchTab(key); return 'Onglet ' + key + ' affiché.';
+    }
+    if (/\b(nouveau|nouvelle|cree|creer|ajoute|ajouter)\b/.test(t) && /(dossier|affaire|chantier|operation)/.test(t) && typeof showNewAffaire === 'function') {
+      showNewAffaire(); return "J'ouvre le formulaire de nouvelle affaire.";
+    }
+    var mo = t.match(/\b(ouvre|ouvrir|charge|charger|bascule|selectionne|selectionner|reviens|retourne)\b(.*)$/);
+    if (mo) {
+      var reste = (' ' + mo[2] + ' ').replace(/\b(moi|le|la|l|les|mon|ma|sur|a|au|aux|du|de|des|dossier|chantier|affaire|affaires|operation|ope|celui|celle|vers)\b/g, ' ').replace(/\s+/g, ' ').trim();
+      if (reste.length >= 3) {
+        var best = trouverAffaire(reste);
+        if (best) { if (typeof loadAffaire === 'function') loadAffaire(best.id); majDossier(); return 'J\'ouvre le dossier « ' + nomAff(best) + ' ».'; }
+        if (/(dossier|chantier|affaire)/.test(t)) { var noms = affairesActives().map(nomAff).filter(Boolean); return 'Je ne trouve pas « ' + reste + ' ». Tes dossiers actifs : ' + (noms.join(' · ') || 'aucun') + '.'; }
+      }
+    }
+    return null;
+  }
+
+  /* ---- Soumettre : commande locale OU question au modèle ---- */
+  async function soumettre(txt, fromVoice) {
+    txt = (txt || '').trim(); if (!txt || busy) return;
+    bulle('user', txt); $('asst-input').value = '';
+    if (fromVoice) { busyVoice = true; if (rec) { try { rec.stop(); } catch (e) {} } recActive = false; }
+    function apres(text) { busyVoice = false; if (fromVoice && voiceMode) parle(text, function () { if (voiceMode) setTimeout(ecoute, 250); }); }
+    var cmd = commande(txt);
+    if (cmd !== null) { bulle('ai', cmd); apres(cmd); return; }
+    busy = true; $('asst-send').disabled = true;
+    var hist = loadHist(); hist.push({ role: 'user', content: txt });
     var msgs = hist.slice(-12).map(function (m) { return { role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }; });
-    var typing = bulle('ai', '…');
+    var typing = bulle('ai', '…'); var text = '';
     try {
       var r = await fetch('/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ system: systemPrompt(), messages: msgs, max_tokens: 1200 }) });
       var j = await r.json();
       if (!r.ok) throw new Error(j.error || ('Serveur ' + r.status));
-      var text = (j.content && j.content[0] && j.content[0].text) || (j.choices && j.choices[0] && j.choices[0].message.content) || '(pas de réponse)';
+      text = (j.content && j.content[0] && j.content[0].text) || (j.choices && j.choices[0] && j.choices[0].message.content) || '(pas de réponse)';
       typing.textContent = text; hist.push({ role: 'assistant', content: text }); saveHist(hist);
-      busy = false; $('asst-send').disabled = false; return text;
-    } catch (e) { typing.remove(); bulle('err', 'Erreur : ' + e.message); busy = false; $('asst-send').disabled = false; return ''; }
+    } catch (e) { typing.remove(); bulle('err', 'Erreur : ' + e.message); text = ''; }
+    busy = false; $('asst-send').disabled = false; apres(text);
   }
 
   function purge() {
@@ -7939,12 +7979,7 @@ function setObsType(id, type, btn) {}
   /* ---- Voix : reconnaissance (mains-libres + réveil) ---- */
   function micUI(on) { var b = $('asst-mic'); if (!b) return; b.style.background = on ? '#7f1d1d' : '#21262d'; b.textContent = on ? '🔴' : '🎤'; }
   function stopVoix(msg) { voiceMode = false; recActive = false; awaitingCmd = false; micUI(false); if (rec) { try { rec.abort(); } catch (e) {} } try { window.speechSynthesis.cancel(); } catch (e) {} if (msg) bulle('err', msg); }
-  function traiter(cmd) {
-    busyVoice = true; awaitingCmd = false;
-    if (rec) { try { rec.stop(); } catch (e) {} } recActive = false;
-    $('asst-input').value = cmd;
-    envoyer().then(function (rep) { busyVoice = false; if (!voiceMode) return; if (rep) parle(rep, function () { if (voiceMode) setTimeout(ecoute, 250); }); else setTimeout(ecoute, 400); });
-  }
+  function traiter(cmd) { awaitingCmd = false; soumettre(cmd, true); }
   function onPhrase(raw) {
     var text = (raw || '').trim(); if (!text || busyVoice || !voiceMode) return;
     failCount = 0;
@@ -7997,11 +8032,11 @@ function setObsType(id, type, btn) {}
   }
   $('asst-fab').onclick = function () { $('asst-panel').classList.contains('open') ? $('asst-panel').classList.remove('open') : ouvrir(); };
   $('asst-close').onclick = function () { $('asst-panel').classList.remove('open'); };
-  $('asst-send').onclick = function () { envoyer(); };
+  $('asst-send').onclick = function () { soumettre($('asst-input').value, false); };
   $('asst-mic').onclick = toggleVoix;
   $('asst-purge').onclick = purge;
   $('asst-set').onclick = function () { var c = $('asst-cfg'); c.style.display = c.style.display === 'block' ? 'none' : 'block'; remplirVoix(); };
-  $('asst-input').addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); envoyer(); } });
+  $('asst-input').addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); soumettre($('asst-input').value, false); } });
 
   // réglages voix
   $('asst-wake').checked = wakeWord;
