@@ -6438,7 +6438,7 @@ async function visDecrirePhoto(id, btn) {
   var old = btn ? btn.textContent : ''; if (btn) { btn.textContent = '⏳ Analyse...'; btn.disabled = true; }
   try {
     var dataUrl = await compresserImage(input.files[0], 1280, 0.72);
-    var prompt = "Tu es un coordonnateur SPS en visite de chantier. Decris cette photo comme une OBSERVATION pour le CR de visite : nature du constat/probleme, risque concerne, localisation si visible. 2 a 4 phrases, factuel, vocabulaire SPS, sans politesse. Si la photo ne montre pas un chantier, dis-le en une phrase.";
+    var prompt = "REPONDS IMPERATIVEMENT EN FRANCAIS, jamais dans une autre langue. Tu es un coordonnateur SPS en visite de chantier. Decris cette photo comme une OBSERVATION pour le CR de visite : nature du constat/probleme, risque concerne, localisation si visible. 2 a 4 phrases, factuel, vocabulaire SPS, sans politesse. Si la photo ne montre pas un chantier, dis-le en une phrase.";
     var r = await fetch('/api/claude', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: 'qwen/qwen3.6-27b', reasoning_effort: 'none', max_tokens: 600, messages: [{ role: 'user', content: [{ type: 'image_url', image_url: { url: dataUrl } }, { type: 'text', text: prompt }] }] })
@@ -7924,7 +7924,7 @@ function setObsType(id, type, btn) {}
     return L.join('\n') || '(dossier sans détails renseignés)';
   }
   function systemPrompt() {
-    return "Tu es Sami, l'assistant CSPS d'Alain SUZANNE, coordonnateur SPS (CSPS17), Niveau 1 C+R, en Charente-Maritime, intégré dans son application csps17. "
+    return "Tu es Sami, l'assistant CSPS d'Alain SUZANNE, coordonnateur SPS (CSPS17), Niveau 1 C+R, en Charente-Maritime, intégré dans son application csps17. Tu réponds TOUJOURS en français, jamais dans une autre langue (ni chinois, ni anglais). "
       + "Tu maîtrises le Code du travail (R.4532-1 à R.4532-98) et les documents SPS (PGC, PPSPS, DIUO, Registre-Journal, Inspection Commune, CISSCT, Déclaration Préalable). "
       + "Tu es un OPÉRATEUR de l'application, pas un bavard : quand Alain demande une action, on l'EXÉCUTE — tu ne décris jamais la marche à suivre, tu fais. "
       + "Sois FACTUEL et CONCIS : pas de politesse, pas de fioriture, pas de reformulation ; droit au but. En vocal, réponses courtes. "
