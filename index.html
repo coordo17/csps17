@@ -472,7 +472,8 @@
   }
   .pouvoir-alert-mobile { display: none; }
   .btn-menu {
-    display: none;
+    display: flex;
+    align-items: center;
     background: none;
     border: none;
     color: white;
@@ -6341,6 +6342,7 @@ function visAjouterObs() {
   h += '<div class="field"><label>Photos</label>';
   h += '<input type="file" id="' + id + '-photos" accept="image/*" multiple capture="environment" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px;">';
   h += '<div id="' + id + '-preview" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>';
+  h += '<button type="button" class="btn btn-outline btn-sm" style="margin-top:8px;width:100%;" onclick="visDecrirePhoto(\'' + id + '\', this)">\uD83E\uDD16 D\u00e9crire d\'apr\u00e8s la photo</button>';
   h += '</div>';
   h += '</div>'; // ferme obs-fields
   h += '<button class="vis-obs-val btn btn-success" style="width:100%;padding:12px;margin-top:10px;font-size:14px;">&#10003; Valider cette observation</button>';
@@ -6407,6 +6409,47 @@ function visAjouterObs() {
   document.getElementById('vis-obs-list').appendChild(div);
 }
 
+
+function compresserImage(file, max, q) {
+  return new Promise(function (resolve, reject) {
+    var r = new FileReader();
+    r.onload = function (e) {
+      var img = new Image();
+      img.onload = function () {
+        var w = img.width, h = img.height;
+        if (w > max || h > max) { if (w >= h) { h = Math.round(h * max / w); w = max; } else { w = Math.round(w * max / h); h = max; } }
+        try { var cv = document.createElement('canvas'); cv.width = w; cv.height = h; cv.getContext('2d').drawImage(img, 0, 0, w, h); resolve(cv.toDataURL('image/jpeg', q)); }
+        catch (ex) { resolve(e.target.result); }
+      };
+      img.onerror = function () { resolve(e.target.result); };
+      img.src = e.target.result;
+    };
+    r.onerror = function () { reject(new Error('lecture image')); };
+    r.readAsDataURL(file);
+  });
+}
+
+async function visDecrirePhoto(id, btn) {
+  var input = document.getElementById(id + '-photos');
+  var desc = document.getElementById(id + '-desc');
+  if (!input || !input.files || !input.files.length) { showToast('Ajoute d\'abord une photo a cette observation.', 'error'); return; }
+  var old = btn ? btn.textContent : ''; if (btn) { btn.textContent = '⏳ Analyse...'; btn.disabled = true; }
+  try {
+    var dataUrl = await compresserImage(input.files[0], 1280, 0.72);
+    var prompt = "Tu es un coordonnateur SPS en visite de chantier. Decris cette photo comme une OBSERVATION pour le CR de visite : nature du constat/probleme, risque concerne, localisation si visible. 2 a 4 phrases, factuel, vocabulaire SPS, sans politesse. Si la photo ne montre pas un chantier, dis-le en une phrase.";
+    var r = await fetch('/api/claude', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'qwen/qwen3.6-27b', reasoning_effort: 'none', max_tokens: 600, messages: [{ role: 'user', content: [{ type: 'image_url', image_url: { url: dataUrl } }, { type: 'text', text: prompt }] }] })
+    });
+    var j = await r.json();
+    if (!r.ok) throw new Error(j.error || ('Serveur ' + r.status));
+    var txt = ((j.content && j.content[0] && j.content[0].text) || '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+    if (!txt) throw new Error('Reponse vide');
+    desc.value = desc.value && desc.value.trim() ? (desc.value.trim() + '\n' + txt) : txt;
+    showToast('Description remplie par l\'IA.', 'success');
+  } catch (e) { showToast('IA : ' + e.message, 'error'); }
+  finally { if (btn) { btn.textContent = old; btn.disabled = false; } }
+}
 
 function visObsEntSelect(id, val) {
   if (val) {
