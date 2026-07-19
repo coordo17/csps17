@@ -7986,7 +7986,7 @@ function setObsType(id, type, btn) {}
     var typing = bulle('ai', '…'); var text = '';
     try {
       var payload = { system: systemPrompt(), messages: msgs, max_tokens: 1200 };
-      if (photo) payload.model = 'qwen/qwen3.6-27b';
+      if (photo) { payload.model = 'qwen/qwen3.6-27b'; payload.reasoning_effort = 'none'; }
       var r = await fetch('/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       var j = await r.json();
       if (!r.ok) throw new Error(j.error || ('Serveur ' + r.status));

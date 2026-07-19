@@ -47,6 +47,8 @@ app.post('/api/claude', async (req, res) => {
       max_tokens: req.body.max_tokens || 4096,
       messages: req.body.messages || [],
     };
+    // Controle de la reflexion (Qwen 3.6 : 'none' = pas de <think>, reponse directe)
+    if (req.body.reasoning_effort) body.reasoning_effort = req.body.reasoning_effort;
     if (req.body.system) {
       body.messages = [{ role: 'system', content: req.body.system }, ...body.messages];
     }
