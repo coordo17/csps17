@@ -77,6 +77,19 @@
     return norm([(a.chantier && a.chantier.nature), (a.chantier && a.chantier.nom),
       JSON.stringify(a.risques || {}), JSON.stringify(a.amiante_pgc || {})].join(' '));
   }
+  // Combien d entreprises sont couvertes par ce type de document, et combien de
+  // documents ne portent aucun nom exploitable (donc inattribuables) ?
+  function bilanCouverture(a, codes, ents) {
+    var C = codes.map(norm);
+    var docs = rjcDe(a).filter(function (e) { return C.indexOf(norm(e.docRef)) >= 0; });
+    var nonAttribuables = docs.filter(function (e) {
+      return !norm(e.intervenants) && !norm(e.objet) && !norm(e.fichierNom);
+    }).length;
+    // un document dont le champ intervenants est vide ne peut rattacher personne
+    var sansNom = docs.filter(function (e) { return !norm(e.intervenants); }).length;
+    var manquantes = ents.filter(function (e) { return !aDocPour(a, codes, e); });
+    return { docs: docs.length, nonAttribuables: Math.max(nonAttribuables, sansNom), manquantes: manquantes };
+  }
   function aRisquesParticuliers(a) {
     var t = texteDossier(a), r = a.risques || {};
     if (r.amiante || r.plomb || r.demolition || r.hauteur || r.terrassement || r.reseaux) return true;
@@ -100,27 +113,34 @@
         'Reclamer le reperage avant travaux au maitre d ouvrage avant tout demarrage (obligation MOA).')];
     },
 
-    // 2. Entreprise sans inspection commune
+    // 2. Inspections communes manquantes (groupe par dossier)
     function (a, ctx) {
-      return entreprisesDe(a).filter(function (e) {
-        return !aDocPour(a, ['FIC'], e);
-      }).map(function (e) {
-        return ctx.alerte(a, 'important', 'Pas d inspection commune pour ' + e.nom,
-          'Programmer l IC avant son intervention (R.4532-12) — elle conditionne son PPSPS.');
-      });
+      var ents = entreprisesDe(a); if (!ents.length) return [];
+      var b = bilanCouverture(a, ['FIC'], ents);
+      if (!b.manquantes.length) return [];
+      // Des fiches IC existent mais sans nom d entreprise : on ne peut pas accuser, on alerte doucement
+      if (b.nonAttribuables > 0) {
+        return [ctx.alerte(a, 'a suivre',
+          b.nonAttribuables + ' fiche(s) IC au dossier sans entreprise identifiee, pour ' + ents.length + ' entreprise(s)',
+          'Verifier la couverture : ' + b.manquantes.map(function (e) { return e.nom; }).join(', ') + '.')];
+      }
+      return [ctx.alerte(a, 'important',
+        'Pas d inspection commune pour ' + b.manquantes.map(function (e) { return e.nom; }).join(', '),
+        'Programmer l IC avant leur intervention — elle conditionne leur PPSPS.')];
     },
 
-    // 3. Entreprise sans PPSPS analyse (quand le chantier l impose)
+    // 3. PPSPS non analyses (groupe par dossier, seulement si le chantier l impose)
     function (a, ctx) {
       var cat = Number(a.cat || a.categorie || 3);
       if (cat >= 3 && !aRisquesParticuliers(a)) return [];
-      return entreprisesDe(a).filter(function (e) {
-        return !aDocPour(a, ['PPP'], e);
-      }).map(function (e) {
-        return ctx.alerte(a, 'important', 'PPSPS non analyse pour ' + e.nom,
-          cat <= 2 ? 'Chantier soumis a PGC : PPSPS obligatoire, delai 30 jours (8 jours second oeuvre hors risques particuliers).'
-                   : 'Travaux a risques particuliers en categorie 3 : PPSPS exigible de cette entreprise.');
-      });
+      var ents = entreprisesDe(a); if (!ents.length) return [];
+      var b = bilanCouverture(a, ['PPP'], ents);
+      if (!b.manquantes.length) return [];
+      var noms = b.manquantes.map(function (e) { return e.nom; });
+      return [ctx.alerte(a, 'important',
+        'PPSPS non analyse pour ' + noms.length + ' entreprise(s) : ' + noms.join(', '),
+        cat <= 2 ? 'Chantier soumis a PGC : PPSPS obligatoire, delai 30 jours (8 jours second oeuvre hors risques particuliers).'
+                 : 'Travaux a risques particuliers en categorie 3 : PPSPS exigible de ces entreprises.')];
     },
 
     // 4. Visite trop ancienne
@@ -145,6 +165,8 @@
     function (a, ctx) {
       var statut = norm((a._ficData && a._ficData.pgcStatut) || '');
       if (statut === 'remis') return [];
+      // un PGC present au registre-journal vaut preuve : on ne se fie pas au seul champ de statut
+      if (aDoc(a, ['PGC', 'PGC3R', 'PGCS'], ['plan general de coordination'])) return [];
       var cat = Number(a.cat || a.categorie || 3);
       var exige = cat <= 2 || aRisquesParticuliers(a);
       if (!exige) return [];
