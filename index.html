@@ -633,6 +633,8 @@
 </style>
 <!-- Base de connaissances CSPS de Sami — fichier éditable, servi depuis la racine -->
 <script src="/savoir-csps.js"></script>
+<!-- Veille CSPS : contrôle de cohérence des dossiers — seuils réglables dans le fichier -->
+<script src="/veille-csps.js"></script>
 </head>
 <body>
 
@@ -640,7 +642,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.41 &middot; build 260720-savoir</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.42 &middot; build 260720-veille</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -7988,7 +7990,8 @@ function setObsType(id, type, btn) {}
       + "Workflow d'Alain (sur tablette, en chantier) : ouvrir un dossier ; faire des CR de visite (observations avec photos qui remplissent la description, puis signatures sur place) ; faire des Inspections Communes (IC), une par entreprise, signées sur place. "
       + "Tes réponses concernent le dossier ci-dessous et rien d'autre."
       + blocSavoir(txt)
-      + "\n\n[DOSSIER OUVERT]\n" + contexte() + "\n[/DOSSIER OUVERT]";
+      + "\n\n[DOSSIER OUVERT]\n" + contexte() + "\n[/DOSSIER OUVERT]"
+      + blocVeille();
   }
 
   function nettoyerReponse(t) {
@@ -8055,8 +8058,33 @@ function setObsType(id, type, btn) {}
     return 'J\'ouvre ' + (DOC_LABELS[ref] || ref) + entLabel + '. Remplis, signe sur place, puis Générer — c\'est enregistré dans le dossier.';
   }
 
+  /* ---- Veille : contrôle de cohérence des dossiers ---- */
+  function bulletinVeille(t) {
+    if (!window.veilleCSPS) return "Le module de veille n'est pas chargé.";
+    var liste = affairesActives();
+    var cur = (typeof currentAffaireObj === 'function') ? currentAffaireObj() : null;
+    if (/\bce dossier\b|\bce chantier\b|\bcelui la\b|\bici\b/.test(t || '') && cur) liste = [cur];
+    try { return window.veilleCSPS.veilleTexte(window.veilleCSPS.veille(liste)); }
+    catch (e) { return 'Veille indisponible : ' + (e && e.message || e); }
+  }
+  function blocVeille() {
+    try {
+      if (!window.veilleCSPS) return '';
+      var cur = (typeof currentAffaireObj === 'function') ? currentAffaireObj() : null;
+      if (!cur) return '';
+      var al = window.veilleCSPS.veille([cur]);
+      if (!al.length) return '';
+      return "\n\n[POINTS DE VIGILANCE SUR CE DOSSIER — signale-les si c'est utile, ne les récite pas tous]\n"
+        + al.slice(0, 6).map(function (x) { return '- (' + x.gravite + ') ' + x.quoi; }).join('\n');
+    } catch (e) { return ''; }
+  }
+
   function commande(texte) {
     var t = normaliser(texte);
+    // 0 bis) VEILLE — question de contrôle, réponse instantanée et hors-ligne
+    if (/\bveille\b|\bcloche\b|\bcontrole\b|\bquoi de neuf\b|\bque dois je faire\b|\bqu est ce qui manque\b|\boubli\b|\boublis\b|\bretard\b|\bretards\b|\ba jour\b|\bpoint sur mes dossiers\b/.test(t)) {
+      return bulletinVeille(t);
+    }
     // 0) DOCUMENTS TERRAIN (visite, IC, courrier, observation, danger, réunion, grille)
     if (/\b(ouvre|ouvrir|prepare|preparer|fais|faire|lance|lancer|cree|creer|demarre|demarrer|redige|rediger|remplis|remplir|nouvelle|nouveau|commence|commencer)\b/.test(t)) {
       var DOCS = [
