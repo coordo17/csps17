@@ -823,6 +823,13 @@ async function indexerPieces(affaireId) {
         }
       }
     }
+    // Battement de coeur Supabase : un appel reel chaque jour via le cron,
+    // meme quand il n'y a rien a indexer. Supabase gratuit met le projet en
+    // PAUSE apres ~1 semaine sans activite (vecu le 20/07/2026 : apercu et
+    // depot de pieces morts en silence). Ceci l'en empeche.
+    if (supabaseOk) {
+      try { await supabase.storage.from(SUPABASE_BUCKET).list('', { limit: 1 }); } catch (e) {}
+    }
     return { ok: true, indexes, illisibles, erreurs, existants, dossiers: affaires.length, details };
   } finally {
     lectureEnCours = false;
