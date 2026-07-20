@@ -724,6 +724,138 @@ app.get('/cron/veille', async (req, res) => {
   }
 });
 
+/* =====================================================================
+   LECTURE DES PIÈCES — palier 2 de Sami
+   ---------------------------------------------------------------------
+   Le texte intégral des fichiers déposés (PGC, PPSPS, diagnostics, IC…)
+   est extrait une fois pour toutes et conservé dans Firestore
+   (collection "sami_docs", un document par pièce, id = chemin nettoyé).
+   Sami interroge ensuite ces textes pour répondre en CITANT les pièces.
+   Moteur d'extraction et réglages : lecture-docs.js (racine du dépôt).
+     POST /api/sami-docs/indexer    -> indexe ce qui manque (tout ou un dossier)
+     GET  /api/sami-docs?dossier=ID -> catalogue des pièces et de leur état
+     POST /api/sami-docs/extraits   -> extraits pertinents pour une question
+     GET  /cron/lecture-docs        -> même indexation, pour GitHub Actions
+   ===================================================================== */
+const lectureDocs = require('./lecture-docs.js');
+
+function idPiece(entree) {
+  const base = entree.fichierPath || ('data_' + (entree.id || ''));
+  return String(base).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 900);
+}
+
+// Les pièces d'une affaire = les entrées du registre-journal munies d'un fichier
+// (nouveau format fichierPath/Supabase, ou ancien format fichierData/base64).
+function piecesDe(affaire) {
+  return (Array.isArray(affaire.rjc) ? affaire.rjc : []).filter(function (e) {
+    return e && (e.fichierPath || e.fichierData);
+  });
+}
+
+async function bufferDePiece(entree) {
+  if (entree.fichierPath && supabaseOk) {
+    const { data, error } = await supabase.storage.from(SUPABASE_BUCKET).download(entree.fichierPath);
+    if (error) throw error;
+    return Buffer.from(await data.arrayBuffer());
+  }
+  if (entree.fichierData) {
+    const b64 = String(entree.fichierData).includes(',') ? String(entree.fichierData).split(',')[1] : entree.fichierData;
+    return Buffer.from(b64, 'base64');
+  }
+  throw new Error('pièce sans fichier');
+}
+
+// Indexe ce qui manque. affaireId facultatif (sinon : tous les dossiers actifs).
+// Une pièce déjà indexée n'est JAMAIS re-téléchargée : coût quasi nul quand
+// tout est à jour, donc appelable sans arrière-pensée avant chaque question.
+let lectureEnCours = false;
+async function indexerPieces(affaireId) {
+  if (!firebaseOk) return { ok: false, raison: 'firestore indisponible' };
+  if (lectureEnCours) return { ok: false, raison: 'indexation deja en cours' };
+  lectureEnCours = true;
+  try {
+    const affaires = (await chargerAffaires()).filter(function (a) {
+      if (!a || a.archive) return false;
+      return affaireId ? String(a.id) === String(affaireId) : true;
+    });
+    // ids déjà indexés (lecture des ids seuls, pas des textes)
+    const dejaSnap = await db.collection('sami_docs').select('statut').get();
+    const deja = {};
+    dejaSnap.docs.forEach(function (d) { deja[d.id] = true; });
+
+    let indexes = 0, illisibles = 0, erreurs = 0, existants = 0;
+    for (const a of affaires) {
+      for (const e of piecesDe(a)) {
+        const id = idPiece(e);
+        if (deja[id]) { existants++; continue; }
+        try {
+          const buf = await bufferDePiece(e);
+          const r = await lectureDocs.extraireTexte(buf, e.fichierNom || e.fichierPath || '');
+          await db.collection('sami_docs').doc(id).set({
+            affaireId: String(a.id || ''),
+            nom: e.fichierNom || String(e.fichierPath || '').split('/').pop() || 'document',
+            docRef: e.docRef || '',
+            date: e.date || '',
+            intervenants: e.intervenants || '',
+            statut: r.statut,
+            pages: r.pages || 0,
+            chars: (r.texte || '').length,
+            texte: r.texte || '',
+            maj: new Date().toISOString()
+          });
+          if (r.statut === 'ok') indexes++; else illisibles++;
+        } catch (err) {
+          erreurs++;
+          console.error('Lecture pièce impossible (' + (e.fichierNom || e.fichierPath) + '):', err.message);
+        }
+      }
+    }
+    return { ok: true, indexes, illisibles, erreurs, existants, dossiers: affaires.length };
+  } finally {
+    lectureEnCours = false;
+  }
+}
+
+async function docsDuDossier(affaireId, avecTexte) {
+  const snap = await db.collection('sami_docs').where('affaireId', '==', String(affaireId)).get();
+  return snap.docs.map(function (d) {
+    const x = d.data() || {};
+    if (!avecTexte) delete x.texte;
+    return x;
+  });
+}
+
+app.post('/api/sami-docs/indexer', async (req, res) => {
+  try {
+    const r = await indexerPieces((req.body || {}).dossier || null);
+    res.json(r);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/sami-docs', async (req, res) => {
+  if (!firebaseOk) return res.json({ docs: [] });
+  try {
+    const docs = await docsDuDossier(String(req.query.dossier || ''), false);
+    res.json({ docs: docs, catalogue: lectureDocs.catalogue(docs) });
+  } catch (e) { res.json({ docs: [], erreur: e.message }); }
+});
+
+app.post('/api/sami-docs/extraits', async (req, res) => {
+  if (!firebaseOk) return res.json({ extraits: '', catalogue: '' });
+  try {
+    const b = req.body || {};
+    const docs = await docsDuDossier(String(b.dossier || ''), true);
+    const ext = lectureDocs.extraits(docs, String(b.question || ''), Number(b.budget) || undefined);
+    res.json({ extraits: ext, catalogue: lectureDocs.catalogue(docs), nbPieces: docs.length });
+  } catch (e) { res.json({ extraits: '', catalogue: '', erreur: e.message }); }
+});
+
+// Pour GitHub Actions (pas de mot de passe côté cron) : ne renvoie que des compteurs.
+app.get('/cron/lecture-docs', async (req, res) => {
+  try { res.json(await indexerPieces(null)); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Fallback
 app.get('*', (req, res) => {
   const fromPublic = path.join(__dirname, 'public', 'index.html');

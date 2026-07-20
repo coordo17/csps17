@@ -642,7 +642,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.44 &middot; build 260720-palier1b</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.45 &middot; build 260720-palier2</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -8050,18 +8050,51 @@ function setObsType(id, type, btn) {}
     if (t.length < 20) return false;
     return /(analyse|analyser|compare|comparer|pourquoi|explique|expliquer|conforme|conformite|redige|rediger|verifie|verifier|est ce que|dois je|faut il|obligation|obligatoire|delai|categorie|responsabilite|que risque|comment faire|argumente)/.test(t);
   }
-  async function reponseReflechie(txt) {
+
+  /* ---- PALIER 2 : les pièces du dossier, lues pour de vrai ----
+     Si la question touche aux documents déposés (PGC, PPSPS, diagnostics…)
+     ou cite une entreprise du dossier, on demande au serveur les extraits
+     réels des pièces indexées et on les met sous les yeux du modèle.
+     L'indexation est paresseuse : coût quasi nul quand tout est déjà lu. */
+  function questionSurPieces(txt) {
+    var t = normaliser(txt || '');
+    if (/\b(ppsps|pgc|diuo|diagnostic|diag|rapport|reperage|raat|dta|crep|planning|contrat|piece|pieces|document|documents|fiche|inspection commune|courrier|cite|extrait|amiante|plomb)\b/.test(t)) return true;
+    var a = affaire(); if (!a) return false;
+    var ents = (a.entreprises || a.intervenants || []);
+    return Array.isArray(ents) && ents.some(function (e) {
+      var n = normaliser(typeof e === 'string' ? e : (e.nom || ''));
+      return n && n.length > 3 && t.indexOf(n.split(' ')[0]) >= 0;
+    });
+  }
+  async function blocPieces(txt) {
+    var a = affaire();
+    if (!a || !questionSurPieces(txt)) return '';
+    try {
+      try { await fetch('/api/sami-docs/indexer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dossier: a.id }) }); } catch (e) {}
+      var r = await fetch('/api/sami-docs/extraits', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dossier: a.id, question: txt }) });
+      if (!r.ok) return '';
+      var j = await r.json();
+      if (!j || (!j.extraits && !j.catalogue)) return '';
+      var B = '';
+      if (j.catalogue) B += "\n\n[PIÈCES DÉPOSÉES AU DOSSIER — état de lecture]\n" + j.catalogue;
+      if (j.extraits) B += "\n\n[EXTRAITS RÉELS DES PIÈCES — appuie-toi dessus et CITE le nom du fichier quand tu t'en sers ; si l'information n'y figure pas, dis-le au lieu de supposer]\n" + j.extraits;
+      return B;
+    } catch (e) { return ''; }
+  }
+
+  async function reponseReflechie(txt, rapide) {
     var hist = loadHist();
     var msgs = hist.slice(-8).map(function (m) { return { role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }; });
     msgs.push({ role: 'user', content: txt });
+    var pieces = await blocPieces(txt);
     var r = await fetch('/api/claude', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        system: systemPrompt(txt) + "\n\nPrends le temps de raisonner avant de repondre, puis donne une reponse courte et tranchee. Pas de plan, pas de cours : la conclusion et ce qu'il faut faire.",
+        system: systemPrompt(txt) + pieces + "\n\nPrends le temps de raisonner avant de repondre, puis donne une reponse courte et tranchee. Pas de plan, pas de cours : la conclusion et ce qu'il faut faire.",
         // budget large : le modele consomme des jetons pour reflechir AVANT de repondre.
         // Trop juste, il epuise son budget en reflexion et rend une reponse vide.
         messages: msgs, max_tokens: 3000,
-        model: 'qwen/qwen3.6-27b', reasoning_effort: 'default', reasoning_format: 'hidden'
+        model: 'qwen/qwen3.6-27b', reasoning_effort: rapide ? 'none' : 'default', reasoning_format: 'hidden'
       })
     });
     var j = await r.json();
@@ -8164,6 +8197,23 @@ function setObsType(id, type, btn) {}
     }
     // 0 ter) MAILS — état du tri automatique de coordo17sps
     if (/\bmails?\b|\bmessagerie\b|\bboite mail\b|\bcourriels?\b/.test(t)) { etatMails(); return '…'; }
+    // 0 quater) INDEXATION DES PIÈCES — « indexe mes documents », « relis les pièces »
+    if (/\b(indexe|indexer|reindexe|relis|relire)\b/.test(t) && /\b(pieces?|documents?|docs|dossiers?|pgc|ppsps|diagnostics?)\b/.test(t)) {
+      (async function () {
+        var d = bulle('ai', '… je lis les pièces déposées');
+        try {
+          var a = affaire();
+          var r = await fetch('/api/sami-docs/indexer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(a ? { dossier: a.id } : {}) });
+          var j = await r.json();
+          if (!j || j.ok === false) { d.textContent = 'Indexation impossible : ' + ((j && j.raison) || 'erreur serveur'); return; }
+          d.textContent = 'Lecture des pièces terminée : ' + (j.indexes || 0) + ' nouvelle(s) lue(s), '
+            + (j.existants || 0) + ' déjà en mémoire'
+            + ((j.illisibles || 0) ? ', ' + j.illisibles + ' scan(s) sans couche texte (non lisibles)' : '')
+            + ((j.erreurs || 0) ? ', ' + j.erreurs + ' erreur(s)' : '') + '.';
+        } catch (e) { d.textContent = 'Indexation impossible : ' + e.message; }
+      })();
+      return '…';
+    }
     // 0) DOCUMENTS TERRAIN (visite, IC, courrier, observation, danger, réunion, grille)
     if (/\b(ouvre|ouvrir|prepare|preparer|fais|faire|lance|lancer|cree|creer|demarre|demarrer|redige|rediger|remplis|remplir|nouvelle|nouveau|commence|commencer)\b/.test(t)) {
       var DOCS = [
@@ -8317,9 +8367,12 @@ function setObsType(id, type, btn) {}
         if (p && p.action && p.action !== 'aucune') {
           var mm = executerIntention(p);
           text = (mm !== null) ? mm : ((p.reponse && p.reponse.trim()) ? p.reponse : "Je n'ai pas pu faire ça. Reformule (ex : « ouvre une visite », « prépare une IC pour X »).");
-        } else if (questionDeFond(txt, fromVoice)) {
-          typing.textContent = '… je réfléchis';
-          try { text = await reponseReflechie(txt); }
+        } else if (questionDeFond(txt, fromVoice) || questionSurPieces(txt)) {
+          // Question de fond OU question sur les pièces : les extraits réels
+          // partent avec le prompt. En vocal : pas de réflexion (réponse rapide),
+          // mais les pièces sont quand même lues.
+          typing.textContent = '… je consulte le dossier';
+          try { text = await reponseReflechie(txt, fromVoice || !questionDeFond(txt, fromVoice)); }
           catch (e2) { text = (p && p.reponse && p.reponse.trim()) ? p.reponse : raw; }
         } else {
           text = (p && p.reponse && p.reponse.trim()) ? p.reponse : raw;
