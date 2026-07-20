@@ -784,6 +784,7 @@ async function indexerPieces(affaireId) {
     dejaSnap.docs.forEach(function (d) { deja[d.id] = true; });
 
     let indexes = 0, illisibles = 0, erreurs = 0, existants = 0;
+    const details = []; // premiers messages d'erreur, pour diagnostiquer sans les logs Render
     for (const a of affaires) {
       for (const e of piecesDe(a)) {
         const id = idPiece(e);
@@ -806,11 +807,12 @@ async function indexerPieces(affaireId) {
           if (r.statut === 'ok') indexes++; else illisibles++;
         } catch (err) {
           erreurs++;
+          if (details.length < 5) details.push((e.fichierNom || e.fichierPath || '?') + ' : ' + err.message);
           console.error('Lecture pièce impossible (' + (e.fichierNom || e.fichierPath) + '):', err.message);
         }
       }
     }
-    return { ok: true, indexes, illisibles, erreurs, existants, dossiers: affaires.length };
+    return { ok: true, indexes, illisibles, erreurs, existants, dossiers: affaires.length, details };
   } finally {
     lectureEnCours = false;
   }
