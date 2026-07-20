@@ -1,0 +1,29 @@
+# Bulletin de veille CSPS17 — tourne tout seul, meme application fermee.
+# A placer dans le depot csps17 sous : .github/workflows/veille-quotidienne.yml
+#
+# GitHub Actions raisonne en heure UTC. En ete, Paris = UTC + 2.
+# '0 5 * * 1-5' = 7 h du matin a Paris, du lundi au vendredi.
+# En hiver ce sera 6 h : si ca te gene, remplace 5 par 6 a la belle saison.
+
+name: Veille CSPS17
+
+on:
+  schedule:
+    - cron: '0 5 * * 1-5'
+  workflow_dispatch:        # permet de lancer le bulletin a la main depuis l'onglet Actions
+
+jobs:
+  bulletin:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reveiller le serveur (Render gratuit se met en veille)
+        run: |
+          curl -s -m 90 -o /dev/null https://csps17.onrender.com/ || true
+          sleep 20
+
+      - name: Demander le bulletin de veille
+        run: |
+          reponse=$(curl -s -m 120 "https://csps17.onrender.com/cron/veille")
+          echo "Reponse du serveur : $reponse"
+          echo "$reponse" | grep -q '"error"' && exit 1
+          exit 0

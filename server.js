@@ -615,6 +615,70 @@ app.post('/api/envoyer-rjc', async (req, res) => {
   }
 });
 
+/* =====================================================================
+   VEILLE QUOTIDIENNE — bulletin de controle des dossiers par mail
+   ---------------------------------------------------------------------
+   Route volontairement hors /api : elle est appelee par un declencheur
+   externe (GitHub Actions) qui n'a pas le mot de passe de l'application.
+   Elle ne renvoie AUCUNE donnee de dossier et n'ecrit rien : au pire,
+   elle envoie a Alain un bulletin qu'il recevrait de toute facon.
+   Un verrou de 6 h empeche tout envoi en rafale.
+     /cron/veille            -> calcule et envoie le bulletin
+     /cron/veille?apercu=1   -> affiche le bulletin sans l'envoyer
+   ===================================================================== */
+const moteurVeille = require('./veille-csps.js');
+const VEILLE_DEST = process.env.VEILLE_MAIL || 'coordo17sps@gmail.com';
+const VEILLE_VERROU_MS = 6 * 60 * 60 * 1000;
+let veilleDernierEnvoi = 0;
+
+async function chargerAffaires() {
+  if (firebaseOk) {
+    const snapshot = await db.collection('affaires').get();
+    return snapshot.docs.map(function (doc) { return doc.data(); });
+  }
+  try { return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); } catch (e) { return []; }
+}
+
+app.get('/cron/veille', async (req, res) => {
+  try {
+    const affaires = await chargerAffaires();
+    const alertes = moteurVeille.veille(affaires);
+    const texte = moteurVeille.veilleTexte(alertes);
+    const critiques = alertes.filter(function (a) { return a.gravite === 'critique'; }).length;
+
+    if (req.query.apercu === '1') {
+      return res.type('text/plain; charset=utf-8')
+        .send('BULLETIN DE VEILLE (apercu, non envoye)\n' + affaires.length + ' dossier(s) analyse(s)\n\n' + texte);
+    }
+
+    if (!alertes.length && req.query.force !== '1') {
+      return res.json({ envoye: false, raison: 'rien a signaler', dossiers: affaires.length });
+    }
+    const maintenant = Date.now();
+    if (maintenant - veilleDernierEnvoi < VEILLE_VERROU_MS && req.query.force !== '1') {
+      return res.json({ envoye: false, raison: 'bulletin deja envoye il y a moins de 6 h' });
+    }
+    veilleDernierEnvoi = maintenant;
+
+    const jour = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+    const sujet = 'CSPS17 — Veille dossiers'
+      + (critiques ? ' — ' + critiques + ' point(s) CRITIQUE(S)' : '')
+      + ' (' + alertes.length + ')';
+    const corps = 'Bulletin de veille du ' + jour + '\n'
+      + affaires.length + ' dossier(s) analyse(s), ' + alertes.length + ' point(s) a traiter.\n\n'
+      + texte
+      + '\n\n—\nBulletin automatique de csps17. Seuils reglables dans veille-csps.js.\n'
+      + 'Pour le detail : https://csps17.onrender.com';
+
+    await envoyerEmail({ to: VEILLE_DEST, subject: sujet, text: corps });
+    console.log('Veille : bulletin envoye (' + alertes.length + ' alertes)');
+    res.json({ envoye: true, alertes: alertes.length, critiques: critiques, dossiers: affaires.length });
+  } catch (err) {
+    console.error('Erreur veille:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Fallback
 app.get('*', (req, res) => {
   const fromPublic = path.join(__dirname, 'public', 'index.html');
