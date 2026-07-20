@@ -754,9 +754,14 @@ function piecesDe(affaire) {
 
 async function bufferDePiece(entree) {
   if (entree.fichierPath && supabaseOk) {
-    const { data, error } = await supabase.storage.from(SUPABASE_BUCKET).download(entree.fichierPath);
-    if (error) throw error;
-    return Buffer.from(await data.arrayBuffer());
+    let res = await supabase.storage.from(SUPABASE_BUCKET).download(entree.fichierPath);
+    if (res.error) {
+      // seconde chance : les erreurs reseau transitoires existent sur Render gratuit
+      await new Promise(function (r) { setTimeout(r, 500); });
+      res = await supabase.storage.from(SUPABASE_BUCKET).download(entree.fichierPath);
+    }
+    if (res.error) throw res.error;
+    return Buffer.from(await res.data.arrayBuffer());
   }
   if (entree.fichierData) {
     const b64 = String(entree.fichierData).includes(',') ? String(entree.fichierData).split(',')[1] : entree.fichierData;
@@ -807,7 +812,13 @@ async function indexerPieces(affaireId) {
           if (r.statut === 'ok') indexes++; else illisibles++;
         } catch (err) {
           erreurs++;
-          if (details.length < 5) details.push((e.fichierNom || e.fichierPath || '?') + ' : ' + err.message);
+          if (details.length < 5) {
+            // remonter la cause reseau reelle : undici la met dans err.cause,
+            // supabase-js l'enveloppe dans err.originalError
+            var prof = (err && err.originalError) || err || {};
+            var cause = prof.cause ? (prof.cause.code || prof.cause.message || String(prof.cause)) : '';
+            details.push((e.fichierNom || e.fichierPath || '?') + ' : ' + err.message + (cause ? ' [' + String(cause).slice(0, 120) + ']' : ''));
+          }
           console.error('Lecture pièce impossible (' + (e.fichierNom || e.fichierPath) + '):', err.message);
         }
       }
