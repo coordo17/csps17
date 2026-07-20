@@ -642,7 +642,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.43 &middot; build 260720-palier1</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.44 &middot; build 260720-palier1b</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -8058,7 +8058,9 @@ function setObsType(id, type, btn) {}
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         system: systemPrompt(txt) + "\n\nPrends le temps de raisonner avant de repondre, puis donne une reponse courte et tranchee. Pas de plan, pas de cours : la conclusion et ce qu'il faut faire.",
-        messages: msgs, max_tokens: 1400,
+        // budget large : le modele consomme des jetons pour reflechir AVANT de repondre.
+        // Trop juste, il epuise son budget en reflexion et rend une reponse vide.
+        messages: msgs, max_tokens: 3000,
         model: 'qwen/qwen3.6-27b', reasoning_effort: 'default', reasoning_format: 'hidden'
       })
     });
