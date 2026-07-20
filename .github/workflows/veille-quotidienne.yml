@@ -27,3 +27,9 @@ jobs:
           echo "Reponse du serveur : $reponse"
           echo "$reponse" | grep -q '"error"' && exit 1
           exit 0
+
+      - name: Lire les nouvelles pieces deposees (palier 2 de Sami)
+        run: |
+          # Indexe le texte des pieces ajoutees depuis la veille ; quasi
+          # instantane s'il n'y a rien de nouveau. Ne bloque jamais le bulletin.
+          curl -s -m 300 "https://csps17.onrender.com/cron/lecture-docs" || true
