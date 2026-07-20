@@ -49,6 +49,8 @@ app.post('/api/claude', async (req, res) => {
     };
     // Controle de la reflexion (Qwen 3.6 : 'none' = pas de <think>, reponse directe)
     if (req.body.reasoning_effort) body.reasoning_effort = req.body.reasoning_effort;
+    // 'hidden' : le modele raisonne mais ne renvoie pas son raisonnement (reponse propre)
+    if (req.body.reasoning_format) body.reasoning_format = req.body.reasoning_format;
     if (req.body.system) {
       body.messages = [{ role: 'system', content: req.body.system }, ...body.messages];
     }
@@ -626,6 +628,49 @@ app.post('/api/envoyer-rjc', async (req, res) => {
      /cron/veille            -> calcule et envoie le bulletin
      /cron/veille?apercu=1   -> affiche le bulletin sans l'envoyer
    ===================================================================== */
+/* ---- Memoire longue de Sami : historique de conversation par dossier ---- */
+app.get('/api/sami-memoire', async (req, res) => {
+  const cle = String(req.query.dossier || 'general').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 120);
+  if (!firebaseOk) return res.json({ messages: [] });
+  try {
+    const doc = await db.collection('sami_memoire').doc(cle).get();
+    return res.json(doc.exists ? (doc.data() || { messages: [] }) : { messages: [] });
+  } catch (e) { return res.json({ messages: [] }); }
+});
+app.post('/api/sami-memoire', async (req, res) => {
+  const cle = String((req.body && req.body.dossier) || 'general').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 120);
+  const messages = Array.isArray(req.body && req.body.messages) ? req.body.messages.slice(-40) : [];
+  if (!firebaseOk) return res.json({ ok: false, raison: 'firestore indisponible' });
+  try {
+    await db.collection('sami_memoire').doc(cle).set({ messages: messages, maj: new Date().toISOString() });
+    return res.json({ ok: true, n: messages.length });
+  } catch (e) { return res.status(500).json({ error: e.message }); }
+});
+
+/* ---- Pont avec le tri des mails (alimente par le script Google Apps Script) ---- */
+app.post('/cron/mails', async (req, res) => {
+  const b = req.body || {};
+  const etat = {
+    maj: new Date().toISOString(),
+    nouveaux: Number(b.nouveaux || 0),
+    aVerifier: Number(b.aVerifier || 0),
+    ranges: Array.isArray(b.ranges) ? b.ranges.slice(0, 30) : [],
+    resume: String(b.resume || '').slice(0, 2000)
+  };
+  if (!firebaseOk) return res.json({ ok: false, raison: 'firestore indisponible' });
+  try {
+    await db.collection('sami_mails').doc('dernier').set(etat);
+    return res.json({ ok: true });
+  } catch (e) { return res.status(500).json({ error: e.message }); }
+});
+app.get('/api/mails', async (req, res) => {
+  if (!firebaseOk) return res.json({ vide: true });
+  try {
+    const doc = await db.collection('sami_mails').doc('dernier').get();
+    return res.json(doc.exists ? doc.data() : { vide: true });
+  } catch (e) { return res.json({ vide: true }); }
+});
+
 const moteurVeille = require('./veille-csps.js');
 const VEILLE_DEST = process.env.VEILLE_MAIL || 'coordo17sps@gmail.com';
 const VEILLE_VERROU_MS = 6 * 60 * 60 * 1000;

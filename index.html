@@ -642,7 +642,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.42 &middot; build 260720-veille</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.43 &middot; build 260720-palier1</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -7911,7 +7911,37 @@ function setObsType(id, type, btn) {}
   function affaire() { try { return (typeof currentAffaireObj === 'function') ? currentAffaireObj() : null; } catch (e) { return null; } }
   function histKey() { var a = affaire(); return 'csps17_asst_' + (a && a.id ? a.id : 'general'); }
   function loadHist() { try { return JSON.parse(localStorage.getItem(histKey()) || '[]'); } catch (e) { return []; } }
-  function saveHist(h) { try { localStorage.setItem(histKey(), JSON.stringify(h.slice(-40))); } catch (e) {} }
+
+  /* ---- Mémoire persistante : le navigateur reste le cache rapide, le serveur la mémoire longue ---- */
+  var memoTimer = null, memoDerniereCle = '';
+  function cleMemoire() { return String(histKey()).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 120); }
+  function saveHist(h) {
+    var court = h.slice(-40);
+    try { localStorage.setItem(histKey(), JSON.stringify(court)); } catch (e) {}
+    if (memoTimer) clearTimeout(memoTimer);
+    memoTimer = setTimeout(function () {
+      try {
+        fetch('/api/sami-memoire', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dossier: cleMemoire(), messages: court })
+        }).catch(function () {});
+      } catch (e) {}
+    }, 1500);
+  }
+  // Au changement de dossier : si le serveur en sait plus que cette tablette, on rapatrie.
+  async function synchroniserMemoire() {
+    var cle = cleMemoire();
+    if (cle === memoDerniereCle) return; memoDerniereCle = cle;
+    try {
+      var r = await fetch('/api/sami-memoire?dossier=' + encodeURIComponent(cle));
+      if (!r.ok) return;
+      var j = await r.json();
+      var dist = (j && j.messages) || [];
+      if (dist.length > loadHist().length) {
+        localStorage.setItem(histKey(), JSON.stringify(dist.slice(-40)));
+      }
+    } catch (e) {}
+  }
 
   function contexte() {
     var a = affaire();
@@ -8006,7 +8036,36 @@ function setObsType(id, type, btn) {}
     d.className = 'asst-m ' + (role === 'user' ? 'asst-u' : role === 'err' ? 'asst-e' : 'asst-a');
     d.textContent = txt; var c = $('asst-msgs'); c.appendChild(d); c.scrollTop = c.scrollHeight; return d;
   }
-  function majDossier() { var a = affaire(); $('asst-dossier').textContent = a ? ('📁 ' + (a.nom || (a.chantier && a.chantier.nom) || 'dossier')) : '— aucun dossier ouvert —'; }
+  function majDossier() {
+    var a = affaire(); $('asst-dossier').textContent = a ? ('📁 ' + (a.nom || (a.chantier && a.chantier.nom) || 'dossier')) : '— aucun dossier ouvert —';
+    try { synchroniserMemoire(); } catch (e) {}
+  }
+
+  /* ---- Réflexion à deux vitesses ----
+     Commande terrain ou vocal : réponse immédiate.
+     Question de fond : on laisse le modèle réfléchir avant de répondre. */
+  function questionDeFond(txt, fromVoice) {
+    if (fromVoice) return false;                 // au volant, jamais d'attente
+    var t = normaliser(txt || '');
+    if (t.length < 20) return false;
+    return /(analyse|analyser|compare|comparer|pourquoi|explique|expliquer|conforme|conformite|redige|rediger|verifie|verifier|est ce que|dois je|faut il|obligation|obligatoire|delai|categorie|responsabilite|que risque|comment faire|argumente)/.test(t);
+  }
+  async function reponseReflechie(txt) {
+    var hist = loadHist();
+    var msgs = hist.slice(-8).map(function (m) { return { role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }; });
+    msgs.push({ role: 'user', content: txt });
+    var r = await fetch('/api/claude', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system: systemPrompt(txt) + "\n\nPrends le temps de raisonner avant de repondre, puis donne une reponse courte et tranchee. Pas de plan, pas de cours : la conclusion et ce qu'il faut faire.",
+        messages: msgs, max_tokens: 1400,
+        model: 'qwen/qwen3.6-27b', reasoning_effort: 'default', reasoning_format: 'hidden'
+      })
+    });
+    var j = await r.json();
+    if (!r.ok) throw new Error(j.error || ('Serveur ' + r.status));
+    return nettoyerReponse((j.content && j.content[0] && j.content[0].text) || '');
+  }
 
   /* ---- Commandes : AGIR dans l'appli (ouvrir un dossier, un onglet...) ---- */
   function normaliser(x) { return (x || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim(); }
@@ -8079,12 +8138,30 @@ function setObsType(id, type, btn) {}
     } catch (e) { return ''; }
   }
 
+  /* ---- État du tri des mails (alimenté par le script Google) ---- */
+  async function etatMails() {
+    var d = bulle('ai', '…');
+    try {
+      var j = await (await fetch('/api/mails')).json();
+      if (!j || j.vide) { d.textContent = "Le tri des mails n'a encore rien transmis. Vérifie que le script Google envoie bien son résumé."; return; }
+      var age = j.maj ? Math.round((Date.now() - new Date(j.maj).getTime()) / 60000) : null;
+      var L = [];
+      L.push('Mails CSPS17' + (age !== null ? ' — relevé il y a ' + (age < 60 ? age + ' min' : Math.round(age / 60) + ' h') : ''));
+      L.push(j.nouveaux + ' nouveau(x) rangé(s), ' + j.aVerifier + ' à vérifier.');
+      if (j.ranges && j.ranges.length) L.push('Rangés : ' + j.ranges.slice(0, 10).join(' · '));
+      if (j.resume) L.push(j.resume);
+      d.textContent = L.join('\n');
+    } catch (e) { d.textContent = 'Impossible de lire l état des mails : ' + e.message; }
+  }
+
   function commande(texte) {
     var t = normaliser(texte);
     // 0 bis) VEILLE — question de contrôle, réponse instantanée et hors-ligne
     if (/\bveille\b|\bcloche\b|\bcontrole\b|\bquoi de neuf\b|\bque dois je faire\b|\bqu est ce qui manque\b|\boubli\b|\boublis\b|\bretard\b|\bretards\b|\ba jour\b|\bpoint sur mes dossiers\b/.test(t)) {
       return bulletinVeille(t);
     }
+    // 0 ter) MAILS — état du tri automatique de coordo17sps
+    if (/\bmails?\b|\bmessagerie\b|\bboite mail\b|\bcourriels?\b/.test(t)) { etatMails(); return '…'; }
     // 0) DOCUMENTS TERRAIN (visite, IC, courrier, observation, danger, réunion, grille)
     if (/\b(ouvre|ouvrir|prepare|preparer|fais|faire|lance|lancer|cree|creer|demarre|demarrer|redige|rediger|remplis|remplir|nouvelle|nouveau|commence|commencer)\b/.test(t)) {
       var DOCS = [
@@ -8238,6 +8315,10 @@ function setObsType(id, type, btn) {}
         if (p && p.action && p.action !== 'aucune') {
           var mm = executerIntention(p);
           text = (mm !== null) ? mm : ((p.reponse && p.reponse.trim()) ? p.reponse : "Je n'ai pas pu faire ça. Reformule (ex : « ouvre une visite », « prépare une IC pour X »).");
+        } else if (questionDeFond(txt, fromVoice)) {
+          typing.textContent = '… je réfléchis';
+          try { text = await reponseReflechie(txt); }
+          catch (e2) { text = (p && p.reponse && p.reponse.trim()) ? p.reponse : raw; }
         } else {
           text = (p && p.reponse && p.reponse.trim()) ? p.reponse : raw;
         }
