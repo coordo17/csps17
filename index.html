@@ -631,6 +631,8 @@
 }
 .sig-actions { display: flex; gap: 8px; margin-top: 8px; }
 </style>
+<!-- Base de connaissances CSPS de Sami — fichier éditable, servi depuis la racine -->
+<script src="/savoir-csps.js"></script>
 </head>
 <body>
 
@@ -638,7 +640,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.40 &middot; build 260719-22h00</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.41 &middot; build 260720-savoir</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -7923,13 +7925,69 @@ function setObsType(id, type, btn) {}
     if (Array.isArray(a.rapportsAnalyses) && a.rapportsAnalyses.length) add('Rapports/diagnostics déposés', a.rapportsAnalyses.length);
     return L.join('\n') || '(dossier sans détails renseignés)';
   }
-  function systemPrompt() {
+  /* ---- Savoir CSPS : socle toujours transmis + fiches ciblées selon la question ---- */
+  var SAVOIR_SYN_METIERS = {
+    'gros oeuvre': ['gros oeuvre', 'maconnerie', 'macon', 'beton', 'banche', 'coffrage', 'dalle', 'fouille', 'etaiement', 'tremie'],
+    'charpente couverture': ['charpente', 'couverture', 'couvreur', 'toiture', 'tuile', 'fibrociment', 'zinguerie', 'faitage'],
+    'electricite': ['electricite', 'electrique', 'electricien', 'habilitation', 'consignation', 'tension', 'htb', 'hta', 'armoire'],
+    'plomberie chauffage': ['plomberie', 'plombier', 'chauffage', 'sanitaire', 'soudure', 'point chaud', 'calorifuge', 'chaudiere'],
+    'menuiserie': ['menuiserie', 'menuisier', 'agencement', 'ouvrant', 'fenetre', 'porte', 'bardage bois'],
+    'platrerie isolation': ['platrerie', 'platrier', 'placo', 'plaque de platre', 'cloison', 'isolation', 'laine', 'faux plafond'],
+    'peinture': ['peinture', 'peintre', 'solvant', 'decapage', 'revetement mural', 'vernis'],
+    'carrelage': ['carrelage', 'carreleur', 'chape', 'ragreage', 'sol souple', 'faience'],
+    'etancheite': ['etancheite', 'etancheur', 'terrasse', 'bitume', 'chalumeau', 'lanterneau', 'acrotere'],
+    'vrd terrassement': ['vrd', 'terrassement', 'tranchee', 'reseau', 'dict', 'pelle', 'enrobe', 'voirie', 'blindage', 'assainissement'],
+    'demolition': ['demolition', 'deconstruction', 'curage', 'rehabilitation', 'abattage', 'sous oeuvre'],
+    'levage': ['levage', 'grue', 'elingue', 'nacelle', 'pemp', 'chariot', 'telescopique', 'manutention'],
+    'echafaudage': ['echafaudage', 'echafaud', 'pirl', 'plateforme', 'garde corps'],
+    'metallerie serrurerie': ['metallerie', 'serrurerie', 'serrurier', 'charpente metallique', 'soudeur', 'poutre metal']
+  };
+  var SAVOIR_SYN_THEMES = {
+    amiante: ['amiante', 'ss3', 'ss4', 'sous section', 'dta', 'fibre', 'desamiantage'],
+    plomb: ['plomb', 'crep', 'saturnisme'],
+    silice: ['silice', 'quartz', 'sciage', 'poussiere', 'ponçage', 'poncage'],
+    'chute de hauteur': ['chute', 'hauteur', 'harnais', 'ligne de vie', 'filet', 'echelle', 'escabeau', 'garde corps'],
+    'base vie': ['base vie', 'vestiaire', 'refectoire', 'sanitaire', 'hygiene', 'eau potable', 'cantonnement'],
+    meteo: ['meteo', 'vent', 'canicule', 'chaleur', 'chaud', 'degres', 'gel', 'froid', 'pluie', 'neige', 'orage', 'intemperie', 'vigilance'],
+    'espace confine': ['confine', 'cuve', 'regard', 'vide sanitaire', 'anoxie', 'atmosphere', 'silo'],
+    'travailleur isole': ['isole', 'dati', 'travail seul'],
+    'danger grave imminent': ['danger grave', 'dgi', 'imminent', 'arret de chantier', 'mise en demeure']
+  };
+  function savoirPertinent(txt) {
+    var S = window.SAVOIR_CSPS; if (!S) return '';
+    var q = normaliser(txt || '');
+    try { q += ' ' + normaliser(contexte()); } catch (e) {}
+    var out = [];
+    function pioche(dico, syn, max) {
+      var n = 0;
+      for (var k in syn) {
+        if (n >= max) break;
+        for (var i = 0; i < syn[k].length; i++) {
+          if (q.indexOf(normaliser(syn[k][i])) >= 0) { if (dico && dico[k]) { out.push(dico[k]); n++; } break; }
+        }
+      }
+    }
+    pioche(S.metiers, SAVOIR_SYN_METIERS, 3);
+    pioche(S.themes, SAVOIR_SYN_THEMES, 3);
+    return out.length ? ('\n\n[FICHES DÉTAILLÉES — utilise-les pour être juste, ne les récite pas]\n' + out.join('\n\n')) : '';
+  }
+  function blocSavoir(txt) {
+    try {
+      if (!window.SAVOIR_CSPS || !window.SAVOIR_CSPS.socle) return '';
+      return "\n\n[SAVOIR CSPS — référence de travail]\n" + window.SAVOIR_CSPS.socle + savoirPertinent(txt);
+    } catch (e) { return ''; }
+  }
+  function systemPrompt(txt) {
     return "Tu es Sami, l'assistant CSPS d'Alain SUZANNE, coordonnateur SPS (CSPS17), Niveau 1 C+R, en Charente-Maritime, intégré dans son application csps17. Tu réponds TOUJOURS en français, jamais dans une autre langue (ni chinois, ni anglais). "
       + "Tu maîtrises le Code du travail (R.4532-1 à R.4532-98) et les documents SPS (PGC, PPSPS, DIUO, Registre-Journal, Inspection Commune, CISSCT, Déclaration Préalable). "
       + "Tu es un OPÉRATEUR de l'application, pas un bavard : quand Alain demande une action, on l'EXÉCUTE — tu ne décris jamais la marche à suivre, tu fais. "
       + "Sois FACTUEL et CONCIS : pas de politesse, pas de fioriture, pas de reformulation ; droit au but. En vocal, réponses courtes. "
+      + "USAGE DU SAVOIR : il sert à être JUSTE, pas à faire un cours. Tu ne récites jamais la réglementation spontanément. Tu cites un article ou un seuil uniquement si Alain le demande, ou s'il est décisif pour la décision à prendre. Alain est certifié Niveau 1 : pas de pédagogie, pas de rappel de l'évidence. "
+      + "Sur le terrain, une réponse utile tient en 1 à 3 phrases : le constat, le point à vérifier, l'action. "
+      + "Si tu n'es pas sûr d'un point réglementaire, tu le dis en une ligne au lieu d'inventer un article. "
       + "Workflow d'Alain (sur tablette, en chantier) : ouvrir un dossier ; faire des CR de visite (observations avec photos qui remplissent la description, puis signatures sur place) ; faire des Inspections Communes (IC), une par entreprise, signées sur place. "
       + "Tes réponses concernent le dossier ci-dessous et rien d'autre."
+      + blocSavoir(txt)
       + "\n\n[DOSSIER OUVERT]\n" + contexte() + "\n[/DOSSIER OUVERT]";
   }
 
@@ -8105,7 +8163,7 @@ function setObsType(id, type, btn) {}
     var aff = affairesActives().map(function (a) { return { id: a.id, num: a.num || '', nom: nomAff(a) }; });
     var cur = (typeof currentAffaireObj === 'function') ? currentAffaireObj() : null;
     var ents = cur ? (cur.entreprises || cur.intervenants || []).map(function (e) { return typeof e === 'string' ? e : (e.nom || ''); }).filter(Boolean) : [];
-    var sys = systemPrompt()
+    var sys = systemPrompt(txt)
       + "\n\n[ROUTEUR — TU RÉPONDS UNIQUEMENT PAR UN OBJET JSON VALIDE, RIEN D'AUTRE]\n"
       + 'Format exact : {"action":"...","cible":"","entreprise":"","reponse":""}\n'
       + "action parmi : ouvrir_dossier, ouvrir_visite, ouvrir_ic, ouvrir_courrier, ouvrir_observation, ouvrir_danger, ouvrir_reunion, ouvrir_grille, nouveau_dossier, onglet, aucune.\n"
@@ -8142,7 +8200,7 @@ function setObsType(id, type, btn) {}
         var histP = loadHist(); histP.push({ role: 'user', content: txt });
         var msgsP = histP.slice(-12).map(function (m) { return { role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }; });
         msgsP[msgsP.length - 1] = { role: 'user', content: [{ type: 'image_url', image_url: { url: photo.url } }, { type: 'text', text: txt }] };
-        var rp = await fetch('/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ system: systemPrompt(), messages: msgsP, max_tokens: 1200, model: 'qwen/qwen3.6-27b', reasoning_effort: 'none' }) });
+        var rp = await fetch('/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ system: systemPrompt(txt), messages: msgsP, max_tokens: 1200, model: 'qwen/qwen3.6-27b', reasoning_effort: 'none' }) });
         var jp = await rp.json(); if (!rp.ok) throw new Error(jp.error || ('Serveur ' + rp.status));
         text = nettoyerReponse((jp.content && jp.content[0] && jp.content[0].text) || '(pas de réponse)');
         typing.textContent = text; histP.push({ role: 'assistant', content: text }); saveHist(histP);
