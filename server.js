@@ -51,9 +51,16 @@ app.post('/api/claude', async (req, res) => {
     if (req.body.reasoning_effort) body.reasoning_effort = req.body.reasoning_effort;
     // 'hidden' : le modele raisonne mais ne renvoie pas son raisonnement (reponse propre)
     if (req.body.reasoning_format) body.reasoning_format = req.body.reasoning_format;
-    if (req.body.system) {
-      body.messages = [{ role: 'system', content: req.body.system }, ...body.messages];
-    }
+    // Règle de style CSPS17 injectée sur TOUT texte rédigé (analyses, PGC, CR,
+    // visites, harmonisation...), présent et futur. Elle soigne le fond ; le
+    // correcteur de Word (langue fr-FR active) rattrape les coquilles résiduelles.
+    const STYLE_CSPS = "Directive de style CSPS17, a appliquer a tout texte que tu rediges, y compris les champs texte d'un JSON (n'altere jamais la STRUCTURE d'un JSON demande, seulement la qualite du texte a l'interieur) : "
+      + "1) Francais correct, sans faute d'accord ni coquille (jamais \"d'personnels\" : ecris \"de personnels\"). "
+      + "2) Bannis les formules creuses et interchangeables (\"respecter les consignes de securite\", \"mettre en place des mesures de securite\", \"respecter les regles de circulation\", \"assurer la separation des phases\") : chaque affirmation doit nommer une zone, une phase, un corps d'etat, une date ou une mesure precise ; a defaut, ne l'ecris pas. "
+      + "3) Ton sobre et professionnel de coordonnateur SPS : pas de majuscules criardes, pas de points d'exclamation superflus. "
+      + "4) Ne mentionne jamais qu'un texte est genere, redige ou assiste par une IA.";
+    const sysContent = req.body.system ? (STYLE_CSPS + '\n\n' + req.body.system) : STYLE_CSPS;
+    body.messages = [{ role: 'system', content: sysContent }, ...body.messages];
     const payload = JSON.stringify(body);
     const options = {
       hostname: 'api.groq.com',

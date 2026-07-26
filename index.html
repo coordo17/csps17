@@ -642,7 +642,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.45 &middot; build 260720-palier2</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.46 &middot; build 260726-phrase</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -2368,7 +2368,7 @@ function xmlEscA(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').r
 function genererDocxAnalyse(parsed, nomFichierSource) {
   function para(txt, opts) {
     opts = opts || {};
-    var rpr = '<w:rPr>' + (opts.bold ? '<w:b/>' : '') + (opts.color ? '<w:color w:val="' + opts.color + '"/>' : '') + '<w:sz w:val="' + (opts.size || 22) + '"/></w:rPr>';
+    var rpr = '<w:rPr>' + (opts.bold ? '<w:b/>' : '') + (opts.color ? '<w:color w:val="' + opts.color + '"/>' : '') + '<w:sz w:val="' + (opts.size || 22) + '"/><w:lang w:val="fr-FR"/></w:rPr>';
     var runs = String(txt).split('\n').map(function(l, i){
       return (i ? '<w:r>' + rpr + '<w:br/></w:r>' : '') + '<w:r>' + rpr + '<w:t xml:space="preserve">' + xmlEscA(l) + '</w:t></w:r>';
     }).join('');
@@ -2421,7 +2421,7 @@ function genererDocxAnalyse(parsed, nomFichierSource) {
       p.points_vigilance.forEach(function(v){ c.push(para('• ' + v)); });
     }
     c.push(para(''));
-    c.push(para('Analyse assistée par IA du ' + new Date().toLocaleDateString('fr-FR') + ' — vérifiée et validée par le coordonnateur SPS. Alain SUZANNE — CSPS17.', { size: 18, color: '555555' }));
+    c.push(para('Analyse de coordination SPS établie le ' + new Date().toLocaleDateString('fr-FR') + ' et validée par le coordonnateur. Alain SUZANNE — CSPS17 · Coordonnateur SPS niveau 1.', { size: 18, color: '555555' }));
     var docXmlP = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
       + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'
       + c.join('') + '<w:sectPr/></w:body></w:document>';
@@ -2444,7 +2444,7 @@ function genererDocxAnalyse(parsed, nomFichierSource) {
   if (p.plomb) c.push(para('Plomb : ' + (p.plomb.presence ? 'DÉTECTÉ' : 'non détecté') + (p.plomb.localisation ? ' — ' + p.plomb.localisation : ''), { bold: !!p.plomb.presence }));
   if (p.points_vigilance_ic) { c.push(para('POINTS DE VIGILANCE — INSPECTION COMMUNE', { bold: true, color: 'C07000' })); c.push(para(p.points_vigilance_ic)); }
   c.push(para(''));
-  c.push(para('Analyse assistée par IA du ' + new Date().toLocaleDateString('fr-FR') + ' — vérifiée et validée par le coordonnateur SPS. Alain SUZANNE — CSPS17.', { size: 18, color: '555555' }));
+  c.push(para('Analyse de coordination SPS établie le ' + new Date().toLocaleDateString('fr-FR') + ' et validée par le coordonnateur. Alain SUZANNE — CSPS17 · Coordonnateur SPS niveau 1.', { size: 18, color: '555555' }));
   var docXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
     + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'
     + c.join('') + '<w:sectPr/></w:body></w:document>';
@@ -2870,7 +2870,7 @@ async function harmoniserPPSPS() {
   }
 
   var corps = tableau + noteHtml
-    + '<p style="font-size:12px;color:var(--text-light);margin-top:10px;">Harmonisation assistee par IA (R.4532-48) — a relire et valider. Tracee au registre-journal.</p>';
+    + '<p style="font-size:12px;color:var(--text-light);margin-top:10px;">Harmonisation (R.4532-48) — proposition a relire et valider par le coordonnateur. Tracee au registre-journal.</p>';
   openDocModal('📋 Harmonisation des PPSPS', corps, '🖨 Imprimer', function(){
     imprimerAnalyses(affaire, { fichier: 'Harmonisation PPSPS', analyse: (note || { type_rapport:'harmo', synthese:'Tableau de synthese des PPSPS' }) });
   });
@@ -3092,6 +3092,8 @@ async function analyserPlanning(affaire, file) {
       + 'phases_dangereuses : nature parmi desamiantage|demolition|levage|terrassement|hauteur|reseaux|autre ; incompatibilite=avec quelles autres activites (ex "aucune co-activite pendant le desamiantage") ; mesure=disposition de coordination. '
       + 'alertes_rouges = 2 a 5 points CRUCIAUX a ne pas rater (ex : desamiantage sans separation de phase, levage au-dessus de zones occupees, co-activite sur zone amiante). Formule chaque alerte en 1 phrase imperative. '
       + 'recommandations : type parmi "inspection commune"|"CISSCT"|"reunion de coordination"|"separation de phase"|"PGC a mettre a jour" ; detail concret et date/phase concernee si possible. '
+      + 'INTERDIT ABSOLU : les phrases creuses et interchangeables du type "respecter les consignes de securite", "mettre en place des mesures de securite", "respecter les regles de circulation", "assurer la separation des phases". Elles ne veulent rien dire et trahissent un texte generique. Chaque point (alerte, recommandation, vigilance) DOIT nommer une zone, une phase, une date, un corps d\'etat ou une mesure PRECISE tiree du planning. Si tu ne peux pas etre precis sur un point, OMETS-le (liste vide) plutot que de meubler. '
+      + 'Ecris un francais correct, sans faute d\'accord ni artefact (jamais "d\'personnels" : ecris "de personnels" ; jamais "et d\'personnels"). Style sobre de coordonnateur : pas de majuscules criardes ni de points d\'exclamation superflus. '
       + 'Si le planning est trop pauvre en texte pour un point, mets null ou liste vide, ne l\'invente pas. Ecris en francais, concret, oriente terrain.';
     var response = await fetch('/api/claude', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -3115,7 +3117,7 @@ async function analyserPlanning(affaire, file) {
     persistAffaires();
     await attacherAnalyseAuRJC(affaire, parsed, file.name);
     openDocModal('📅 Analyse coordination — ' + file.name, htmlAnalyse(parsed)
-      + '<p style="font-size:12px;color:var(--text-light);margin-top:10px;">Analyse assistee par IA — a verifier et valider. La co-activite a ete cochee dans les risques particuliers de l\'affaire.</p>',
+      + '<p style="font-size:12px;color:var(--text-light);margin-top:10px;">Analyse — a verifier et valider par le coordonnateur. La co-activite a ete cochee dans les risques particuliers de l\'affaire.</p>',
       '🖨 Imprimer', function(){ imprimerAnalyses(affaire, { fichier: file.name, analyse: parsed }); });
   } catch (err) {
     showToast('Analyse du planning impossible : ' + err.message, 'error');
@@ -3308,7 +3310,7 @@ async function analyserPPSPSDepose(affaire, file) {
     persistAffaires();
     await attacherAnalyseAuRJC(affaire, parsed, file.name);
     openDocModal('📋 Harmonisation PPSPS — ' + (parsed.entreprise || file.name), htmlAnalyse(parsed)
-      + '<p style="font-size:12px;color:var(--text-light);margin-top:10px;">Fiche d\'harmonisation assistee par IA — a relire et valider. Utilisez « Harmoniser les PPSPS » pour croiser tous les lots.</p>',
+      + '<p style="font-size:12px;color:var(--text-light);margin-top:10px;">Fiche d\'harmonisation — proposition a relire et valider par le coordonnateur. Utilisez « Harmoniser les PPSPS » pour croiser tous les lots.</p>',
       '🖨 Imprimer', function(){ imprimerAnalyses(affaire, { fichier: file.name, analyse: parsed }); });
   } catch (err) {
     showToast('Analyse du PPSPS impossible : ' + err.message, 'error');
