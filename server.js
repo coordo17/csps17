@@ -58,16 +58,14 @@ app.post('/api/claude', async (req, res) => {
       'llama-3.1-8b-instant',
       'qwen/qwen3.6-27b'
     ];
-    const modele = MODELES_OK.indexOf(req.body.model) !== -1 ? req.body.model : 'llama-3.3-70b-versatile';
-    const body = {
-      model: modele,
-      max_tokens: req.body.max_tokens || 4096,
-      messages: req.body.messages || [],
+    const modeleDemande = MODELES_OK.indexOf(req.body.model) !== -1 ? req.body.model : 'llama-3.3-70b-versatile';
+    // Repli automatique si le modele demande est sature (429) : sans ca, une
+    // conversation (ex. Leo <-> Sami) s'arretait net a la moindre limite de
+    // quota atteinte sur ce modele, alors qu'un autre modele repond souvent.
+    const REPLI = {
+      'llama-3.3-70b-versatile': 'llama-3.1-8b-instant',
+      'qwen/qwen3.6-27b': 'llama-3.3-70b-versatile',
     };
-    // Controle de la reflexion (Qwen 3.6 : 'none' = pas de <think>, reponse directe)
-    if (req.body.reasoning_effort) body.reasoning_effort = req.body.reasoning_effort;
-    // 'hidden' : le modele raisonne mais ne renvoie pas son raisonnement (reponse propre)
-    if (req.body.reasoning_format) body.reasoning_format = req.body.reasoning_format;
     // Règle de style CSPS17 injectée sur TOUT texte rédigé (analyses, PGC, CR,
     // visites, harmonisation...), présent et futur. Elle soigne le fond ; le
     // correcteur de Word (langue fr-FR active) rattrape les coquilles résiduelles.
@@ -77,41 +75,57 @@ app.post('/api/claude', async (req, res) => {
       + "3) Ton sobre et professionnel de coordonnateur SPS : pas de majuscules criardes, pas de points d'exclamation superflus. "
       + "4) Ne mentionne jamais qu'un texte est genere, redige ou assiste par une IA.";
     const sysContent = req.body.system ? (STYLE_CSPS + '\n\n' + req.body.system) : STYLE_CSPS;
-    body.messages = [{ role: 'system', content: sysContent }, ...body.messages];
-    const payload = JSON.stringify(body);
-    const options = {
-      hostname: 'api.groq.com',
-      path: '/openai/v1/chat/completions',
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + GROQ_API_KEY,
-        'Content-Length': Buffer.byteLength(payload),
-      },
-    };
-    const proxyReq = https.request(options, (proxyRes) => {
-      let data = '';
-      proxyRes.on('data', (chunk) => { data += chunk; });
-      proxyRes.on('end', () => {
-        try {
-          const groqData = JSON.parse(data);
-          // Convertir la reponse Groq au format Anthropic
-          const anthropicFormat = {
-            content: [{ type: 'text', text: groqData.choices?.[0]?.message?.content || '' }],
-            model: groqData.model,
-            usage: groqData.usage,
-          };
-          res.status(proxyRes.statusCode).json(anthropicFormat);
-        } catch (e) {
-          res.status(500).json({ error: 'Erreur parsing reponse Groq' });
-        }
+
+    function appelerGroq(modele, dejaReplie) {
+      const body = {
+        model: modele,
+        max_tokens: req.body.max_tokens || 4096,
+        messages: [{ role: 'system', content: sysContent }, ...(req.body.messages || [])],
+      };
+      // Controle de la reflexion (Qwen 3.6 : 'none' = pas de <think>, reponse directe)
+      if (req.body.reasoning_effort) body.reasoning_effort = req.body.reasoning_effort;
+      // 'hidden' : le modele raisonne mais ne renvoie pas son raisonnement (reponse propre)
+      if (req.body.reasoning_format) body.reasoning_format = req.body.reasoning_format;
+      const payload = JSON.stringify(body);
+      const options = {
+        hostname: 'api.groq.com',
+        path: '/openai/v1/chat/completions',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + GROQ_API_KEY,
+          'Content-Length': Buffer.byteLength(payload),
+        },
+      };
+      const proxyReq = https.request(options, (proxyRes) => {
+        let data = '';
+        proxyRes.on('data', (chunk) => { data += chunk; });
+        proxyRes.on('end', () => {
+          if (proxyRes.statusCode === 429 && !dejaReplie && REPLI[modele]) {
+            return appelerGroq(REPLI[modele], true);
+          }
+          try {
+            const groqData = JSON.parse(data);
+            // Convertir la reponse Groq au format Anthropic
+            const anthropicFormat = {
+              content: [{ type: 'text', text: groqData.choices?.[0]?.message?.content || '' }],
+              model: groqData.model,
+              usage: groqData.usage,
+            };
+            res.status(proxyRes.statusCode).json(anthropicFormat);
+          } catch (e) {
+            res.status(500).json({ error: 'Erreur parsing reponse Groq' });
+          }
+        });
       });
-    });
-    proxyReq.on('error', (err) => {
-      res.status(500).json({ error: err.message });
-    });
-    proxyReq.write(payload);
-    proxyReq.end();
+      proxyReq.on('error', (err) => {
+        res.status(500).json({ error: err.message });
+      });
+      proxyReq.write(payload);
+      proxyReq.end();
+    }
+
+    appelerGroq(modeleDemande, false);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
