@@ -649,6 +649,7 @@
     <button class="btn btn-outline btn-sm" id="btn-import-pgc" onclick="showPage('import')">&#128229; Importer PGC</button>
     <button class="btn btn-outline btn-sm" onclick="showPage('terrain');setTimeout(populateTerrainSelect,100);" style="background:#e8f5e9;color:#2e7d52;border-color:#2e7d52;">&#128241; Terrain</button>
     <button class="btn btn-outline btn-sm" onclick="ouvrirSauvegardes()" title="Exporter / importer une sauvegarde de toutes vos affaires">&#128190; Sauvegardes</button>
+    <button class="btn btn-outline btn-sm" onclick="actualiserDepuisServeur()" title="Effacer le cache local de cet appareil et retelecharger la liste depuis le serveur (utile si un autre appareil a supprime/modifie une affaire qui n'apparait pas ici)">&#128260; Actualiser</button>
     <span id="sync-indic" onclick="resyncMaintenant()" title="Etat de la sauvegarde serveur" style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 9px;border-radius:12px;cursor:pointer;background:#eee;color:#666;"><span id="sync-dot" style="width:9px;height:9px;border-radius:50%;background:#999;"></span><span id="sync-txt">—</span></span>
   </div>
 </header>
@@ -1522,6 +1523,19 @@ function pousserVersServeur() {
 }
 
 function resyncMaintenant(){ pousserVersServeur(); }
+
+// "Actualiser" (demande d'Alain 10/08) : contrairement a resyncMaintenant()
+// qui POUSSE le local vers le serveur, celui-ci fait l'inverse — il vide le
+// cache local de CET appareil et retelecharge depuis le serveur. Necessaire
+// car fusionnerAffaires() ne supprime jamais localement une affaire absente
+// de la reponse serveur (fusion anti-regression) : un appareil qui n'a pas
+// ete rouvert depuis la suppression d'une affaire ailleurs continue de
+// l'afficher indefiniment, meme apres un simple rechargement de page.
+function actualiserDepuisServeur(){
+  if(!confirm('Effacer le cache local de cet appareil et retelecharger la liste depuis le serveur ?\n\nA utiliser si une affaire supprimee/modifiee sur un autre appareil n\'apparait pas correctement ici.'))return;
+  localStorage.removeItem('csps17_affaires');
+  location.reload();
+}
 
 // Indicateur de sauvegarde dans le header
 function majSyncIndic(etat){
