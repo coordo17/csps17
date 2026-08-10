@@ -41,6 +41,15 @@ app.use('/api', function (req, res, next) {
   if (fourni === process.env.APP_PASSWORD) return next();
   return res.status(401).json({ error: 'Mot de passe requis ou invalide' });
 });
+// ── Empeche tout cache intermediaire (proxy operateur mobile, cache Android, etc.)
+// de garder une ancienne version de la page apres un deploiement : chaque visite
+// doit revalider depuis le serveur au lieu de servir une copie perimee.
+app.use(function (req, res, next) {
+  if (req.path === '/' || req.path.endsWith('.html')) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  }
+  next();
+});
 app.use(express.static(__dirname));
 app.use(express.static(path.join(__dirname, 'public')));
 
