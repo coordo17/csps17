@@ -14,6 +14,23 @@ const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 // plusieurs documents en base64 (chacun +33% une fois encode) dans une seule requete.
 app.use(express.json({ limit: '40mb' }));
 
+// ── CORS : autorise Leo (leo-sync.onrender.com) a appeler l'API de Sami depuis
+// son propre domaine. Sans ca, le navigateur bloque l'appel cross-origin.
+// Liste blanche stricte (pas de '*') pour ne pas ouvrir l'API a n'importe qui.
+// L'OPTIONS de prevol (preflight) est court-circuite avant la verification du
+// mot de passe, car il n'a jamais l'en-tete X-App-Password.
+var ORIGINES_AUTORISEES = ['https://leo-sync.onrender.com'];
+app.use('/api', function (req, res, next) {
+  var origin = req.headers.origin;
+  if (ORIGINES_AUTORISEES.indexOf(origin) !== -1) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-App-Password');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  }
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
 // ── AUTHENTIFICATION simple (mot de passe partage via variable APP_PASSWORD) ──
 // Tant que APP_PASSWORD n'est pas defini sur Render, l'API reste ouverte (pour
 // ne pas se bloquer avant configuration). Des qu'il est defini, chaque appel
