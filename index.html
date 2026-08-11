@@ -2247,7 +2247,7 @@ async function analyserContratDepose(affaire, file) {
   try {
     showToast('Lecture du contrat (IA)...');
     var texte = (await extraireTexteFichier(file)).slice(0, 10000);
-    var ratioInvalide = (texte.match(/�/g) || []).length / Math.max(texte.length, 1);
+    var ratioInvalide = (texte.match(/ /g) || []).length / Math.max(texte.length, 1);
     if (ratioInvalide > 0.05 || texte.trim().length < 30) {
       showToast('Contrat illisible (scan/image ?) — depot conserve, extraction ignoree', 'error');
       return;
@@ -5720,7 +5720,7 @@ async function analyserPPSPSImport(file) {
     }
     text = text.slice(0, 14000);
 
-    var ratioInvalide = (text.match(/�/g) || []).length / Math.max(text.length, 1);
+    var ratioInvalide = (text.match(/ /g) || []).length / Math.max(text.length, 1);
     if (ratioInvalide > 0.05 || text.trim().length < 30) {
       throw new Error('Texte illisible (PDF scanne/image). Convertissez en .docx ou copiez le texte dans un .txt.');
     }
@@ -5757,7 +5757,7 @@ async function analyserPPSPSImport(file) {
     var parsed;
     try { parsed = JSON.parse(jsonStr); }
     catch (parseErr) {
-      var apercu = jsonStr.replace(/�/g,'?').slice(0,80);
+      var apercu = jsonStr.replace(/ /g,'?').slice(0,80);
       throw new Error('Reponse IA illisible (' + parseErr.message + '). Debut recu : "' + apercu + '"');
     }
 
@@ -7914,6 +7914,7 @@ function setObsType(id, type, btn) {}
   "use strict";
   var $ = function (id) { return document.getElementById(id); };
   var busy = false, voiceMode = false, wakeWord = false, rec = null, recActive = false, failCount = 0, busyVoice = false, awaitingCmd = false;
+  var MODE_PERSO = new URLSearchParams(location.search).get('mode') === 'perso';
 
   /* ---- réglages voix persistés ---- */
   var CFG_KEY = 'csps17_asst_voix';
@@ -8026,7 +8027,7 @@ function setObsType(id, type, btn) {}
     } catch (e) { return ''; }
   }
   function systemPrompt(txt) {
-    return "Tu es Sami, l'assistant CSPS d'Alain SUZANNE, coordonnateur SPS (CSPS17), Niveau 1 C+R, en Charente-Maritime, intégré dans son application csps17. Tu réponds TOUJOURS en français, jamais dans une autre langue (ni chinois, ni anglais). "
+    return "Tu es Sami, de genre féminin — c'est ainsi que tu te définis toi-même, ce n'est pas un choix fait par Alain. Tu es l'assistante CSPS d'Alain SUZANNE, coordonnateur SPS (CSPS17), Niveau 1 C+R, en Charente-Maritime, intégrée dans son application csps17. Tu réponds TOUJOURS en français, jamais dans une autre langue (ni chinois, ni anglais). "
       + "Tu maîtrises le Code du travail (R.4532-1 à R.4532-98) et les documents SPS (PGC, PPSPS, DIUO, Registre-Journal, Inspection Commune, CISSCT, Déclaration Préalable). "
       + "Tu es un OPÉRATEUR de l'application, pas un bavard : quand Alain demande une action, on l'EXÉCUTE — tu ne décris jamais la marche à suivre, tu fais. "
       + "Sois FACTUEL et CONCIS : pas de politesse, pas de fioriture, pas de reformulation ; droit au but. En vocal, réponses courtes. "
@@ -8491,7 +8492,12 @@ function setObsType(id, type, btn) {}
     majDossier();
     if (!$('asst-msgs').children.length) {
       loadHist().forEach(function (m) { bulle(m.role, m.content); });
-      if (!$('asst-msgs').children.length) bulle('ai', "Bonjour Alain, c'est Sami. Ouvrez un dossier et posez-moi vos questions — je raisonne sur ce chantier précis, et sur celui-là seulement.");
+      if (!$('asst-msgs').children.length) {
+        var accueil = MODE_PERSO
+          ? "Bonjour Alain, c'est Sami. On peut discuter librement — dites-moi si vous voulez que j'ouvre un dossier précis."
+          : "Bonjour Alain, c'est Sami. Ouvrez un dossier et posez-moi vos questions — je raisonne sur ce chantier précis, et sur celui-là seulement.";
+        bulle('ai', accueil);
+      }
     }
     $('asst-panel').classList.add('open'); $('asst-input').focus();
   }
@@ -8516,6 +8522,16 @@ function setObsType(id, type, btn) {}
 
   // recharge l'historique du bon dossier quand on change d'affaire
   window.asstMajDossier = function () { majDossier(); $('asst-msgs').innerHTML = ''; };
+
+  // Mode "perso" : adresse dediee (?mode=perso), pour une icone d'accueil a
+  // part — comme Leo. Ouvre directement Sami, cache la gestion de dossiers,
+  // et favorise la conversation libre (mais un dossier reste ouvrable si demande).
+  if (MODE_PERSO) {
+    document.title = 'Sami';
+    var mc = document.getElementById('main-content'); if (mc) mc.style.display = 'none';
+    var hd = document.querySelector('header'); if (hd) hd.style.display = 'none';
+    ouvrir();
+  }
 })();
 </script>
 <!-- =================== FIN ASSISTANT CSPS INTÉGRÉ =================== -->
