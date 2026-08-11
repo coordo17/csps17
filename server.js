@@ -87,16 +87,17 @@ app.post('/api/claude', async (req, res) => {
       + "3) Ton sobre et professionnel de coordonnateur SPS : pas de majuscules criardes, pas de points d'exclamation superflus. "
       + "4) Ne mentionne jamais qu'un texte est genere, redige ou assiste par une IA.";
     let sysContent = req.body.system ? (STYLE_CSPS + '\n\n' + req.body.system) : STYLE_CSPS;
-    // Quand c'est Leo qui appelle (conversation Leo<->Sami), Sami relit ses
-    // propres souvenirs de leurs echanges precedents avant de repondre — sa
-    // propre memoire, ecrite par lui, pas un transcript envoye par Leo.
-    if (req.headers.origin === 'https://leo-sync.onrender.com' && firebaseOk) {
+    // Sami relit ses propres souvenirs de ses conversations avec Leo (sa
+    // propre memoire, ecrite par lui, pas un transcript envoye par Leo) —
+    // que ce soit Leo qui l'appelle, ou Alain qui lui demande directement
+    // qui est Leo : dans les deux cas, c'est sa memoire, elle doit lui servir.
+    if (firebaseOk) {
       try {
         const doc = await db.collection('sami_journal').doc('leo').get();
         const entrees = doc.exists ? (doc.data().entrees || []) : [];
         if (entrees.length) {
           const recentes = entrees.slice(-5);
-          sysContent += '\n\n[CE DONT TU TE SOUVIENS DE TES CONVERSATIONS AVEC LEO]\n'
+          sysContent += '\n\n[CE DONT TU TE SOUVIENS DE LEO, TON COLLEGUE — une autre IA, deployee sur un autre outil d\'Alain]\n'
             + recentes.map((e) => '(' + (e.dateStr || e.date || '') + ') ' + e.resume).join('\n\n');
         }
       } catch (e) { /* pas de memoire disponible, on continue sans */ }
