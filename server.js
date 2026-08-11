@@ -29,7 +29,7 @@ app.use(express.json({ limit: '40mb' }));
 // Liste blanche stricte (pas de '*') pour ne pas ouvrir l'API a n'importe qui.
 // L'OPTIONS de prevol (preflight) est court-circuite avant la verification du
 // mot de passe, car il n'a jamais l'en-tete X-App-Password.
-var ORIGINES_AUTORISEES = ['https://leo-sync.onrender.com'];
+var ORIGINES_AUTORISEES = ['https://leo-sync.onrender.com', 'https://sami-perso.onrender.com'];
 app.use('/api', function (req, res, next) {
   var origin = req.headers.origin;
   if (ORIGINES_AUTORISEES.indexOf(origin) !== -1) {
