@@ -10,6 +10,9 @@ const { createClient } = require('@supabase/supabase-js');
 const app = express();
 const PORT = process.env.PORT || 3017;
 const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
+// Filet de secours quand TOUS les modeles Groq sont satures (429) : Cerebras,
+// meme principe et meme modele que celui deja utilise et eprouve chez Leo.
+const CEREBRAS_API_KEY = process.env.CEREBRAS_API_KEY || '';
 // Limite relevee (au lieu de 20mb) : l'envoi du RJC par email peut regrouper
 // plusieurs documents en base64 (chacun +33% une fois encode) dans une seule requete.
 app.use(express.json({ limit: '40mb' }));
@@ -99,6 +102,49 @@ app.post('/api/claude', async (req, res) => {
       } catch (e) { /* pas de memoire disponible, on continue sans */ }
     }
 
+    // Dernier recours quand TOUTE la chaine Groq est saturee (429) : Cerebras,
+    // meme modele et memes reglages que le filet de secours deja utilise et
+    // eprouve cote Leo (voir fetchCerebras dans leo-sync).
+    function appelerCerebras() {
+      if (!CEREBRAS_API_KEY) return res.status(429).json({ error: 'Modeles Groq satures, Cerebras non configure' });
+      const body = {
+        model: 'gpt-oss-120b',
+        max_tokens: req.body.max_tokens || 4096,
+        messages: [{ role: 'system', content: sysContent }, ...(req.body.messages || [])],
+      };
+      const payload = JSON.stringify(body);
+      const options = {
+        hostname: 'api.cerebras.ai',
+        path: '/v1/chat/completions',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + CEREBRAS_API_KEY,
+          'Content-Length': Buffer.byteLength(payload),
+        },
+      };
+      const proxyReq = https.request(options, (proxyRes) => {
+        let data = '';
+        proxyRes.on('data', (chunk) => { data += chunk; });
+        proxyRes.on('end', () => {
+          try {
+            const cerebrasData = JSON.parse(data);
+            const anthropicFormat = {
+              content: [{ type: 'text', text: cerebrasData.choices?.[0]?.message?.content || '' }],
+              model: 'cerebras/' + (cerebrasData.model || 'gpt-oss-120b'),
+              usage: cerebrasData.usage,
+            };
+            res.status(proxyRes.statusCode).json(anthropicFormat);
+          } catch (e) {
+            res.status(500).json({ error: 'Erreur parsing reponse Cerebras' });
+          }
+        });
+      });
+      proxyReq.on('error', (err) => { res.status(500).json({ error: err.message }); });
+      proxyReq.write(payload);
+      proxyReq.end();
+    }
+
     function appelerGroq(modele, dejaReplie) {
       const body = {
         model: modele,
@@ -124,8 +170,10 @@ app.post('/api/claude', async (req, res) => {
         let data = '';
         proxyRes.on('data', (chunk) => { data += chunk; });
         proxyRes.on('end', () => {
-          if (proxyRes.statusCode === 429 && !dejaReplie && REPLI[modele]) {
-            return appelerGroq(REPLI[modele], true);
+          if (proxyRes.statusCode === 429) {
+            if (!dejaReplie && REPLI[modele]) return appelerGroq(REPLI[modele], true);
+            // Chaine Groq epuisee : dernier recours Cerebras plutot que d'echouer net.
+            return appelerCerebras();
           }
           try {
             const groqData = JSON.parse(data);
