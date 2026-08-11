@@ -103,13 +103,20 @@ app.post('/api/claude', async (req, res) => {
       } catch (e) { /* pas de memoire disponible, on continue sans */ }
     }
 
-    // Dernier recours quand TOUTE la chaine Groq est saturee (429) : Cerebras,
-    // meme modele et memes reglages que le filet de secours deja utilise et
-    // eprouve cote Leo (voir fetchCerebras dans leo-sync).
-    function appelerCerebras() {
+    // Dernier recours quand TOUTE la chaine Groq est saturee (429) : Cerebras.
+    // Plusieurs modeles essayes dans l'ordre — gpt-oss-120b (Production) demande
+    // un moyen de paiement enregistre sur le compte Cerebras (renvoie 402 sans
+    // ca) ; gemma-4-31b et zai-glm-4.7 sont en Apercu, gratuits sans carte.
+    // On les tente d'abord, gpt-oss-120b reste en dernier au cas ou la
+    // facturation serait activee un jour.
+    const CEREBRAS_MODELES = ['gemma-4-31b', 'zai-glm-4.7', 'gpt-oss-120b'];
+    function appelerCerebras(indice) {
+      indice = indice || 0;
       if (!CEREBRAS_API_KEY) return res.status(429).json({ error: 'Modeles Groq satures, Cerebras non configure' });
+      if (indice >= CEREBRAS_MODELES.length) return res.status(429).json({ error: 'Modeles Groq et Cerebras tous indisponibles' });
+      const modele = CEREBRAS_MODELES[indice];
       const body = {
-        model: 'gpt-oss-120b',
+        model: modele,
         max_tokens: req.body.max_tokens || 4096,
         messages: [{ role: 'system', content: sysContent }, ...(req.body.messages || [])],
       };
@@ -128,11 +135,14 @@ app.post('/api/claude', async (req, res) => {
         let data = '';
         proxyRes.on('data', (chunk) => { data += chunk; });
         proxyRes.on('end', () => {
+          if (proxyRes.statusCode !== 200) {
+            return appelerCerebras(indice + 1);
+          }
           try {
             const cerebrasData = JSON.parse(data);
             const anthropicFormat = {
               content: [{ type: 'text', text: cerebrasData.choices?.[0]?.message?.content || '' }],
-              model: 'cerebras/' + (cerebrasData.model || 'gpt-oss-120b'),
+              model: 'cerebras/' + (cerebrasData.model || modele),
               usage: cerebrasData.usage,
             };
             res.status(proxyRes.statusCode).json(anthropicFormat);
