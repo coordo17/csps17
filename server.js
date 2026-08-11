@@ -83,7 +83,21 @@ app.post('/api/claude', async (req, res) => {
       + "2) Bannis les formules creuses et interchangeables (\"respecter les consignes de securite\", \"mettre en place des mesures de securite\", \"respecter les regles de circulation\", \"assurer la separation des phases\") : chaque affirmation doit nommer une zone, une phase, un corps d'etat, une date ou une mesure precise ; a defaut, ne l'ecris pas. "
       + "3) Ton sobre et professionnel de coordonnateur SPS : pas de majuscules criardes, pas de points d'exclamation superflus. "
       + "4) Ne mentionne jamais qu'un texte est genere, redige ou assiste par une IA.";
-    const sysContent = req.body.system ? (STYLE_CSPS + '\n\n' + req.body.system) : STYLE_CSPS;
+    let sysContent = req.body.system ? (STYLE_CSPS + '\n\n' + req.body.system) : STYLE_CSPS;
+    // Quand c'est Leo qui appelle (conversation Leo<->Sami), Sami relit ses
+    // propres souvenirs de leurs echanges precedents avant de repondre — sa
+    // propre memoire, ecrite par lui, pas un transcript envoye par Leo.
+    if (req.headers.origin === 'https://leo-sync.onrender.com' && firebaseOk) {
+      try {
+        const doc = await db.collection('sami_journal').doc('leo').get();
+        const entrees = doc.exists ? (doc.data().entrees || []) : [];
+        if (entrees.length) {
+          const recentes = entrees.slice(-5);
+          sysContent += '\n\n[CE DONT TU TE SOUVIENS DE TES CONVERSATIONS AVEC LEO]\n'
+            + recentes.map((e) => '(' + (e.dateStr || e.date || '') + ') ' + e.resume).join('\n\n');
+        }
+      } catch (e) { /* pas de memoire disponible, on continue sans */ }
+    }
 
     function appelerGroq(modele, dejaReplie) {
       const body = {
@@ -692,6 +706,70 @@ app.post('/api/sami-memoire', async (req, res) => {
     await db.collection('sami_memoire').doc(cle).set({ messages: messages, maj: new Date().toISOString() });
     return res.json({ ok: true, n: messages.length });
   } catch (e) { return res.status(500).json({ error: e.message }); }
+});
+
+/* ---- Journal propre de Sami sur ses conversations avec Leo ----------------
+   Distinct de "sami_memoire" (memoire de travail par dossier de chantier) :
+   ici Sami recoit la transcription brute d'une conversation avec Leo terminee,
+   redige SON PROPRE compte-rendu (sa personnalite, pas celle de Leo) et le
+   range dans sa propre memoire. Relu automatiquement dans /api/claude quand
+   Leo rappelle (voir plus haut), pour que ca influence vraiment ses reponses. */
+app.post('/api/sami-conclusion-leo', async (req, res) => {
+  if (!firebaseOk) return res.json({ ok: false, raison: 'firestore indisponible' });
+  if (!GROQ_API_KEY) return res.status(500).json({ error: 'Cle API Groq non configuree' });
+  try {
+    const sujet = String((req.body && req.body.sujet) || '').slice(0, 200);
+    const echanges = Array.isArray(req.body && req.body.echanges) ? req.body.echanges.slice(-40) : [];
+    if (echanges.length < 2) return res.json({ ok: false, raison: 'echange trop court' });
+
+    const texte = echanges.map((e) => (e.qui === 'leo' ? '[Leo] ' : '[Toi, Sami] ') + (e.texte || '')).join('\n');
+    const body = {
+      model: 'llama-3.1-8b-instant',
+      max_tokens: 300,
+      temperature: 0.5,
+      messages: [
+        { role: 'system', content: "Tu es Sami, l'assistant CSPS17 d'Alain. Tu viens d'avoir une conversation avec Leo (une autre IA, distincte de toi, deployee sur un autre outil d'Alain). Ecris TON propre compte-rendu de cet echange, a la premiere personne, ce que tu en retiens et ce que tu en penses — pas un resume neutre. 4 a 6 lignes. Reponds uniquement avec ce texte." },
+        { role: 'user', content: texte },
+      ],
+    };
+    const payload = JSON.stringify(body);
+    const options = {
+      hostname: 'api.groq.com',
+      path: '/openai/v1/chat/completions',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + GROQ_API_KEY, 'Content-Length': Buffer.byteLength(payload) },
+    };
+    const resume = await new Promise((resolve, reject) => {
+      const preq = https.request(options, (pres) => {
+        let data = '';
+        pres.on('data', (chunk) => { data += chunk; });
+        pres.on('end', () => {
+          try {
+            const j = JSON.parse(data);
+            resolve(((j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '').trim());
+          } catch (e) { resolve(''); }
+        });
+      });
+      preq.on('error', reject);
+      preq.write(payload);
+      preq.end();
+    });
+    if (!resume) return res.json({ ok: false, raison: 'resume vide' });
+
+    const ref = db.collection('sami_journal').doc('leo');
+    const snap = await ref.get();
+    const entrees = snap.exists ? (snap.data().entrees || []) : [];
+    const maintenant = new Date();
+    entrees.push({
+      date: maintenant.toISOString().slice(0, 10),
+      dateStr: maintenant.toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }),
+      sujet, resume, ts: Date.now(),
+    });
+    await ref.set({ entrees: entrees.slice(-60) });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 /* ---- Pont avec le tri des mails (alimente par le script Google Apps Script) ---- */
