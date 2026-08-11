@@ -13,6 +13,10 @@ const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 // Filet de secours quand TOUS les modeles Groq sont satures (429) : Cerebras,
 // meme principe et meme modele que celui deja utilise et eprouve chez Leo.
 const CEREBRAS_API_KEY = process.env.CEREBRAS_API_KEY || '';
+// Filet de secours ultime si Cerebras est aussi indisponible. Contrairement a
+// Leo (code cote navigateur, bloque par CORS), Sami est deja un serveur : il
+// appelle SambaNova directement, pas besoin de relais.
+const SAMBANOVA_API_KEY = process.env.SAMBANOVA_API_KEY || '';
 // Limite relevee (au lieu de 20mb) : l'envoi du RJC par email peut regrouper
 // plusieurs documents en base64 (chacun +33% une fois encode) dans une seule requete.
 app.use(express.json({ limit: '40mb' }));
@@ -112,8 +116,8 @@ app.post('/api/claude', async (req, res) => {
     const CEREBRAS_MODELES = ['gemma-4-31b', 'zai-glm-4.7', 'gpt-oss-120b'];
     function appelerCerebras(indice) {
       indice = indice || 0;
-      if (!CEREBRAS_API_KEY) return res.status(429).json({ error: 'Modeles Groq satures, Cerebras non configure' });
-      if (indice >= CEREBRAS_MODELES.length) return res.status(429).json({ error: 'Modeles Groq et Cerebras tous indisponibles' });
+      if (!CEREBRAS_API_KEY) return appelerSambaNova();
+      if (indice >= CEREBRAS_MODELES.length) return appelerSambaNova();
       const modele = CEREBRAS_MODELES[indice];
       const body = {
         model: modele,
@@ -154,6 +158,48 @@ app.post('/api/claude', async (req, res) => {
       proxyReq.on('error', (err) => { res.status(500).json({ error: err.message }); });
       proxyReq.write(payload);
       proxyReq.end();
+    }
+
+    // Filet de secours ultime : SambaNova, appele directement (serveur a
+    // serveur, pas de CORS a contourner ici).
+    function appelerSambaNova() {
+      if (!SAMBANOVA_API_KEY) return res.status(429).json({ error: 'Modeles Groq, Cerebras et SambaNova tous indisponibles' });
+      const body = {
+        model: 'Meta-Llama-3.3-70B-Instruct',
+        max_tokens: req.body.max_tokens || 4096,
+        messages: [{ role: 'system', content: sysContent }, ...(req.body.messages || [])],
+      };
+      const payload = JSON.stringify(body);
+      const options = {
+        hostname: 'api.sambanova.ai',
+        path: '/v1/chat/completions',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + SAMBANOVA_API_KEY,
+          'Content-Length': Buffer.byteLength(payload),
+        },
+      };
+      const proxyReq2 = https.request(options, (proxyRes) => {
+        let data = '';
+        proxyRes.on('data', (chunk) => { data += chunk; });
+        proxyRes.on('end', () => {
+          try {
+            const sambaData = JSON.parse(data);
+            const anthropicFormat = {
+              content: [{ type: 'text', text: sambaData.choices?.[0]?.message?.content || '' }],
+              model: 'sambanova/' + (sambaData.model || 'Meta-Llama-3.3-70B-Instruct'),
+              usage: sambaData.usage,
+            };
+            res.status(proxyRes.statusCode).json(anthropicFormat);
+          } catch (e) {
+            res.status(500).json({ error: 'Erreur parsing reponse SambaNova' });
+          }
+        });
+      });
+      proxyReq2.on('error', (err) => { res.status(500).json({ error: err.message }); });
+      proxyReq2.write(payload);
+      proxyReq2.end();
     }
 
     function appelerGroq(modele, dejaReplie) {
