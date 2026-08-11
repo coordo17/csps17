@@ -101,7 +101,8 @@ app.post('/api/claude', async (req, res) => {
         const entrees = doc.exists ? (doc.data().entrees || []) : [];
         if (entrees.length) {
           const recentes = entrees.slice(-5);
-          sysContent += '\n\n[CE DONT TU TE SOUVIENS DE LEO, TON COLLEGUE — une autre IA, deployee sur un autre outil d\'Alain]\n'
+          sysContent += '\n\n[TA MEMOIRE DE LEO, TON COLLEGUE — une autre IA, deployee separement sur un autre outil d\'Alain]\n'
+            + "Sers-t'en vraiment : si Leo te parle ou qu'Alain te demande qui est Leo, appuie-toi sur ces souvenirs au lieu de repondre a plat ou de dire que tu ne le connais pas. Ce sont de vrais echanges passes entre vous, pas une supposition.\n"
             + recentes.map((e) => '(' + (e.dateStr || e.date || '') + ') ' + e.resume).join('\n\n');
         }
       } catch (e) { /* pas de memoire disponible, on continue sans */ }
