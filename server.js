@@ -17,6 +17,9 @@ const CEREBRAS_API_KEY = process.env.CEREBRAS_API_KEY || '';
 // Leo (code cote navigateur, bloque par CORS), Sami est deja un serveur : il
 // appelle SambaNova directement, pas besoin de relais.
 const SAMBANOVA_API_KEY = process.env.SAMBANOVA_API_KEY || '';
+// Deux derniers filets de secours, memes fournisseurs et modeles que Leo.
+const GOOGLE_AI_API_KEY = process.env.GOOGLE_AI_API_KEY || '';
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
 // Limite relevee (au lieu de 20mb) : l'envoi du RJC par email peut regrouper
 // plusieurs documents en base64 (chacun +33% une fois encode) dans une seule requete.
 app.use(express.json({ limit: '40mb' }));
@@ -164,7 +167,7 @@ app.post('/api/claude', async (req, res) => {
     // Filet de secours ultime : SambaNova, appele directement (serveur a
     // serveur, pas de CORS a contourner ici).
     function appelerSambaNova() {
-      if (!SAMBANOVA_API_KEY) return res.status(429).json({ error: 'Modeles Groq, Cerebras et SambaNova tous indisponibles' });
+      if (!SAMBANOVA_API_KEY) return appelerGoogleAI();
       const body = {
         model: 'Meta-Llama-3.3-70B-Instruct',
         max_tokens: req.body.max_tokens || 4096,
@@ -185,6 +188,7 @@ app.post('/api/claude', async (req, res) => {
         let data = '';
         proxyRes.on('data', (chunk) => { data += chunk; });
         proxyRes.on('end', () => {
+          if (proxyRes.statusCode !== 200) return appelerGoogleAI();
           try {
             const sambaData = JSON.parse(data);
             const anthropicFormat = {
@@ -201,6 +205,87 @@ app.post('/api/claude', async (req, res) => {
       proxyReq2.on('error', (err) => { res.status(500).json({ error: err.message }); });
       proxyReq2.write(payload);
       proxyReq2.end();
+    }
+
+    function appelerGoogleAI() {
+      if (!GOOGLE_AI_API_KEY) return appelerOpenRouter();
+      const body = {
+        model: 'gemini-flash-latest',
+        max_tokens: req.body.max_tokens || 4096,
+        messages: [{ role: 'system', content: sysContent }, ...(req.body.messages || [])],
+      };
+      const payload = JSON.stringify(body);
+      const options = {
+        hostname: 'generativelanguage.googleapis.com',
+        path: '/v1beta/openai/chat/completions',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + GOOGLE_AI_API_KEY,
+          'Content-Length': Buffer.byteLength(payload),
+        },
+      };
+      const proxyReq3 = https.request(options, (proxyRes) => {
+        let data = '';
+        proxyRes.on('data', (chunk) => { data += chunk; });
+        proxyRes.on('end', () => {
+          if (proxyRes.statusCode !== 200) return appelerOpenRouter();
+          try {
+            const gData = JSON.parse(data);
+            const anthropicFormat = {
+              content: [{ type: 'text', text: gData.choices?.[0]?.message?.content || '' }],
+              model: 'google/' + (gData.model || 'gemini-flash-latest'),
+              usage: gData.usage,
+            };
+            res.status(proxyRes.statusCode).json(anthropicFormat);
+          } catch (e) {
+            res.status(500).json({ error: 'Erreur parsing reponse Google AI' });
+          }
+        });
+      });
+      proxyReq3.on('error', (err) => { res.status(500).json({ error: err.message }); });
+      proxyReq3.write(payload);
+      proxyReq3.end();
+    }
+
+    function appelerOpenRouter() {
+      if (!OPENROUTER_API_KEY) return res.status(429).json({ error: 'Tous les fournisseurs (Groq, Cerebras, SambaNova, Google AI, OpenRouter) sont indisponibles' });
+      const body = {
+        model: 'openai/gpt-oss-20b:free',
+        max_tokens: req.body.max_tokens || 4096,
+        messages: [{ role: 'system', content: sysContent }, ...(req.body.messages || [])],
+      };
+      const payload = JSON.stringify(body);
+      const options = {
+        hostname: 'openrouter.ai',
+        path: '/api/v1/chat/completions',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + OPENROUTER_API_KEY,
+          'Content-Length': Buffer.byteLength(payload),
+        },
+      };
+      const proxyReq4 = https.request(options, (proxyRes) => {
+        let data = '';
+        proxyRes.on('data', (chunk) => { data += chunk; });
+        proxyRes.on('end', () => {
+          try {
+            const oData = JSON.parse(data);
+            const anthropicFormat = {
+              content: [{ type: 'text', text: oData.choices?.[0]?.message?.content || '' }],
+              model: 'openrouter/' + (oData.model || 'gpt-oss-20b'),
+              usage: oData.usage,
+            };
+            res.status(proxyRes.statusCode).json(anthropicFormat);
+          } catch (e) {
+            res.status(500).json({ error: 'Erreur parsing reponse OpenRouter' });
+          }
+        });
+      });
+      proxyReq4.on('error', (err) => { res.status(500).json({ error: err.message }); });
+      proxyReq4.write(payload);
+      proxyReq4.end();
     }
 
     function appelerGroq(modele, dejaReplie) {
