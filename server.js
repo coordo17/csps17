@@ -722,7 +722,21 @@ app.post('/api/sami-envoyer-mail-alain', async (req, res) => {
     const corps = String((req.body && req.body.corps) || '').trim();
     if (!corps) return res.status(400).json({ error: 'corps manquant' });
     const dest = 'coordinateursps17@gmail.com';
-    await envoyerEmail({ to: dest, subject: '[Sami] ' + sujet, text: corps });
+    // Contenu long (ex: dump complet d'une memoire) -> piece jointe .txt plutot
+    // qu'un pave de texte illisible dans le corps du mail. Un seul email suffit
+    // toujours a cette echelle (bien en dessous de la limite Gmail ~25 Mo) :
+    // pas besoin du decoupage multi-emails utilise pour le RJC (fichiers reels).
+    const LONG = 2000;
+    if (corps.length > LONG) {
+      await envoyerEmail({
+        to: dest,
+        subject: '[Sami] ' + sujet,
+        text: 'Contenu en piece jointe (trop long pour le corps du mail).',
+        attachments: [{ filename: 'sami_' + Date.now() + '.txt', content: Buffer.from(corps, 'utf8') }],
+      });
+    } else {
+      await envoyerEmail({ to: dest, subject: '[Sami] ' + sujet, text: corps });
+    }
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
