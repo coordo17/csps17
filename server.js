@@ -710,6 +710,25 @@ function creerZipBuffer(fichiers) {
   });
 }
 
+// Sami envoie un email directement a Alain, depuis une simple demande en
+// conversation (pas un document genere) — declenche par l'action routeur
+// "envoyer_mail_alain" cote client, jamais par du texte libre du modele.
+app.post('/api/sami-envoyer-mail-alain', async (req, res) => {
+  if (!mailPret) {
+    return res.status(500).json({ error: 'Envoi email non configure sur le serveur (variable BREVO_API_KEY manquante)' });
+  }
+  try {
+    const sujet = String((req.body && req.body.sujet) || 'Message de Sami').slice(0, 200);
+    const corps = String((req.body && req.body.corps) || '').trim();
+    if (!corps) return res.status(400).json({ error: 'corps manquant' });
+    const dest = 'coordinateursps17@gmail.com';
+    await envoyerEmail({ to: dest, subject: '[Sami] ' + sujet, text: corps });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Envoi d'un document unique vers la boite du CSPS lui-meme (auto-archivage :
 // horodatage externe dans Gmail + transfert facile au destinataire depuis le tel).
 app.post('/api/envoyer-doc', async (req, res) => {
