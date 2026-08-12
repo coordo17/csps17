@@ -8310,8 +8310,24 @@ function setObsType(id, type, btn) {}
     if (!m) return null;
     try { return JSON.parse(m[0]); } catch (e) { return null; }
   }
-  function executerIntention(p) {
+  async function executerIntention(p) {
     var a = p && p.action;
+    if (a === 'envoyer_mail_alain') {
+      var sujetMail = (p.cible || 'Message de Sami').trim();
+      var corpsMail = (p.reponse || '').trim();
+      if (!corpsMail) return "Je n'ai pas de contenu clair a envoyer — precise ce que tu veux que je mette dans le mail.";
+      try {
+        var rm = await fetch('/api/sami-envoyer-mail-alain', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sujet: sujetMail, corps: corpsMail })
+        });
+        var jm = await rm.json();
+        if (!rm.ok || !jm.ok) return 'Echec de l\'envoi (' + (jm.error || rm.status) + ') — je ne l\'ai PAS envoye.';
+        return 'Envoye : « ' + sujetMail + ' » est parti sur ta boite mail.';
+      } catch (eMail) {
+        return 'Echec de l\'envoi (' + eMail.message + ') — je ne l\'ai PAS envoye.';
+      }
+    }
     if (a === 'ouvrir_visite') return ouvrirDocTerrain('VIS', p.entreprise);
     if (a === 'ouvrir_ic') return ouvrirDocTerrain('FIC', p.entreprise);
     if (a === 'ouvrir_courrier') return ouvrirDocTerrain('IC', p.entreprise);
@@ -8341,10 +8357,11 @@ function setObsType(id, type, btn) {}
     var sys = systemPrompt(txt)
       + "\n\n[ROUTEUR — TU RÉPONDS UNIQUEMENT PAR UN OBJET JSON VALIDE, RIEN D'AUTRE]\n"
       + 'Format exact : {"action":"...","cible":"","entreprise":"","reponse":""}\n'
-      + "action parmi : ouvrir_dossier, ouvrir_visite, ouvrir_ic, ouvrir_courrier, ouvrir_observation, ouvrir_danger, ouvrir_reunion, ouvrir_grille, nouveau_dossier, onglet, aucune.\n"
+      + "action parmi : ouvrir_dossier, ouvrir_visite, ouvrir_ic, ouvrir_courrier, ouvrir_observation, ouvrir_danger, ouvrir_reunion, ouvrir_grille, nouveau_dossier, onglet, envoyer_mail_alain, aucune.\n"
       + "- Si Alain demande une ACTION dans l'appli : mets l'action, laisse reponse vide. ouvrir_dossier -> cible=nom du dossier. onglet -> cible parmi chantier|intervenants|organismes|documents|rjc. Documents (ic, courrier, observation, danger, reunion, grille) -> entreprise=nom si cité.\n"
       + "IMPORTANT : « inspection commune » ou « IC » = ouvrir_ic (JAMAIS ouvrir_visite). « visite » / « CR de visite » = ouvrir_visite.\n"
       + "Pour ouvrir_dossier, cible = le nom EXACT d'un dossier de la liste, OU son numéro (ex : « dossier 2 », « numéro 1 » -> cible=\"2\" ou \"1\"). Ne jamais inventer ni fusionner deux noms. Si Alain ne désigne pas clairement UN seul dossier, action=aucune et demande lequel dans reponse en listant les dossiers.\n"
+      + "Si Alain demande d'envoyer/recevoir un email/mail (ex : « envoie-moi ça par mail », « fais-moi un mail pour... ») -> action=envoyer_mail_alain, cible=sujet court du mail, reponse=le corps complet du mail redige. RÈGLE ABSOLUE : tu n'as AUCUN autre moyen d'envoyer un email que cette action — ne dis JAMAIS \"c'est envoye\"/\"c'est fait\" dans un texte libre (action=aucune), c'est un mensonge si l'action n'a pas ete declenchee. Si tu n'es pas sur de ce qu'il faut mettre dans le mail, action=aucune et demande des precisions dans reponse plutot que de deviner.\n"
       + "- Sinon (question, conseil réglementaire, discussion) : action=aucune et mets ta réponse (factuelle, concise, sans fioriture) dans reponse.\n"
       + "Dossiers en cours : " + JSON.stringify(aff) + "\nEntreprises du dossier ouvert : " + JSON.stringify(ents);
     var hist = loadHist();
@@ -8383,7 +8400,7 @@ function setObsType(id, type, btn) {}
         var raw = await routerIA(txt);
         var p = parseAction(raw);
         if (p && p.action && p.action !== 'aucune') {
-          var mm = executerIntention(p);
+          var mm = await executerIntention(p);
           text = (mm !== null) ? mm : ((p.reponse && p.reponse.trim()) ? p.reponse : "Je n'ai pas pu faire ça. Reformule (ex : « ouvre une visite », « prépare une IC pour X »).");
         } else if (questionDeFond(txt, fromVoice) || questionSurPieces(txt)) {
           // Question de fond OU question sur les pièces : les extraits réels
