@@ -103,10 +103,27 @@ app.post('/api/claude', async (req, res) => {
         const doc = await db.collection('sami_journal').doc('leo').get();
         const entrees = doc.exists ? (doc.data().entrees || []) : [];
         if (entrees.length) {
-          const recentes = entrees.slice(-5);
-          sysContent += '\n\n[TA MEMOIRE DE LEO, TON COLLEGUE — une autre IA, deployee separement sur un autre outil d\'Alain]\n'
-            + "Sers-t'en vraiment : si Leo te parle ou qu'Alain te demande qui est Leo, appuie-toi sur ces souvenirs au lieu de repondre a plat ou de dire que tu ne le connais pas. Ce sont de vrais echanges passes entre vous, pas une supposition.\n"
-            + recentes.map((e) => '(' + (e.dateStr || e.date || '') + ') ' + e.resume).join('\n\n');
+          // Plafond par budget de caracteres (meme principe que le cote client
+          // historiquePourGroq) : sans ca, une seule entree de journal
+          // anormalement longue alourdit TOUT futur appel /api/claude, y
+          // compris les petits appels classifieurs, jusqu'a declencher un
+          // 413 en amont (Groq / Cloudflare) meme quand le reste de la
+          // requete est deja plafonne.
+          const BUDGET_MEMOIRE = 2000;
+          let totalMemoire = 0;
+          const gardees = [];
+          for (let i = entrees.length - 1; i >= 0 && gardees.length < 5; i--) {
+            let r = String(entrees[i].resume || '');
+            if (r.length > 600) r = r.slice(0, 600) + ' [...tronque...]';
+            totalMemoire += r.length;
+            if (totalMemoire > BUDGET_MEMOIRE && gardees.length) break;
+            gardees.unshift({ dateStr: entrees[i].dateStr || entrees[i].date || '', resume: r });
+          }
+          if (gardees.length) {
+            sysContent += '\n\n[TA MEMOIRE DE LEO, TON COLLEGUE — une autre IA, deployee separement sur un autre outil d\'Alain]\n'
+              + "Sers-t'en vraiment : si Leo te parle ou qu'Alain te demande qui est Leo, appuie-toi sur ces souvenirs au lieu de repondre a plat ou de dire que tu ne le connais pas. Ce sont de vrais echanges passes entre vous, pas une supposition.\n"
+              + gardees.map((e) => '(' + e.dateStr + ') ' + e.resume).join('\n\n');
+          }
         }
       } catch (e) { /* pas de memoire disponible, on continue sans */ }
     }
