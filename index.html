@@ -322,6 +322,11 @@
     cursor: pointer; user-select: none;
   }
   .doc-badge:hover { background: var(--blue-dark); }
+  /* Indicateur unique "ca travaille" : pulsation visible tant qu'une operation
+     (analyse au depot, harmonisation, generation PGC) est en cours. */
+  @keyframes csps-pulse { 0%,100% { opacity: 1; } 50% { opacity: .2; } }
+  .travaille { animation: csps-pulse .9s ease-in-out infinite; }
+  .doc-badge.travaille { background: var(--orange-dark); }
   .doc-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-left: 6px; vertical-align: middle; }
   .doc-dot.ok { background: #16a34a; }
   .doc-dot.warn { background: #f59e0b; }
@@ -2176,15 +2181,24 @@ async function deposerPieceDossier(affaire, file, type) {
     showToast(file.name + ' ajoute au dossier', 'success');
     // Analyse IA : rapports/diagnostics (avec injection dans l'affaire) ET
     // PGC (simple synthese aide-memoire, sans injection — le PGC fait foi).
-    if (type === 'DIAG') await analyserRapportDiag(affaire, file);
-    else if (type === 'PGC') await analyserPGCDepose(affaire, file);
-    else if (type === 'PLAN') await analyserPlanning(affaire, file);
-    else if (type === 'CONTRAT') await analyserContratDepose(affaire, file);
-    else if (type === 'ICR') await analyserICDeposee(affaire, file);
-    else if (type === 'CONTRAINTES') await analyserContraintesDeposee(affaire, file);
-    else if (type === 'PLANS') await analyserPlansDepose(affaire, file);
-    else if (type === 'PPSPS') await analyserPPSPSDepose(affaire, file);
-    else if (type === 'CRMOA') await analyserCRReunion(affaire, file);
+    // Pendant toute l'analyse (extraction/OCR compris), le badge de la carte
+    // clignote pour montrer que ca travaille et que ca n'a pas plante.
+    ANALYSES_EN_COURS[type] = true;
+    try { renderDocsGrid(); } catch (eR) {}
+    try {
+      if (type === 'DIAG') await analyserRapportDiag(affaire, file);
+      else if (type === 'PGC') await analyserPGCDepose(affaire, file);
+      else if (type === 'PLAN') await analyserPlanning(affaire, file);
+      else if (type === 'CONTRAT') await analyserContratDepose(affaire, file);
+      else if (type === 'ICR') await analyserICDeposee(affaire, file);
+      else if (type === 'CONTRAINTES') await analyserContraintesDeposee(affaire, file);
+      else if (type === 'PLANS') await analyserPlansDepose(affaire, file);
+      else if (type === 'PPSPS') await analyserPPSPSDepose(affaire, file);
+      else if (type === 'CRMOA') await analyserCRReunion(affaire, file);
+    } finally {
+      delete ANALYSES_EN_COURS[type];
+      try { renderDocsGrid(); } catch (eR2) {}
+    }
   } catch (err) {
     showToast('Erreur depot : ' + err.message, 'error');
   }
@@ -2280,36 +2294,74 @@ async function analyserContratDepose(affaire, file) {
 //   les documents AVAL (Fiche IC, risques particuliers, notes amiante...) — jamais le PGC.
 // - phase conception uniquement : rien n'est injecte, l'analyse est stockee dans
 //   affaire.rapportsAnalyses[] pour servir a la redaction du futur PGC.
+// OCR d'un PDF scanne via Gemini (cote serveur). Le navigateur rend chaque page
+// en JPEG compresse et les envoie par petits lots a /api/ocr-images : aucune
+// limite de pages (un PPSPS de 80 pages est simplement traite en plusieurs lots),
+// rapide et de bonne qualite. Utilise en priorite ; Tesseract reste en secours.
+async function ocrViaServeur(pdf) {
+  var LOT = 4;                 // pages envoyees par requete
+  var total = pdf.numPages;
+  var texteTotal = '';
+  var lot = [];
+  for (var p = 1; p <= total; p++) {
+    var pg = await pdf.getPage(p);
+    var vp = pg.getViewport({ scale: 1.8 });
+    var cv = document.createElement('canvas');
+    cv.width = vp.width; cv.height = vp.height;
+    await pg.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+    lot.push(cv.toDataURL('image/jpeg', 0.7));
+    if (lot.length === LOT || p === total) {
+      showToast('Lecture OCR (Gemini) — page ' + p + '/' + total + '...');
+      var resp = await fetch('/api/ocr-images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images: lot })
+      });
+      if (!resp.ok) throw new Error('OCR serveur ' + resp.status);
+      var data = await resp.json();
+      texteTotal += (data.texte || '') + '\n';
+      lot = [];
+    }
+  }
+  return texteTotal;
+}
+
 async function extraireTexteFichier(file) {
   var nom = (file.name || '').toLowerCase();
   if (nom.endsWith('.pdf')) {
     var ab = await file.arrayBuffer();
     var pdf = await pdfjsLib.getDocument({ data: ab }).promise;
-    var maxPages = Math.min(pdf.numPages, 15);
+    var maxPages = Math.min(pdf.numPages, 100); // plus de plafond bas : les gros PPSPS (80 p.) sont lus en entier
     var t = '';
     for (var i = 1; i <= maxPages; i++) {
       var page = await pdf.getPage(i);
       var tc = await page.getTextContent();
       t += tc.items.map(function(it){ return it.str; }).join(' ') + '\n';
     }
-    // Fallback OCR si le PDF est un scan (aucune couche texte) — meme principe qu'Harmo.
-    // Tesseract est deja charge dans CSPS17 (cf. processEntMailFile). OCR pleine page.
-    if (t.replace(/\s/g, '').length < 30 && typeof Tesseract !== 'undefined') {
-      var ocrPages = Math.min(pdf.numPages, 15);
-      showToast('PDF scanne detecte — lecture OCR en cours (' + ocrPages + ' page(s), patientez)...');
-      var ocr = '';
-      for (var p = 1; p <= ocrPages; p++) {
-        try {
-          var opg = await pdf.getPage(p);
-          var ovp = opg.getViewport({ scale: 2 });
-          var ocv = document.createElement('canvas');
-          ocv.width = ovp.width; ocv.height = ovp.height;
-          await opg.render({ canvasContext: ocv.getContext('2d'), viewport: ovp }).promise;
-          var ores = await Tesseract.recognize(ocv, 'fra');
-          ocr += ((ores.data && ores.data.text) ? ores.data.text : '') + '\n';
-        } catch (eOcr) { /* page en erreur : on garde les autres */ }
+    // PDF scanne (aucune couche texte) : OCR Gemini via le serveur en priorite,
+    // Tesseract local en secours si le serveur ne repond pas.
+    if (t.replace(/\s/g, '').length < 30) {
+      showToast('PDF scanne detecte — lecture OCR en cours (patientez)...');
+      try {
+        var ocrG = await ocrViaServeur(pdf);
+        if (ocrG && ocrG.replace(/\s/g, '').length >= 30) return ocrG;
+      } catch (eG) { /* serveur indisponible : on bascule sur Tesseract ci-dessous */ }
+      if (typeof Tesseract !== 'undefined') {
+        showToast('OCR local (Tesseract) en secours...');
+        var ocr = '';
+        for (var p = 1; p <= pdf.numPages; p++) {
+          try {
+            var opg = await pdf.getPage(p);
+            var ovp = opg.getViewport({ scale: 2 });
+            var ocv = document.createElement('canvas');
+            ocv.width = ovp.width; ocv.height = ovp.height;
+            await opg.render({ canvasContext: ocv.getContext('2d'), viewport: ovp }).promise;
+            var ores = await Tesseract.recognize(ocv, 'fra');
+            ocr += ((ores.data && ores.data.text) ? ores.data.text : '') + '\n';
+          } catch (eOcr) { /* page en erreur : on garde les autres */ }
+        }
+        if (ocr.replace(/\s/g, '').length >= 30) t = ocr;
       }
-      if (ocr.replace(/\s/g, '').length >= 30) t = ocr;
     }
     return t;
   }
@@ -3562,6 +3614,37 @@ async function supprimerPieceHistorique(entryId, ref) {
   if (rjcEntriesForDoc(affaire, ref).length) { showHistoriqueDoc(ref); } else { closeModal(); }
 }
 
+// Types de pieces dont l'analyse au depot est en cours (badge clignotant).
+var ANALYSES_EN_COURS = {};
+
+// Indicateur global "ca travaille" : tant qu'une requete vers le serveur est en
+// cours (analyse au depot, OCR, harmonisation, generation PGC...), une pastille
+// pulse en bas a droite. Une seule instrumentation (wrapper de fetch) couvre
+// automatiquement TOUTES les operations longues, presentes et futures.
+(function(){
+  var enCours = 0, pastille = null;
+  function maj(){
+    if(!pastille){
+      pastille = document.createElement('div');
+      pastille.className = 'travaille';
+      pastille.style.cssText = 'position:fixed;bottom:16px;right:16px;background:var(--orange-dark);color:#fff;padding:8px 15px;border-radius:20px;font-size:13px;font-weight:700;z-index:99999;box-shadow:0 2px 10px rgba(0,0,0,.28);display:none;';
+      pastille.textContent = '⏳ Traitement en cours…';
+      (document.body || document.documentElement).appendChild(pastille);
+    }
+    pastille.style.display = enCours > 0 ? 'block' : 'none';
+  }
+  var fetchOrig = window.fetch;
+  window.fetch = function(){
+    var url = arguments[0];
+    var estApi = (typeof url === 'string') && url.indexOf('/api/') >= 0;
+    if(estApi){ enCours++; try{ maj(); }catch(e){} }
+    var pr = fetchOrig.apply(this, arguments);
+    if(estApi && pr && typeof pr.finally === 'function'){
+      pr.finally(function(){ enCours = Math.max(0, enCours - 1); try{ maj(); }catch(e){} });
+    }
+    return pr;
+  };
+})();
 function renderDocsGrid() {
   var grid = document.getElementById('docs-grid');
   var reminder = document.getElementById('cat-reminder');
@@ -3588,8 +3671,9 @@ function renderDocsGrid() {
       var entries = rjcEntriesForDoc(affaire, p.ref);
       var nb = entries.length;
       var dernierF = dernierFichierDoc(affaire, p.ref);
-      var badge = nb > 0
-        ? '<span class="doc-badge" onclick="showHistoriqueDoc(\'' + p.ref + '\')" title="' + nb + ' piece(s) au dossier \u2014 cliquer pour l\'historique">' + nb + '</span>'
+      var enCours = !!ANALYSES_EN_COURS[p.ref];
+      var badge = (nb > 0 || enCours)
+        ? '<span class="doc-badge' + (enCours ? ' travaille' : '') + '" onclick="showHistoriqueDoc(\'' + p.ref + '\')" title="' + (enCours ? 'Analyse en cours\u2026' : nb + ' piece(s) au dossier \u2014 cliquer pour l\'historique') + '">' + nb + '</span>'
         : '';
       var dot = (p.ref === 'PGC')
         ? '<span class="doc-dot ' + (nb > 0 ? 'ok' : 'warn') + '" title="' + (nb > 0 ? 'PGC present au dossier' : 'Aucun PGC depose pour cette affaire') + '"></span>'
