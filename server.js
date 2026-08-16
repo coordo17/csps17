@@ -47,7 +47,7 @@ app.post('/api/claude', async (req, res) => {
       messages: req.body.messages || [],
     };
     // Controle de la reflexion (Qwen 3.6 : 'none' = pas de <think>, reponse directe)
-    if (req.body.reasoning_effort) body.reasoning_effort = req.body.reasoning_effort;
+    body.reasoning_effort = req.body.reasoning_effort || 'none';
     // 'hidden' : le modele raisonne mais ne renvoie pas son raisonnement (reponse propre)
     if (req.body.reasoning_format) body.reasoning_format = req.body.reasoning_format;
     // Règle de style CSPS17 injectée sur TOUT texte rédigé (analyses, PGC, CR,
