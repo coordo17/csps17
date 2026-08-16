@@ -11,9 +11,10 @@
    Côté serveur uniquement (Node) : l'extraction utilise pdf-parse et
    mammoth (déclarés dans package.json).
 
-   Les scans purs (PDF image, sans couche texte) ne sont PAS océrisés
-   dans ce palier : ils sont marqués « scan illisible », même convention
-   que l'analyse au dépôt déjà en place dans l'application.
+   Les scans purs (PDF image, sans couche texte) SONT désormais océrisés
+   par Gemini vision (même principe qu'Harmo) quand la clé GEMINI_API_KEY
+   est présente dans l'environnement. Sans clé, on garde l'ancien
+   comportement : le scan est marqué « scan illisible ».
    ======================================================================= */
 
 'use strict';
@@ -25,8 +26,57 @@ var REGLAGES = {
   seuilScan: 200,           // moins de N caractères utiles dans un PDF -> considéré comme scan illisible
   tailleMorceau: 1100,      // taille visée d'un morceau (extrait candidat), en caractères
   budgetExtraits: 7000,     // budget total d'extraits injectés dans le prompt de Sami
-  maxExtraitsParDoc: 3      // pour qu'une seule grosse pièce ne mange pas tout le budget
+  maxExtraitsParDoc: 3,     // pour qu'une seule grosse pièce ne mange pas tout le budget
+  ocrMaxOctets: 14 * 1024 * 1024, // au-delà, envoi inline Gemini refusé (limite requête ~20 Mo une fois en base64)
+  ocrTimeoutMs: 90000,      // l'OCR d'un PDF scanné peut être long : on laisse de la marge
+  ocrMaxTokens: 16384       // plafond de texte restitué par l'OCR (un PPSPS scanné très long peut être tronqué)
 };
+
+/* ------------------------ OCR DES SCANS (Gemini vision) ------------------------
+   Un PDF sans couche texte (scan pur) ne peut pas être lu par pdf.js. On envoie
+   alors le PDF entier à Gemini (inlineData PDF, il l'océrise nativement — même
+   approche qu'Harmo). La clé se lit dans l'environnement ; elle n'est jamais
+   écrite dans le code. Toute erreur (pas de clé, quota, fichier trop gros, panne)
+   fait retomber proprement sur l'ancien comportement « scan illisible ».        */
+var GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+var GEMINI_MODEL   = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
+
+async function ocrPdfGemini(buffer) {
+  if (!GEMINI_API_KEY) return null;                              // pas de clé -> scan illisible (comme avant)
+  if (!buffer || buffer.length > REGLAGES.ocrMaxOctets) return null; // trop volumineux pour l'envoi inline
+  var prompt = 'Transcris integralement, en texte brut, tout le contenu de ce document '
+    + '(un PPSPS ou une piece de chantier), page apres page. Restitue les titres, les '
+    + 'tableaux sous forme de texte lisible, les listes et les mentions manuscrites si '
+    + 'presentes. Ne resume pas, ne commente pas : donne uniquement le texte du document.';
+  var body = {
+    contents: [{ role: 'user', parts: [
+      { text: prompt },
+      { inlineData: { mimeType: 'application/pdf', data: buffer.toString('base64') } }
+    ]}],
+    generationConfig: { maxOutputTokens: REGLAGES.ocrMaxTokens, temperature: 0 }
+  };
+  var ctrl = new AbortController();
+  var minuteur = setTimeout(function () { ctrl.abort(); }, REGLAGES.ocrTimeoutMs);
+  try {
+    var r = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL + ':generateContent',
+      { method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
+        body: JSON.stringify(body),
+        signal: ctrl.signal }
+    );
+    if (!r.ok) return null;
+    var j = await r.json();
+    var parts = j && j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts;
+    var t = parts ? parts.map(function (p) { return p.text || ''; }).join('') : '';
+    t = String(t).replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+    return t.length >= REGLAGES.seuilScan ? t : null;
+  } catch (e) {
+    return null;
+  } finally {
+    clearTimeout(minuteur);
+  }
+}
 
 /* ------------------------ OUTILS ------------------------ */
 function norm(x) {
@@ -71,7 +121,13 @@ async function extraireTexte(buffer, nomFichier) {
     }
     try { await doc.destroy(); } catch (e) {}
     var texte = t.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
-    if (texte.length < REGLAGES.seuilScan) return { statut: 'scan', texte: '', pages: doc.numPages || 0 };
+    if (texte.length < REGLAGES.seuilScan) {
+      // PDF sans couche texte = scan. On tente l'OCR Gemini (si clé présente) ;
+      // en cas d'echec on retombe sur l'ancien marquage « scan illisible ».
+      var ocr = await ocrPdfGemini(buffer);
+      if (ocr) return { statut: 'ok', texte: ocr.slice(0, REGLAGES.maxCharsParDoc), pages: doc.numPages || 0, ocr: true };
+      return { statut: 'scan', texte: '', pages: doc.numPages || 0 };
+    }
     return { statut: 'ok', texte: texte.slice(0, REGLAGES.maxCharsParDoc), pages: doc.numPages || 0 };
   }
   if (nom.endsWith('.docx')) {
