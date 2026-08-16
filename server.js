@@ -27,7 +27,34 @@ app.use('/api', function (req, res, next) {
 app.use(express.static(__dirname));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Proxy API Groq (compatible messages)
+// Redaction texte par Gemini (francais propre, sans mots deformes) : utilise en
+// priorite par /api/claude. La cle GEMINI_API_KEY se lit dans l'environnement.
+async function appelGeminiTexte(systemText, userText, maxTokens) {
+  const key = process.env.GEMINI_API_KEY || '';
+  if (!key) throw new Error('GEMINI_API_KEY absente');
+  const model = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
+  const body = {
+    systemInstruction: { parts: [{ text: systemText }] },
+    contents: [{ role: 'user', parts: [{ text: userText }] }],
+    generationConfig: { maxOutputTokens: maxTokens || 4096, temperature: 0.2 }
+  };
+  const ctrl = new AbortController();
+  const to = setTimeout(function () { ctrl.abort(); }, 60000);
+  try {
+    const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent',
+      { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body), signal: ctrl.signal });
+    if (!r.ok) throw new Error('Gemini HTTP ' + r.status);
+    const j = await r.json();
+    const parts = j && j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts;
+    const text = parts ? parts.map(function (x) { return x.text || ''; }).join('') : '';
+    if (!text) throw new Error('Gemini reponse vide');
+    return text;
+  } finally {
+    clearTimeout(to);
+  }
+}
+
+// Proxy IA (compatible messages) : Gemini pour la redaction, Groq en secours + vision
 app.post('/api/claude', async (req, res) => {
   if (!GROQ_API_KEY) {
     return res.status(500).json({ error: 'Cle API Groq non configuree' });
@@ -59,6 +86,19 @@ app.post('/api/claude', async (req, res) => {
       + "3) Ton sobre et professionnel de coordonnateur SPS : pas de majuscules criardes, pas de points d'exclamation superflus. "
       + "4) Ne mentionne jamais qu'un texte est genere, redige ou assiste par une IA.";
     const sysContent = req.body.system ? (STYLE_CSPS + '\n\n' + req.body.system) : STYLE_CSPS;
+    // Redaction texte -> Gemini en priorite (francais propre). On garde Groq en
+    // secours (ci-dessous) si Gemini echoue, et pour la VISION : un message dont
+    // le 'content' n'est pas une chaine (photo) reste traite par Groq.
+    const estVision = (req.body.messages || []).some(function (m) { return m && typeof m.content !== 'string'; });
+    if (!estVision) {
+      try {
+        const userText = (req.body.messages || []).map(function (m) { return typeof m.content === 'string' ? m.content : ''; }).join('\n\n');
+        const gemTxt = await appelGeminiTexte(sysContent, userText, req.body.max_tokens);
+        return res.json({ content: [{ type: 'text', text: gemTxt }] });
+      } catch (eGem) {
+        console.warn('Gemini KO, bascule Groq:', eGem.message);
+      }
+    }
     body.messages = [{ role: 'system', content: sysContent }, ...body.messages];
     const payload = JSON.stringify(body);
     const options = {
