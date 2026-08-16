@@ -2292,6 +2292,25 @@ async function extraireTexteFichier(file) {
       var tc = await page.getTextContent();
       t += tc.items.map(function(it){ return it.str; }).join(' ') + '\n';
     }
+    // Fallback OCR si le PDF est un scan (aucune couche texte) — meme principe qu'Harmo.
+    // Tesseract est deja charge dans CSPS17 (cf. processEntMailFile). OCR pleine page.
+    if (t.replace(/\s/g, '').length < 30 && typeof Tesseract !== 'undefined') {
+      var ocrPages = Math.min(pdf.numPages, 15);
+      showToast('PDF scanne detecte — lecture OCR en cours (' + ocrPages + ' page(s), patientez)...');
+      var ocr = '';
+      for (var p = 1; p <= ocrPages; p++) {
+        try {
+          var opg = await pdf.getPage(p);
+          var ovp = opg.getViewport({ scale: 2 });
+          var ocv = document.createElement('canvas');
+          ocv.width = ovp.width; ocv.height = ovp.height;
+          await opg.render({ canvasContext: ocv.getContext('2d'), viewport: ovp }).promise;
+          var ores = await Tesseract.recognize(ocv, 'fra');
+          ocr += ((ores.data && ores.data.text) ? ores.data.text : '') + '\n';
+        } catch (eOcr) { /* page en erreur : on garde les autres */ }
+      }
+      if (ocr.replace(/\s/g, '').length >= 30) t = ocr;
+    }
     return t;
   }
   if (nom.endsWith('.docx')) {
