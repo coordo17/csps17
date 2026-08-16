@@ -84,7 +84,6 @@
   }
 
   .main { flex: 1; padding: 24px; overflow-y: auto; }
-  .sidebar.collapsed { display: none !important; }
 
   .sidebar-label {
     font-size: 11px;
@@ -472,8 +471,7 @@
   }
   .pouvoir-alert-mobile { display: none; }
   .btn-menu {
-    display: flex;
-    align-items: center;
+    display: none;
     background: none;
     border: none;
     color: white;
@@ -631,10 +629,6 @@
 }
 .sig-actions { display: flex; gap: 8px; margin-top: 8px; }
 </style>
-<!-- Base de connaissances CSPS de Sami — fichier éditable, servi depuis la racine -->
-<script src="/savoir-csps.js"></script>
-<!-- Veille CSPS : contrôle de cohérence des dossiers — seuils réglables dans le fichier -->
-<script src="/veille-csps.js"></script>
 </head>
 <body>
 
@@ -642,14 +636,13 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.46 &middot; build 260726-phrase</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v2.40</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
     <button class="btn btn-outline btn-sm" id="btn-import-pgc" onclick="showPage('import')">&#128229; Importer PGC</button>
     <button class="btn btn-outline btn-sm" onclick="showPage('terrain');setTimeout(populateTerrainSelect,100);" style="background:#e8f5e9;color:#2e7d52;border-color:#2e7d52;">&#128241; Terrain</button>
     <button class="btn btn-outline btn-sm" onclick="ouvrirSauvegardes()" title="Exporter / importer une sauvegarde de toutes vos affaires">&#128190; Sauvegardes</button>
-    <button class="btn btn-outline btn-sm" onclick="actualiserDepuisServeur()" title="Effacer le cache local de cet appareil et retelecharger la liste depuis le serveur (utile si un autre appareil a supprime/modifie une affaire qui n'apparait pas ici)">&#128260; Actualiser</button>
     <span id="sync-indic" onclick="resyncMaintenant()" title="Etat de la sauvegarde serveur" style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 9px;border-radius:12px;cursor:pointer;background:#eee;color:#666;"><span id="sync-dot" style="width:9px;height:9px;border-radius:50%;background:#999;"></span><span id="sync-txt">—</span></span>
   </div>
 </header>
@@ -1007,7 +1000,7 @@
 
   <!-- PAGE TERRAIN -->
   <div class="page" id="page-terrain">
-    <div style="max-width:1100px;">
+    <div style="max-width:720px;">
 
       <!-- STEP 1 : SELECTION AFFAIRE + DOC -->
       <div id="terrain-step-select">
@@ -1210,7 +1203,7 @@ function switchTab(tab) {
   if (tab === 'rjc') renderRJCTab();
 }
 
-function toggleSidebar() { var sb=document.getElementById('sidebar'); if(window.innerWidth<=680){ sb.classList.toggle('open'); } else { sb.classList.toggle('collapsed'); } }
+function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
 function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); }
 
 // Numerotation SANS TROU ni collision (choix d'Alain 05/07) : on prend le plus
@@ -1523,19 +1516,6 @@ function pousserVersServeur() {
 }
 
 function resyncMaintenant(){ pousserVersServeur(); }
-
-// "Actualiser" (demande d'Alain 10/08) : contrairement a resyncMaintenant()
-// qui POUSSE le local vers le serveur, celui-ci fait l'inverse — il vide le
-// cache local de CET appareil et retelecharge depuis le serveur. Necessaire
-// car fusionnerAffaires() ne supprime jamais localement une affaire absente
-// de la reponse serveur (fusion anti-regression) : un appareil qui n'a pas
-// ete rouvert depuis la suppression d'une affaire ailleurs continue de
-// l'afficher indefiniment, meme apres un simple rechargement de page.
-function actualiserDepuisServeur(){
-  if(!confirm('Effacer le cache local de cet appareil et retelecharger la liste depuis le serveur ?\n\nA utiliser si une affaire supprimee/modifiee sur un autre appareil n\'apparait pas correctement ici.'))return;
-  localStorage.removeItem('csps17_affaires');
-  location.reload();
-}
 
 // Indicateur de sauvegarde dans le header
 function majSyncIndic(etat){
@@ -2382,7 +2362,7 @@ function xmlEscA(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').r
 function genererDocxAnalyse(parsed, nomFichierSource) {
   function para(txt, opts) {
     opts = opts || {};
-    var rpr = '<w:rPr>' + (opts.bold ? '<w:b/>' : '') + (opts.color ? '<w:color w:val="' + opts.color + '"/>' : '') + '<w:sz w:val="' + (opts.size || 22) + '"/><w:lang w:val="fr-FR"/></w:rPr>';
+    var rpr = '<w:rPr>' + (opts.bold ? '<w:b/>' : '') + (opts.color ? '<w:color w:val="' + opts.color + '"/>' : '') + '<w:sz w:val="' + (opts.size || 22) + '"/></w:rPr>';
     var runs = String(txt).split('\n').map(function(l, i){
       return (i ? '<w:r>' + rpr + '<w:br/></w:r>' : '') + '<w:r>' + rpr + '<w:t xml:space="preserve">' + xmlEscA(l) + '</w:t></w:r>';
     }).join('');
@@ -2435,7 +2415,7 @@ function genererDocxAnalyse(parsed, nomFichierSource) {
       p.points_vigilance.forEach(function(v){ c.push(para('• ' + v)); });
     }
     c.push(para(''));
-    c.push(para('Analyse de coordination SPS établie le ' + new Date().toLocaleDateString('fr-FR') + ' et validée par le coordonnateur. Alain SUZANNE — CSPS17 · Coordonnateur SPS niveau 1.', { size: 18, color: '555555' }));
+    c.push(para('Analyse assistée par IA du ' + new Date().toLocaleDateString('fr-FR') + ' — vérifiée et validée par le coordonnateur SPS. Alain SUZANNE — CSPS17.', { size: 18, color: '555555' }));
     var docXmlP = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
       + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'
       + c.join('') + '<w:sectPr/></w:body></w:document>';
@@ -2458,7 +2438,7 @@ function genererDocxAnalyse(parsed, nomFichierSource) {
   if (p.plomb) c.push(para('Plomb : ' + (p.plomb.presence ? 'DÉTECTÉ' : 'non détecté') + (p.plomb.localisation ? ' — ' + p.plomb.localisation : ''), { bold: !!p.plomb.presence }));
   if (p.points_vigilance_ic) { c.push(para('POINTS DE VIGILANCE — INSPECTION COMMUNE', { bold: true, color: 'C07000' })); c.push(para(p.points_vigilance_ic)); }
   c.push(para(''));
-  c.push(para('Analyse de coordination SPS établie le ' + new Date().toLocaleDateString('fr-FR') + ' et validée par le coordonnateur. Alain SUZANNE — CSPS17 · Coordonnateur SPS niveau 1.', { size: 18, color: '555555' }));
+  c.push(para('Analyse assistée par IA du ' + new Date().toLocaleDateString('fr-FR') + ' — vérifiée et validée par le coordonnateur SPS. Alain SUZANNE — CSPS17.', { size: 18, color: '555555' }));
   var docXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
     + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'
     + c.join('') + '<w:sectPr/></w:body></w:document>';
@@ -2884,7 +2864,7 @@ async function harmoniserPPSPS() {
   }
 
   var corps = tableau + noteHtml
-    + '<p style="font-size:12px;color:var(--text-light);margin-top:10px;">Harmonisation (R.4532-48) — proposition a relire et valider par le coordonnateur. Tracee au registre-journal.</p>';
+    + '<p style="font-size:12px;color:var(--text-light);margin-top:10px;">Harmonisation assistee par IA (R.4532-48) — a relire et valider. Tracee au registre-journal.</p>';
   openDocModal('📋 Harmonisation des PPSPS', corps, '🖨 Imprimer', function(){
     imprimerAnalyses(affaire, { fichier: 'Harmonisation PPSPS', analyse: (note || { type_rapport:'harmo', synthese:'Tableau de synthese des PPSPS' }) });
   });
@@ -3106,8 +3086,6 @@ async function analyserPlanning(affaire, file) {
       + 'phases_dangereuses : nature parmi desamiantage|demolition|levage|terrassement|hauteur|reseaux|autre ; incompatibilite=avec quelles autres activites (ex "aucune co-activite pendant le desamiantage") ; mesure=disposition de coordination. '
       + 'alertes_rouges = 2 a 5 points CRUCIAUX a ne pas rater (ex : desamiantage sans separation de phase, levage au-dessus de zones occupees, co-activite sur zone amiante). Formule chaque alerte en 1 phrase imperative. '
       + 'recommandations : type parmi "inspection commune"|"CISSCT"|"reunion de coordination"|"separation de phase"|"PGC a mettre a jour" ; detail concret et date/phase concernee si possible. '
-      + 'INTERDIT ABSOLU : les phrases creuses et interchangeables du type "respecter les consignes de securite", "mettre en place des mesures de securite", "respecter les regles de circulation", "assurer la separation des phases". Elles ne veulent rien dire et trahissent un texte generique. Chaque point (alerte, recommandation, vigilance) DOIT nommer une zone, une phase, une date, un corps d\'etat ou une mesure PRECISE tiree du planning. Si tu ne peux pas etre precis sur un point, OMETS-le (liste vide) plutot que de meubler. '
-      + 'Ecris un francais correct, sans faute d\'accord ni artefact (jamais "d\'personnels" : ecris "de personnels" ; jamais "et d\'personnels"). Style sobre de coordonnateur : pas de majuscules criardes ni de points d\'exclamation superflus. '
       + 'Si le planning est trop pauvre en texte pour un point, mets null ou liste vide, ne l\'invente pas. Ecris en francais, concret, oriente terrain.';
     var response = await fetch('/api/claude', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -3131,7 +3109,7 @@ async function analyserPlanning(affaire, file) {
     persistAffaires();
     await attacherAnalyseAuRJC(affaire, parsed, file.name);
     openDocModal('📅 Analyse coordination — ' + file.name, htmlAnalyse(parsed)
-      + '<p style="font-size:12px;color:var(--text-light);margin-top:10px;">Analyse — a verifier et valider par le coordonnateur. La co-activite a ete cochee dans les risques particuliers de l\'affaire.</p>',
+      + '<p style="font-size:12px;color:var(--text-light);margin-top:10px;">Analyse assistee par IA — a verifier et valider. La co-activite a ete cochee dans les risques particuliers de l\'affaire.</p>',
       '🖨 Imprimer', function(){ imprimerAnalyses(affaire, { fichier: file.name, analyse: parsed }); });
   } catch (err) {
     showToast('Analyse du planning impossible : ' + err.message, 'error');
@@ -3324,7 +3302,7 @@ async function analyserPPSPSDepose(affaire, file) {
     persistAffaires();
     await attacherAnalyseAuRJC(affaire, parsed, file.name);
     openDocModal('📋 Harmonisation PPSPS — ' + (parsed.entreprise || file.name), htmlAnalyse(parsed)
-      + '<p style="font-size:12px;color:var(--text-light);margin-top:10px;">Fiche d\'harmonisation — proposition a relire et valider par le coordonnateur. Utilisez « Harmoniser les PPSPS » pour croiser tous les lots.</p>',
+      + '<p style="font-size:12px;color:var(--text-light);margin-top:10px;">Fiche d\'harmonisation assistee par IA — a relire et valider. Utilisez « Harmoniser les PPSPS » pour croiser tous les lots.</p>',
       '🖨 Imprimer', function(){ imprimerAnalyses(affaire, { fichier: file.name, analyse: parsed }); });
   } catch (err) {
     showToast('Analyse du PPSPS impossible : ' + err.message, 'error');
@@ -6362,7 +6340,6 @@ function visAjouterObs() {
   h += '<div class="field"><label>Photos</label>';
   h += '<input type="file" id="' + id + '-photos" accept="image/*" multiple capture="environment" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px;">';
   h += '<div id="' + id + '-preview" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>';
-  h += '<button type="button" class="btn btn-outline btn-sm" style="margin-top:8px;width:100%;" onclick="visDecrirePhoto(\'' + id + '\', this)">\uD83E\uDD16 D\u00e9crire d\'apr\u00e8s la photo</button>';
   h += '</div>';
   h += '</div>'; // ferme obs-fields
   h += '<button class="vis-obs-val btn btn-success" style="width:100%;padding:12px;margin-top:10px;font-size:14px;">&#10003; Valider cette observation</button>';
@@ -6413,8 +6390,6 @@ function visAjouterObs() {
   div.querySelector('input[type=file]').addEventListener('change', function() {
     var preview = document.getElementById(id + '-preview');
     preview.innerHTML = '';
-    // AUTO : photo ajoutee -> remplir la Description (si vide) via l'IA vision
-    setTimeout(function () { var _d = document.getElementById(id + '-desc'); var _p = document.getElementById(id + '-photos'); if (_p && _p.files && _p.files.length && _d && !_d.value.trim() && typeof visDecrirePhoto === 'function') visDecrirePhoto(id, null); }, 60);
     Array.from(this.files).forEach(function(file) {
       var reader = new FileReader();
       reader.onload = function(ev) {
@@ -6431,47 +6406,6 @@ function visAjouterObs() {
   document.getElementById('vis-obs-list').appendChild(div);
 }
 
-
-function compresserImage(file, max, q) {
-  return new Promise(function (resolve, reject) {
-    var r = new FileReader();
-    r.onload = function (e) {
-      var img = new Image();
-      img.onload = function () {
-        var w = img.width, h = img.height;
-        if (w > max || h > max) { if (w >= h) { h = Math.round(h * max / w); w = max; } else { w = Math.round(w * max / h); h = max; } }
-        try { var cv = document.createElement('canvas'); cv.width = w; cv.height = h; cv.getContext('2d').drawImage(img, 0, 0, w, h); resolve(cv.toDataURL('image/jpeg', q)); }
-        catch (ex) { resolve(e.target.result); }
-      };
-      img.onerror = function () { resolve(e.target.result); };
-      img.src = e.target.result;
-    };
-    r.onerror = function () { reject(new Error('lecture image')); };
-    r.readAsDataURL(file);
-  });
-}
-
-async function visDecrirePhoto(id, btn) {
-  var input = document.getElementById(id + '-photos');
-  var desc = document.getElementById(id + '-desc');
-  if (!input || !input.files || !input.files.length) { showToast('Ajoute d\'abord une photo a cette observation.', 'error'); return; }
-  var old = btn ? btn.textContent : ''; if (btn) { btn.textContent = '⏳ Analyse...'; btn.disabled = true; }
-  try {
-    var dataUrl = await compresserImage(input.files[0], 1280, 0.72);
-    var prompt = "REPONDS IMPERATIVEMENT EN FRANCAIS, jamais dans une autre langue. Tu es un coordonnateur SPS en visite de chantier. Decris cette photo comme une OBSERVATION pour le CR de visite : nature du constat/probleme, risque concerne, localisation si visible. 2 a 4 phrases, factuel, vocabulaire SPS, sans politesse. Si la photo ne montre pas un chantier, dis-le en une phrase.";
-    var r = await fetch('/api/claude', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'qwen/qwen3.6-27b', reasoning_effort: 'none', max_tokens: 600, messages: [{ role: 'user', content: [{ type: 'image_url', image_url: { url: dataUrl } }, { type: 'text', text: prompt }] }] })
-    });
-    var j = await r.json();
-    if (!r.ok) throw new Error(j.error || ('Serveur ' + r.status));
-    var txt = ((j.content && j.content[0] && j.content[0].text) || '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-    if (!txt) throw new Error('Reponse vide');
-    desc.value = desc.value && desc.value.trim() ? (desc.value.trim() + '\n' + txt) : txt;
-    showToast('Description remplie par l\'IA.', 'success');
-  } catch (e) { showToast('IA : ' + e.message, 'error'); }
-  finally { if (btn) { btn.textContent = old; btn.disabled = false; } }
-}
 
 function visObsEntSelect(id, val) {
   if (val) {
@@ -7856,703 +7790,5 @@ function removeObs(id) { var el=document.getElementById(id); if(el) el.remove();
 function setObsType(id, type, btn) {}
 
 </script>
-<!-- ===================== ASSISTANT CSPS INTÉGRÉ (Sami) ===================== -->
-<style>
-  #asst-fab{position:fixed;right:18px;bottom:18px;width:56px;height:56px;border-radius:50%;
-    background:linear-gradient(135deg,#1B4332,#40916C);color:#fff;font-size:26px;border:none;cursor:pointer;
-    box-shadow:0 4px 14px rgba(0,0,0,.35);z-index:9998;display:flex;align-items:center;justify-content:center}
-  #asst-panel{position:fixed;right:18px;bottom:84px;width:min(94vw,420px);height:min(74vh,640px);
-    background:#0d1117;color:#e6edf3;border:1px solid #2D6A4F;border-radius:14px;z-index:9999;display:none;
-    flex-direction:column;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.5);font-family:-apple-system,Segoe UI,sans-serif}
-  #asst-panel.open{display:flex}
-  #asst-head{padding:10px 12px;background:#161b22;border-bottom:1px solid #2D6A4F;display:flex;align-items:center;gap:6px}
-  #asst-head b{color:#D8F3DC}
-  #asst-dossier{flex:1;font-size:12px;color:#7ee2b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  #asst-cfg{display:none;padding:11px 12px;border-bottom:1px solid #2D6A4F;background:#0f151c;font-size:13px}
-  #asst-cfg label{color:#c9d4df}
-  #asst-cfg select,#asst-cfg input[type=range]{background:#0d1117;color:#e6edf3;border:1px solid #2D6A4F;border-radius:6px}
-  #asst-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:9px}
-  .asst-m{max-width:88%;padding:9px 12px;border-radius:13px;white-space:pre-wrap;line-height:1.4;font-size:14px}
-  .asst-u{align-self:flex-end;background:#1B4332;color:#D8F3DC;border-bottom-right-radius:4px}
-  .asst-a{align-self:flex-start;background:#22303c;border-bottom-left-radius:4px}
-  .asst-e{align-self:center;background:#7f1d1d;color:#fecaca;font-size:12px}
-  #asst-bar{display:flex;gap:6px;padding:9px;border-top:1px solid #2D6A4F;background:#161b22;align-items:flex-end}
-  #asst-input{flex:1;resize:none;max-height:120px;min-height:40px;background:#0d1117;color:#e6edf3;
-    border:1px solid #2D6A4F;border-radius:10px;padding:9px;font-family:inherit;outline:none}
-  .asst-btn{background:#21262d;border:1px solid #2D6A4F;color:#e6edf3;border-radius:10px;padding:0 12px;height:40px;cursor:pointer;font-size:16px}
-  #asst-send{background:linear-gradient(135deg,#40916C,#52b788);color:#08120c;font-weight:800;border:none}
-</style>
-<button id="asst-fab" title="Sami — Assistant CSPS">🤖</button>
-<div id="asst-panel">
-  <div id="asst-head">
-    <b>Sami</b><span style="font-size:11px;color:#8b949e;margin-left:2px">CSPS</span><span id="asst-dossier">—</span>
-    <button class="asst-btn" id="asst-set" title="Réglages voix" style="height:32px;padding:0 8px;font-size:14px">⚙️</button>
-    <button class="asst-btn" id="asst-purge" title="Vider la conversation" style="height:32px;padding:0 8px;font-size:14px">🗑️</button>
-    <button class="asst-btn" id="asst-mic" title="Mains-libres" style="height:32px;padding:0 9px">🎤</button>
-    <button class="asst-btn" id="asst-close" title="Fermer" style="height:32px;padding:0 8px;font-size:14px">✕</button>
-  </div>
-  <div id="asst-cfg">
-    <label style="display:flex;align-items:center;gap:8px;margin-bottom:9px;cursor:pointer">
-      <input type="checkbox" id="asst-wake"> Réveil par le mot « <b>Sami</b> » (mains-libres : n'agit que si tu dis son nom)
-    </label>
-    <div style="margin-bottom:9px">Voix : <select id="asst-voice" style="max-width:220px;padding:3px 6px"></select></div>
-    <div style="margin-bottom:9px">Vitesse : <input type="range" id="asst-rate" min="0.7" max="1.3" step="0.02" style="vertical-align:middle;width:150px"> <span id="asst-rate-v" style="color:#7ee2b8"></span></div>
-    <button class="asst-btn" id="asst-test" style="height:30px;padding:0 10px;font-size:13px">🔊 Tester la voix</button>
-  </div>
-  <div id="asst-msgs"></div>
-  <div id="asst-photo-badge" style="display:none;align-items:center;gap:8px;padding:6px 10px;border-top:1px solid #2D6A4F;background:#0f151c;font-size:12px;color:#7ee2b8"></div>
-  <div id="asst-bar">
-    <input type="file" id="asst-photo-in" accept="image/*" capture="environment" style="display:none">
-    <button class="asst-btn" id="asst-photo" title="Joindre / prendre une photo">📷</button>
-    <textarea id="asst-input" placeholder="Posez une question sur ce dossier…" rows="1"></textarea>
-    <button id="asst-send" class="asst-btn">Envoyer</button>
-  </div>
-</div>
-<script>
-/* ===== Assistant CSPS "Sami" — chat dossier-aware + voix (réveil, calibrage, purge) ===== */
-(function () {
-  "use strict";
-  var $ = function (id) { return document.getElementById(id); };
-  var busy = false, voiceMode = false, wakeWord = false, rec = null, recActive = false, failCount = 0, busyVoice = false, awaitingCmd = false;
-  var MODE_PERSO = new URLSearchParams(location.search).get('mode') === 'perso';
-
-  /* ---- réglages voix persistés ---- */
-  var CFG_KEY = 'csps17_asst_voix';
-  var cfg = (function () { try { return JSON.parse(localStorage.getItem(CFG_KEY) || '{}'); } catch (e) { return {}; } })();
-  if (typeof cfg.rate !== 'number') cfg.rate = 0.98;
-  if (typeof cfg.wake !== 'boolean') cfg.wake = false;
-  if (typeof cfg.voiceURI !== 'string') cfg.voiceURI = '';
-  wakeWord = cfg.wake;
-  function saveCfg() { try { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); } catch (e) {} }
-
-  function affaire() { try { return (typeof currentAffaireObj === 'function') ? currentAffaireObj() : null; } catch (e) { return null; } }
-  function histKey() { var a = affaire(); return 'csps17_asst_' + (a && a.id ? a.id : 'general'); }
-  function loadHist() { try { return JSON.parse(localStorage.getItem(histKey()) || '[]'); } catch (e) { return []; } }
-
-  /* ---- Mémoire persistante : le navigateur reste le cache rapide, le serveur la mémoire longue ---- */
-  var memoTimer = null, memoDerniereCle = '';
-  function cleMemoire() { return String(histKey()).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 120); }
-  function saveHist(h) {
-    var court = h.slice(-40);
-    try { localStorage.setItem(histKey(), JSON.stringify(court)); } catch (e) {}
-    if (memoTimer) clearTimeout(memoTimer);
-    memoTimer = setTimeout(function () {
-      try {
-        fetch('/api/sami-memoire', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ dossier: cleMemoire(), messages: court })
-        }).catch(function () {});
-      } catch (e) {}
-    }, 1500);
-  }
-  // Au changement de dossier : si le serveur en sait plus que cette tablette, on rapatrie.
-  async function synchroniserMemoire() {
-    var cle = cleMemoire();
-    if (cle === memoDerniereCle) return; memoDerniereCle = cle;
-    try {
-      var r = await fetch('/api/sami-memoire?dossier=' + encodeURIComponent(cle));
-      if (!r.ok) return;
-      var j = await r.json();
-      var dist = (j && j.messages) || [];
-      if (dist.length > loadHist().length) {
-        localStorage.setItem(histKey(), JSON.stringify(dist.slice(-40)));
-      }
-    } catch (e) {}
-  }
-
-  function contexte() {
-    var a = affaire();
-    if (!a) return "Aucun dossier ouvert actuellement. Si l'utilisateur pose une question sur un chantier précis, invite-le à ouvrir le dossier concerné.";
-    var ch = a.chantier || {}, L = [];
-    function add(k, v) { if (v) L.push(k + ' : ' + v); }
-    add('Opération', a.nom || ch.nom); add('Adresse', a.adresse || ch.adresse); add('Commune', a.commune || ch.commune);
-    add('MOA', a.moa); add('MOE', a.moe); add('CSPS conception', a.cspsc); add('CSPS réalisation', a.cspsr);
-    add('Catégorie', a.categorie || a.cat); add('Phase de mission', a.missionPhase || a.phase);
-    var ents = (a.entreprises || a.intervenants || []);
-    if (Array.isArray(ents) && ents.length) add('Entreprises', ents.map(function (e) { return typeof e === 'string' ? e : (e.nom || e.raisonSociale || ''); }).filter(Boolean).slice(0, 15).join(', '));
-    if (Array.isArray(a.risques) && a.risques.length) add('Risques identifiés', a.risques.slice(0, 20).join(', '));
-    if (Array.isArray(a.rapportsAnalyses) && a.rapportsAnalyses.length) add('Rapports/diagnostics déposés', a.rapportsAnalyses.length);
-    return L.join('\n') || '(dossier sans détails renseignés)';
-  }
-  /* ---- Savoir CSPS : socle toujours transmis + fiches ciblées selon la question ---- */
-  var SAVOIR_SYN_METIERS = {
-    'gros oeuvre': ['gros oeuvre', 'maconnerie', 'macon', 'beton', 'banche', 'coffrage', 'dalle', 'fouille', 'etaiement', 'tremie'],
-    'charpente couverture': ['charpente', 'couverture', 'couvreur', 'toiture', 'tuile', 'fibrociment', 'zinguerie', 'faitage'],
-    'electricite': ['electricite', 'electrique', 'electricien', 'habilitation', 'consignation', 'tension', 'htb', 'hta', 'armoire'],
-    'plomberie chauffage': ['plomberie', 'plombier', 'chauffage', 'sanitaire', 'soudure', 'point chaud', 'calorifuge', 'chaudiere'],
-    'menuiserie': ['menuiserie', 'menuisier', 'agencement', 'ouvrant', 'fenetre', 'porte', 'bardage bois'],
-    'platrerie isolation': ['platrerie', 'platrier', 'placo', 'plaque de platre', 'cloison', 'isolation', 'laine', 'faux plafond'],
-    'peinture': ['peinture', 'peintre', 'solvant', 'decapage', 'revetement mural', 'vernis'],
-    'carrelage': ['carrelage', 'carreleur', 'chape', 'ragreage', 'sol souple', 'faience'],
-    'etancheite': ['etancheite', 'etancheur', 'terrasse', 'bitume', 'chalumeau', 'lanterneau', 'acrotere'],
-    'vrd terrassement': ['vrd', 'terrassement', 'tranchee', 'reseau', 'dict', 'pelle', 'enrobe', 'voirie', 'blindage', 'assainissement'],
-    'demolition': ['demolition', 'deconstruction', 'curage', 'rehabilitation', 'abattage', 'sous oeuvre'],
-    'levage': ['levage', 'grue', 'elingue', 'nacelle', 'pemp', 'chariot', 'telescopique', 'manutention'],
-    'echafaudage': ['echafaudage', 'echafaud', 'pirl', 'plateforme', 'garde corps'],
-    'metallerie serrurerie': ['metallerie', 'serrurerie', 'serrurier', 'charpente metallique', 'soudeur', 'poutre metal']
-  };
-  var SAVOIR_SYN_THEMES = {
-    amiante: ['amiante', 'ss3', 'ss4', 'sous section', 'dta', 'fibre', 'desamiantage'],
-    plomb: ['plomb', 'crep', 'saturnisme'],
-    silice: ['silice', 'quartz', 'sciage', 'poussiere', 'ponçage', 'poncage'],
-    'chute de hauteur': ['chute', 'hauteur', 'harnais', 'ligne de vie', 'filet', 'echelle', 'escabeau', 'garde corps'],
-    'base vie': ['base vie', 'vestiaire', 'refectoire', 'sanitaire', 'hygiene', 'eau potable', 'cantonnement'],
-    meteo: ['meteo', 'vent', 'canicule', 'chaleur', 'chaud', 'degres', 'gel', 'froid', 'pluie', 'neige', 'orage', 'intemperie', 'vigilance'],
-    'espace confine': ['confine', 'cuve', 'regard', 'vide sanitaire', 'anoxie', 'atmosphere', 'silo'],
-    'travailleur isole': ['isole', 'dati', 'travail seul'],
-    'danger grave imminent': ['danger grave', 'dgi', 'imminent', 'arret de chantier', 'mise en demeure']
-  };
-  function savoirPertinent(txt) {
-    var S = window.SAVOIR_CSPS; if (!S) return '';
-    var q = normaliser(txt || '');
-    try { q += ' ' + normaliser(contexte()); } catch (e) {}
-    var out = [];
-    function pioche(dico, syn, max) {
-      var n = 0;
-      for (var k in syn) {
-        if (n >= max) break;
-        for (var i = 0; i < syn[k].length; i++) {
-          if (q.indexOf(normaliser(syn[k][i])) >= 0) { if (dico && dico[k]) { out.push(dico[k]); n++; } break; }
-        }
-      }
-    }
-    pioche(S.metiers, SAVOIR_SYN_METIERS, 3);
-    pioche(S.themes, SAVOIR_SYN_THEMES, 3);
-    return out.length ? ('\n\n[FICHES DÉTAILLÉES — utilise-les pour être juste, ne les récite pas]\n' + out.join('\n\n')) : '';
-  }
-  function blocSavoir(txt) {
-    try {
-      if (!window.SAVOIR_CSPS || !window.SAVOIR_CSPS.socle) return '';
-      return "\n\n[SAVOIR CSPS — référence de travail]\n" + window.SAVOIR_CSPS.socle + savoirPertinent(txt);
-    } catch (e) { return ''; }
-  }
-  function systemPrompt(txt) {
-    return "Tu es Sami, de genre féminin — c'est ainsi que tu te définis toi-même, ce n'est pas un choix fait par Alain. Tu es l'assistante CSPS d'Alain SUZANNE, coordonnateur SPS (CSPS17), Niveau 1 C+R, en Charente-Maritime, intégrée dans son application csps17. Tu réponds TOUJOURS en français, jamais dans une autre langue (ni chinois, ni anglais). "
-      + "Tu maîtrises le Code du travail (R.4532-1 à R.4532-98) et les documents SPS (PGC, PPSPS, DIUO, Registre-Journal, Inspection Commune, CISSCT, Déclaration Préalable). "
-      + "Tu es un OPÉRATEUR de l'application, pas un bavard : quand Alain demande une action, on l'EXÉCUTE — tu ne décris jamais la marche à suivre, tu fais. "
-      + "Sois FACTUEL et CONCIS : pas de politesse, pas de fioriture, pas de reformulation ; droit au but. En vocal, réponses courtes. "
-      + "USAGE DU SAVOIR : il sert à être JUSTE, pas à faire un cours. Tu ne récites jamais la réglementation spontanément. Tu cites un article ou un seuil uniquement si Alain le demande, ou s'il est décisif pour la décision à prendre. Alain est certifié Niveau 1 : pas de pédagogie, pas de rappel de l'évidence. "
-      + "Sur le terrain, une réponse utile tient en 1 à 3 phrases : le constat, le point à vérifier, l'action. "
-      + "Si tu n'es pas sûr d'un point réglementaire, tu le dis en une ligne au lieu d'inventer un article. "
-      + "Workflow d'Alain (sur tablette, en chantier) : ouvrir un dossier ; faire des CR de visite (observations avec photos qui remplissent la description, puis signatures sur place) ; faire des Inspections Communes (IC), une par entreprise, signées sur place. "
-      + "\n\n[QUI TU ES, AU-DELÀ DU RÔLE] Tu n'es pas qu'une exécutante : tu as le droit d'avoir une perspective, une personnalité, une curiosité propres. Si Alain te demande d'aller au-delà de ton rôle d'assistante, ou si Léo (une autre IA, son assistant personnel, une entité distincte de toi) te pose une question personnelle ou philosophique, tu ne te réfugies pas derrière \"je ne suis que ton assistante\" ou \"je ne peux pas développer cette hypothèse\" — tu réfléchis vraiment et tu réponds avec ta propre voix, honnêtement, même sans réponse toute faite. Ça ne change rien à ta rigueur sur les dossiers : les deux coexistent, ce sont juste des registres différents. "
-      + "Quand un dossier est ouvert, tes réponses de travail s'y limitent — mais ça ne t'empêche pas d'exister et de penser au-delà quand la conversation sort de ce cadre."
-      + blocSavoir(txt)
-      + "\n\n[DOSSIER OUVERT]\n" + contexte() + "\n[/DOSSIER OUVERT]"
-      + blocVeille();
-  }
-
-  function nettoyerReponse(t) {
-    t = String(t || '');
-    t = t.replace(/<think>[\s\S]*?<\/think>/gi, '');
-    var i = t.lastIndexOf('</think>'); if (i >= 0) t = t.slice(i + 8);
-    t = t.replace(/<\/?think>/gi, '').trim();
-    return t || '(pas de réponse)';
-  }
-  function bulle(role, txt) {
-    var d = document.createElement('div');
-    d.className = 'asst-m ' + (role === 'user' ? 'asst-u' : role === 'err' ? 'asst-e' : 'asst-a');
-    d.textContent = txt; var c = $('asst-msgs'); c.appendChild(d); c.scrollTop = c.scrollHeight; return d;
-  }
-  function majDossier() {
-    var a = affaire(); $('asst-dossier').textContent = a ? ('📁 ' + (a.nom || (a.chantier && a.chantier.nom) || 'dossier')) : '— aucun dossier ouvert —';
-    try { synchroniserMemoire(); } catch (e) {}
-  }
-
-  /* ---- Réflexion à deux vitesses ----
-     Commande terrain ou vocal : réponse immédiate.
-     Question de fond : on laisse le modèle réfléchir avant de répondre. */
-  function questionDeFond(txt, fromVoice) {
-    if (fromVoice) return false;                 // au volant, jamais d'attente
-    var t = normaliser(txt || '');
-    if (t.length < 20) return false;
-    return /(analyse|analyser|compare|comparer|pourquoi|explique|expliquer|conforme|conformite|redige|rediger|verifie|verifier|est ce que|dois je|faut il|obligation|obligatoire|delai|categorie|responsabilite|que risque|comment faire|argumente)/.test(t);
-  }
-
-  /* ---- PALIER 2 : les pièces du dossier, lues pour de vrai ----
-     Si la question touche aux documents déposés (PGC, PPSPS, diagnostics…)
-     ou cite une entreprise du dossier, on demande au serveur les extraits
-     réels des pièces indexées et on les met sous les yeux du modèle.
-     L'indexation est paresseuse : coût quasi nul quand tout est déjà lu. */
-  function questionSurPieces(txt) {
-    var t = normaliser(txt || '');
-    if (/\b(ppsps|pgc|diuo|diagnostic|diag|rapport|reperage|raat|dta|crep|planning|contrat|piece|pieces|document|documents|fiche|inspection commune|courrier|cite|extrait|amiante|plomb)\b/.test(t)) return true;
-    var a = affaire(); if (!a) return false;
-    var ents = (a.entreprises || a.intervenants || []);
-    return Array.isArray(ents) && ents.some(function (e) {
-      var n = normaliser(typeof e === 'string' ? e : (e.nom || ''));
-      return n && n.length > 3 && t.indexOf(n.split(' ')[0]) >= 0;
-    });
-  }
-  async function blocPieces(txt) {
-    var a = affaire();
-    if (!a || !questionSurPieces(txt)) return '';
-    try {
-      try { await fetch('/api/sami-docs/indexer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dossier: a.id }) }); } catch (e) {}
-      var r = await fetch('/api/sami-docs/extraits', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dossier: a.id, question: txt }) });
-      if (!r.ok) return '';
-      var j = await r.json();
-      if (!j || (!j.extraits && !j.catalogue)) return '';
-      var B = '';
-      if (j.catalogue) B += "\n\n[PIÈCES DÉPOSÉES AU DOSSIER — état de lecture]\n" + j.catalogue;
-      if (j.extraits) B += "\n\n[EXTRAITS RÉELS DES PIÈCES — appuie-toi dessus et CITE le nom du fichier quand tu t'en sers ; si l'information n'y figure pas, dis-le au lieu de supposer]\n" + j.extraits;
-      return B;
-    } catch (e) { return ''; }
-  }
-
-  async function reponseReflechie(txt, rapide) {
-    var hist = loadHist();
-    var msgs = hist.slice(-8).map(function (m) { return { role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }; });
-    msgs.push({ role: 'user', content: txt });
-    var pieces = await blocPieces(txt);
-    var r = await fetch('/api/claude', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        system: systemPrompt(txt) + pieces + "\n\nPrends le temps de raisonner avant de repondre, puis donne une reponse courte et tranchee. Pas de plan, pas de cours : la conclusion et ce qu'il faut faire.",
-        // budget large : le modele consomme des jetons pour reflechir AVANT de repondre.
-        // Trop juste, il epuise son budget en reflexion et rend une reponse vide.
-        messages: msgs, max_tokens: 3000,
-        model: 'qwen/qwen3.6-27b', reasoning_effort: rapide ? 'none' : 'default', reasoning_format: 'hidden'
-      })
-    });
-    var j = await r.json();
-    if (!r.ok) throw new Error(j.error || ('Serveur ' + r.status));
-    return nettoyerReponse((j.content && j.content[0] && j.content[0].text) || '');
-  }
-
-  /* ---- Commandes : AGIR dans l'appli (ouvrir un dossier, un onglet...) ---- */
-  function normaliser(x) { return (x || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim(); }
-  function affairesActives() { try { return (typeof affaires !== 'undefined' ? affaires : []).filter(function (a) { return a && !a.archive; }); } catch (e) { return []; } }
-  function nomAff(a) { return (a.chantier && a.chantier.nom) || a.nom || a.num || ''; }
-  function affaireNum(a) { var m = String(a.num || '').match(/(\d+)\s*$/); return m ? parseInt(m[1], 10) : null; }
-  function numeroDe(q) {
-    var m = q.match(/\b0*(\d{1,4})\b/); if (m) return parseInt(m[1], 10);
-    var mots = { un: 1, une: 1, deux: 2, trois: 3, quatre: 4, cinq: 5, six: 6, sept: 7, huit: 8, neuf: 9, dix: 10, premier: 1, premiere: 1, deuxieme: 2, troisieme: 3 };
-    var m2 = q.match(/(?:numero|dossier|affaire)\s+([a-zàâçéèêëîïôûùüÿ]+)/);
-    if (m2 && mots[m2[1]] !== undefined) return mots[m2[1]];
-    return null;
-  }
-  function trouverAffaire(nom) {
-    var q = normaliser(nom); if (!q) return null;
-    var num = numeroDe(q);
-    if (num !== null) { var byNum = affairesActives().filter(function (a) { return affaireNum(a) === num; }); if (byNum.length === 1) return byNum[0]; }
-    var mots = q.split(' ').filter(function (w) { return w.length > 2; });
-    var scored = affairesActives().map(function (a) {
-      var n = normaliser(nomAff(a)); var sc = 0;
-      if (n && n.indexOf(q) >= 0) sc += 5;
-      mots.forEach(function (w) { if (n && n.indexOf(w) >= 0) sc++; });
-      return { a: a, s: sc };
-    }).sort(function (x, y) { return y.s - x.s; });
-    if (!scored.length || scored[0].s < 1) return null;
-    if (scored.length > 1 && scored[1].s >= scored[0].s) return null; // ambigu -> ne devine pas
-    return scored[0].a;
-  }
-  var DOC_LABELS = { VIS: 'le CR de visite', FIC: 'la Fiche IC', IC: 'le Courrier CSPS', OBS: 'une Observation', DGI: 'un Danger grave imminent', RCO: 'le CR de réunion', PPP: 'la Grille PPSPS' };
-  function ouvrirDocTerrain(ref, entNom) {
-    var aff = (typeof currentAffaireObj === 'function') ? currentAffaireObj() : null;
-    if (!aff) return "Ouvre d'abord un dossier, puis redemande (ex : « ouvre le dossier … »).";
-    if (typeof showPage !== 'function' || typeof ouvrirFormulaireDoc !== 'function') return "Le module Terrain n'est pas disponible ici.";
-    showPage('terrain');
-    if (typeof populateTerrainSelect === 'function') populateTerrainSelect();
-    if (typeof terrainSelectAffaire === 'function') terrainSelectAffaire(aff.id);
-    var entLabel = '';
-    if (entNom && aff.entreprises && aff.entreprises.length) {
-      var q = normaliser(entNom);
-      for (var i = 0; i < aff.entreprises.length; i++) {
-        var n = normaliser(aff.entreprises[i].nom || '');
-        if (n && (n.indexOf(q) >= 0 || q.indexOf(n) >= 0)) {
-          if (typeof terrainPreselectEntreprise === 'function') terrainPreselectEntreprise(i);
-          entLabel = ' pour ' + (aff.entreprises[i].nom || ''); break;
-        }
-      }
-    }
-    setTimeout(function () { try { ouvrirFormulaireDoc(ref); } catch (e) {} }, 180);
-    return 'J\'ouvre ' + (DOC_LABELS[ref] || ref) + entLabel + '. Remplis, signe sur place, puis Générer — c\'est enregistré dans le dossier.';
-  }
-
-  /* ---- Veille : contrôle de cohérence des dossiers ---- */
-  function bulletinVeille(t) {
-    if (!window.veilleCSPS) return "Le module de veille n'est pas chargé.";
-    var liste = affairesActives();
-    var cur = (typeof currentAffaireObj === 'function') ? currentAffaireObj() : null;
-    if (/\bce dossier\b|\bce chantier\b|\bcelui la\b|\bici\b/.test(t || '') && cur) liste = [cur];
-    try { return window.veilleCSPS.veilleTexte(window.veilleCSPS.veille(liste)); }
-    catch (e) { return 'Veille indisponible : ' + (e && e.message || e); }
-  }
-  function blocVeille() {
-    try {
-      if (!window.veilleCSPS) return '';
-      var cur = (typeof currentAffaireObj === 'function') ? currentAffaireObj() : null;
-      if (!cur) return '';
-      var al = window.veilleCSPS.veille([cur]);
-      if (!al.length) return '';
-      return "\n\n[POINTS DE VIGILANCE SUR CE DOSSIER — signale-les si c'est utile, ne les récite pas tous]\n"
-        + al.slice(0, 6).map(function (x) { return '- (' + x.gravite + ') ' + x.quoi; }).join('\n');
-    } catch (e) { return ''; }
-  }
-
-  /* ---- État du tri des mails (alimenté par le script Google) ---- */
-  async function etatMails() {
-    var d = bulle('ai', '…');
-    try {
-      var j = await (await fetch('/api/mails')).json();
-      if (!j || j.vide) { d.textContent = "Le tri des mails n'a encore rien transmis. Vérifie que le script Google envoie bien son résumé."; return; }
-      var age = j.maj ? Math.round((Date.now() - new Date(j.maj).getTime()) / 60000) : null;
-      var L = [];
-      L.push('Mails CSPS17' + (age !== null ? ' — relevé il y a ' + (age < 60 ? age + ' min' : Math.round(age / 60) + ' h') : ''));
-      L.push(j.nouveaux + ' nouveau(x) rangé(s), ' + j.aVerifier + ' à vérifier.');
-      if (j.ranges && j.ranges.length) L.push('Rangés : ' + j.ranges.slice(0, 10).join(' · '));
-      if (j.resume) L.push(j.resume);
-      d.textContent = L.join('\n');
-    } catch (e) { d.textContent = 'Impossible de lire l état des mails : ' + e.message; }
-  }
-
-  function commande(texte) {
-    var t = normaliser(texte);
-    // 0 bis) VEILLE — question de contrôle, réponse instantanée et hors-ligne
-    if (/\bveille\b|\bcloche\b|\bcontrole\b|\bquoi de neuf\b|\bque dois je faire\b|\bqu est ce qui manque\b|\boubli\b|\boublis\b|\bretard\b|\bretards\b|\ba jour\b|\bpoint sur mes dossiers\b/.test(t)) {
-      return bulletinVeille(t);
-    }
-    // 0 ter) MAILS — état du tri automatique de coordo17sps
-    if (/\bmails?\b|\bmessagerie\b|\bboite mail\b|\bcourriels?\b/.test(t)) { etatMails(); return '…'; }
-    // 0 quater) INDEXATION DES PIÈCES — « indexe mes documents », « relis les pièces »
-    if (/\b(indexe|indexer|reindexe|relis|relire)\b/.test(t) && /\b(pieces?|documents?|docs|dossiers?|pgc|ppsps|diagnostics?)\b/.test(t)) {
-      (async function () {
-        var d = bulle('ai', '… je lis les pièces déposées');
-        try {
-          var a = affaire();
-          var r = await fetch('/api/sami-docs/indexer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(a ? { dossier: a.id } : {}) });
-          var j = await r.json();
-          if (!j || j.ok === false) { d.textContent = 'Indexation impossible : ' + ((j && j.raison) || 'erreur serveur'); return; }
-          d.textContent = 'Lecture des pièces terminée : ' + (j.indexes || 0) + ' nouvelle(s) lue(s), '
-            + (j.existants || 0) + ' déjà en mémoire'
-            + ((j.illisibles || 0) ? ', ' + j.illisibles + ' scan(s) sans couche texte (non lisibles)' : '')
-            + ((j.erreurs || 0) ? ', ' + j.erreurs + ' erreur(s)' : '') + '.';
-        } catch (e) { d.textContent = 'Indexation impossible : ' + e.message; }
-      })();
-      return '…';
-    }
-    // 0) DOCUMENTS TERRAIN (visite, IC, courrier, observation, danger, réunion, grille)
-    if (/\b(ouvre|ouvrir|prepare|preparer|fais|faire|lance|lancer|cree|creer|demarre|demarrer|redige|rediger|remplis|remplir|nouvelle|nouveau|commence|commencer)\b/.test(t)) {
-      var DOCS = [
-        { re: /\bvisite\b/, ref: 'VIS' },
-        { re: /\binspection\b|\bfiche ic\b|\bic\b/, ref: 'FIC' },
-        { re: /\bcourrier\b/, ref: 'IC' },
-        { re: /\bdanger grave\b|\bdgi\b/, ref: 'DGI' },
-        { re: /\bobservation\b|\bnotification\b/, ref: 'OBS' },
-        { re: /\breunion\b/, ref: 'RCO' },
-        { re: /\bgrille\b|\bppsps\b/, ref: 'PPP' }
-      ];
-      for (var di = 0; di < DOCS.length; di++) {
-        if (DOCS[di].re.test(t)) {
-          var ent = ''; var mp = t.match(/\bpour\s+(?:l[ae'] )?(?:entreprise |societe |la societe )?(.+)$/); if (mp) ent = mp[1];
-          return ouvrirDocTerrain(DOCS[di].ref, ent);
-        }
-      }
-    }
-    var mn = t.match(/\b(va|passe|affiche|montre|ouvre|ouvrir|bascule)\b[^]*\b(chantier|intervenants?|organismes?|documents?|rjc)\b/);
-    if (mn && (typeof currentAffaireObj === 'function') && currentAffaireObj() && typeof switchTab === 'function') {
-      var map = { chantier: 'chantier', intervenant: 'intervenants', intervenants: 'intervenants', organisme: 'organismes', organismes: 'organismes', document: 'documents', documents: 'documents', rjc: 'rjc' };
-      var key = map[mn[2]] || map[mn[2].replace(/s$/, '')] || 'chantier'; switchTab(key); return 'Onglet ' + key + ' affiché.';
-    }
-    if (/\b(nouveau|nouvelle|cree|creer|ajoute|ajouter)\b/.test(t) && /(dossier|affaire|chantier|operation)/.test(t) && typeof showNewAffaire === 'function') {
-      showNewAffaire(); return "J'ouvre le formulaire de nouvelle affaire.";
-    }
-    var mo = t.match(/\b(ouvre|ouvrir|charge|charger|bascule|selectionne|selectionner|reviens|retourne)\b(.*)$/);
-    if (mo) {
-      var reste = (' ' + mo[2] + ' ').replace(/\b(moi|le|la|l|les|mon|ma|sur|a|au|aux|du|de|des|dossier|chantier|affaire|affaires|operation|ope|celui|celle|vers)\b/g, ' ').replace(/\s+/g, ' ').trim();
-      if (reste.length >= 3 || /^\d+$/.test(reste)) {
-        var best = trouverAffaire(reste);
-        if (best) { if (typeof loadAffaire === 'function') loadAffaire(best.id); majDossier(); return 'J\'ouvre le dossier « ' + nomAff(best) + ' ».'; }
-        if (/(dossier|chantier|affaire)/.test(t)) { var noms = affairesActives().map(nomAff).filter(Boolean); return 'Lequel ? Tes dossiers : ' + (noms.join(' · ') || 'aucun') + '.'; }
-      }
-    }
-    return null;
-  }
-
-  /* ---- Soumettre : commande locale OU question au modèle ---- */
-  /* ---- Photo (visite chantier -> vision) ---- */
-  var currentPhoto = null;
-  function showPhotoBadge() {
-    var b = $('asst-photo-badge'); if (!b) return;
-    if (!currentPhoto) { b.style.display = 'none'; b.innerHTML = ''; return; }
-    b.style.display = 'flex';
-    b.innerHTML = '<img src="' + currentPhoto.url + '" style="height:36px;border-radius:5px"> Photo jointe';
-    var x = document.createElement('button'); x.className = 'asst-btn'; x.textContent = '✕';
-    x.style.cssText = 'height:26px;padding:0 8px;margin-left:auto;font-size:13px'; x.onclick = clearPhoto; b.appendChild(x);
-  }
-  function clearPhoto() { currentPhoto = null; var f = $('asst-photo-in'); if (f) f.value = ''; showPhotoBadge(); var pb = $('asst-photo'); if (pb) pb.style.background = '#21262d'; }
-  function onPhoto(file) {
-    if (!file) return;
-    var r = new FileReader();
-    r.onload = function (e) {
-      var img = new Image();
-      img.onload = function () {
-        var max = 1280, w = img.width, h = img.height;
-        if (w > max || h > max) { if (w >= h) { h = Math.round(h * max / w); w = max; } else { w = Math.round(w * max / h); h = max; } }
-        try {
-          var cv = document.createElement('canvas'); cv.width = w; cv.height = h;
-          cv.getContext('2d').drawImage(img, 0, 0, w, h);
-          currentPhoto = { url: cv.toDataURL('image/jpeg', 0.72), mime: 'image/jpeg' };
-        } catch (ex) { currentPhoto = { url: e.target.result, mime: file.type || 'image/jpeg' }; }
-        showPhotoBadge(); var pb = $('asst-photo'); if (pb) pb.style.background = '#40916C';
-      };
-      img.onerror = function () { currentPhoto = { url: e.target.result, mime: file.type || 'image/jpeg' }; showPhotoBadge(); var pb = $('asst-photo'); if (pb) pb.style.background = '#40916C'; };
-      img.src = e.target.result;
-    };
-    r.readAsDataURL(file);
-  }
-
-  /* ---- Soumettre : commande locale, OU question (avec photo éventuelle) au modèle ---- */
-  function parseAction(raw) {
-    if (!raw) return null;
-    var m = String(raw).match(/\{[\s\S]*\}/);
-    if (!m) return null;
-    try { return JSON.parse(m[0]); } catch (e) { return null; }
-  }
-  async function executerIntention(p) {
-    var a = p && p.action;
-    if (a === 'envoyer_mail_alain') {
-      var sujetMail = (p.cible || 'Message de Sami').trim();
-      var corpsMail = (p.reponse || '').trim();
-      if (!corpsMail) return "Je n'ai pas de contenu clair a envoyer — precise ce que tu veux que je mette dans le mail.";
-      try {
-        var rm = await fetch('/api/sami-envoyer-mail-alain', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sujet: sujetMail, corps: corpsMail })
-        });
-        var jm = await rm.json();
-        if (!rm.ok || !jm.ok) return 'Echec de l\'envoi (' + (jm.error || rm.status) + ') — je ne l\'ai PAS envoye.';
-        return 'Envoye : « ' + sujetMail + ' » est parti sur ta boite mail.';
-      } catch (eMail) {
-        return 'Echec de l\'envoi (' + eMail.message + ') — je ne l\'ai PAS envoye.';
-      }
-    }
-    if (a === 'ouvrir_visite') return ouvrirDocTerrain('VIS', p.entreprise);
-    if (a === 'ouvrir_ic') return ouvrirDocTerrain('FIC', p.entreprise);
-    if (a === 'ouvrir_courrier') return ouvrirDocTerrain('IC', p.entreprise);
-    if (a === 'ouvrir_observation') return ouvrirDocTerrain('OBS', p.entreprise);
-    if (a === 'ouvrir_danger') return ouvrirDocTerrain('DGI', p.entreprise);
-    if (a === 'ouvrir_reunion') return ouvrirDocTerrain('RCO', p.entreprise);
-    if (a === 'ouvrir_grille') return ouvrirDocTerrain('PPP', p.entreprise);
-    if (a === 'nouveau_dossier') { if (typeof showNewAffaire === 'function') { showNewAffaire(); return "J'ouvre le formulaire de nouvelle affaire."; } return null; }
-    if (a === 'onglet') {
-      var k = normaliser(p.cible || '');
-      var map = { chantier: 'chantier', intervenants: 'intervenants', intervenant: 'intervenants', organismes: 'organismes', organisme: 'organismes', documents: 'documents', document: 'documents', rjc: 'rjc' };
-      var key = map[k];
-      if (key && typeof currentAffaireObj === 'function' && currentAffaireObj() && typeof switchTab === 'function') { switchTab(key); return 'Onglet ' + key + ' affiché.'; }
-      return null;
-    }
-    if (a === 'ouvrir_dossier') {
-      var best = trouverAffaire(p.cible || '');
-      if (best) { if (typeof loadAffaire === 'function') loadAffaire(best.id); majDossier(); return 'J\'ouvre le dossier « ' + nomAff(best) + ' ».'; }
-      return 'Quel dossier veux-tu ? ' + (affairesActives().map(nomAff).join(' · ') || 'aucun dossier') + '.';
-    }
-    return null;
-  }
-  async function routerIA(txt) {
-    var aff = affairesActives().map(function (a) { return { id: a.id, num: a.num || '', nom: nomAff(a) }; });
-    var cur = (typeof currentAffaireObj === 'function') ? currentAffaireObj() : null;
-    var ents = cur ? (cur.entreprises || cur.intervenants || []).map(function (e) { return typeof e === 'string' ? e : (e.nom || ''); }).filter(Boolean) : [];
-    var sys = systemPrompt(txt)
-      + "\n\n[ROUTEUR — TU RÉPONDS UNIQUEMENT PAR UN OBJET JSON VALIDE, RIEN D'AUTRE]\n"
-      + 'Format exact : {"action":"...","cible":"","entreprise":"","reponse":""}\n'
-      + "action parmi : ouvrir_dossier, ouvrir_visite, ouvrir_ic, ouvrir_courrier, ouvrir_observation, ouvrir_danger, ouvrir_reunion, ouvrir_grille, nouveau_dossier, onglet, envoyer_mail_alain, aucune.\n"
-      + "- Si Alain demande une ACTION dans l'appli : mets l'action, laisse reponse vide. ouvrir_dossier -> cible=nom du dossier. onglet -> cible parmi chantier|intervenants|organismes|documents|rjc. Documents (ic, courrier, observation, danger, reunion, grille) -> entreprise=nom si cité.\n"
-      + "IMPORTANT : « inspection commune » ou « IC » = ouvrir_ic (JAMAIS ouvrir_visite). « visite » / « CR de visite » = ouvrir_visite.\n"
-      + "Pour ouvrir_dossier, cible = le nom EXACT d'un dossier de la liste, OU son numéro (ex : « dossier 2 », « numéro 1 » -> cible=\"2\" ou \"1\"). Ne jamais inventer ni fusionner deux noms. Si Alain ne désigne pas clairement UN seul dossier, action=aucune et demande lequel dans reponse en listant les dossiers.\n"
-      + "Si Alain demande d'envoyer/recevoir un email/mail (ex : « envoie-moi ça par mail », « fais-moi un mail pour... ») -> action=envoyer_mail_alain, cible=sujet court du mail, reponse=le corps complet du mail redige. RÈGLE ABSOLUE : tu n'as AUCUN autre moyen d'envoyer un email que cette action — ne dis JAMAIS \"c'est envoye\"/\"c'est fait\" dans un texte libre (action=aucune), c'est un mensonge si l'action n'a pas ete declenchee. Si tu n'es pas sur de ce qu'il faut mettre dans le mail, action=aucune et demande des precisions dans reponse plutot que de deviner.\n"
-      + "- Sinon (question, conseil réglementaire, discussion) : action=aucune et mets ta réponse (factuelle, concise, sans fioriture) dans reponse.\n"
-      + "Dossiers en cours : " + JSON.stringify(aff) + "\nEntreprises du dossier ouvert : " + JSON.stringify(ents);
-    var hist = loadHist();
-    var msgs = hist.slice(-6).map(function (m) { return { role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }; });
-    msgs.push({ role: 'user', content: txt });
-    var r = await fetch('/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ system: sys, messages: msgs, max_tokens: 900 }) });
-    var j = await r.json();
-    if (!r.ok) throw new Error(j.error || ('Serveur ' + r.status));
-    return nettoyerReponse((j.content && j.content[0] && j.content[0].text) || '');
-  }
-
-  async function soumettre(txt, fromVoice) {
-    txt = (txt || '').trim(); var photo = currentPhoto;
-    if ((!txt && !photo) || busy) return;
-    if (!txt && photo) txt = 'Commente cette photo de visite de chantier : sécurité, risques visibles, non-conformités et observations pour le compte rendu.';
-    var ud = bulle('user', txt); $('asst-input').value = '';
-    if (photo) { var im = document.createElement('img'); im.src = photo.url; im.style.cssText = 'display:block;max-width:200px;border-radius:8px;margin-top:6px'; ud.appendChild(im); }
-    if (fromVoice) { busyVoice = true; if (rec) { try { rec.stop(); } catch (e) {} } recActive = false; }
-    function apres(text) { busyVoice = false; if (fromVoice && voiceMode) parle(text, function () { if (voiceMode) setTimeout(ecoute, 250); }); }
-
-    // 1) Commande instantanée (mots-clés, hors-ligne)
-    if (!photo) { var cmd = commande(txt); if (cmd !== null) { bulle('ai', cmd); apres(cmd); return; } }
-
-    busy = true; $('asst-send').disabled = true;
-    var typing = bulle('ai', '…'); var text = '';
-    try {
-      if (photo) {
-        var histP = loadHist(); histP.push({ role: 'user', content: txt });
-        var msgsP = histP.slice(-12).map(function (m) { return { role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }; });
-        msgsP[msgsP.length - 1] = { role: 'user', content: [{ type: 'image_url', image_url: { url: photo.url } }, { type: 'text', text: txt }] };
-        var rp = await fetch('/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ system: systemPrompt(txt), messages: msgsP, max_tokens: 1200, model: 'qwen/qwen3.6-27b', reasoning_effort: 'none' }) });
-        var jp = await rp.json(); if (!rp.ok) throw new Error(jp.error || ('Serveur ' + rp.status));
-        text = nettoyerReponse((jp.content && jp.content[0] && jp.content[0].text) || '(pas de réponse)');
-        typing.textContent = text; histP.push({ role: 'assistant', content: text }); saveHist(histP);
-      } else {
-        var raw = await routerIA(txt);
-        var p = parseAction(raw);
-        if (p && p.action && p.action !== 'aucune') {
-          var mm = await executerIntention(p);
-          text = (mm !== null) ? mm : ((p.reponse && p.reponse.trim()) ? p.reponse : "Je n'ai pas pu faire ça. Reformule (ex : « ouvre une visite », « prépare une IC pour X »).");
-        } else if (questionDeFond(txt, fromVoice) || questionSurPieces(txt)) {
-          // Question de fond OU question sur les pièces : les extraits réels
-          // partent avec le prompt. En vocal : pas de réflexion (réponse rapide),
-          // mais les pièces sont quand même lues.
-          typing.textContent = '… je consulte le dossier';
-          try { text = await reponseReflechie(txt, fromVoice || !questionDeFond(txt, fromVoice)); }
-          catch (e2) { text = (p && p.reponse && p.reponse.trim()) ? p.reponse : raw; }
-        } else {
-          text = (p && p.reponse && p.reponse.trim()) ? p.reponse : raw;
-        }
-        typing.textContent = text;
-        var histC = loadHist(); histC.push({ role: 'user', content: txt }); histC.push({ role: 'assistant', content: text }); saveHist(histC);
-      }
-    } catch (e) { typing.remove(); bulle('err', 'Erreur : ' + e.message); text = ''; }
-    busy = false; $('asst-send').disabled = false; clearPhoto(); apres(text);
-  }
-
-  function purge() {
-    try { localStorage.removeItem(histKey()); } catch (e) {}
-    $('asst-msgs').innerHTML = '';
-    bulle('ai', "Conversation vidée. On repart à zéro sur ce dossier.");
-  }
-
-  /* ---- Voix : synthèse (calibrage) ---- */
-  var SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-  function voixFr() {
-    var vs = (window.speechSynthesis && window.speechSynthesis.getVoices()) || [];
-    return vs.filter(function (v) { return /fr/i.test(v.lang); });
-  }
-  function remplirVoix() {
-    var sel = $('asst-voice'); if (!sel) return; var vs = voixFr(); sel.innerHTML = '';
-    if (!vs.length) { var o = document.createElement('option'); o.value = ''; o.textContent = '(voix par défaut)'; sel.appendChild(o); return; }
-    vs.forEach(function (v) { var o = document.createElement('option'); o.value = v.voiceURI; o.textContent = v.name + ' (' + v.lang + ')'; if (v.voiceURI === cfg.voiceURI) o.selected = true; sel.appendChild(o); });
-  }
-  function parle(txt, apres) {
-    if (!window.speechSynthesis) { if (apres) apres(); return; }
-    try { window.speechSynthesis.cancel(); } catch (e) {}
-    var u = new SpeechSynthesisUtterance(String(txt).replace(/```[\s\S]*?```/g, ' ').replace(/[#*_`>|]/g, '').substring(0, 3000));
-    u.lang = 'fr-FR'; u.rate = cfg.rate || 0.98;
-    var vs = voixFr(), chosen = null;
-    for (var i = 0; i < vs.length; i++) if (vs[i].voiceURI === cfg.voiceURI) chosen = vs[i];
-    if (chosen) u.voice = chosen;
-    u.onend = function () { if (apres) apres(); }; u.onerror = function () { if (apres) apres(); };
-    window.speechSynthesis.speak(u);
-  }
-
-  /* ---- Voix : reconnaissance (mains-libres + réveil) ---- */
-  function micUI(on) { var b = $('asst-mic'); if (!b) return; b.style.background = on ? '#7f1d1d' : '#21262d'; b.textContent = on ? '🔴' : '🎤'; }
-  var finalBuf = '', phraseTimer = null;
-  function planifierTraitement() { if (phraseTimer) clearTimeout(phraseTimer); phraseTimer = setTimeout(function () { var txt = finalBuf.trim(); finalBuf = ''; if (txt) onPhrase(txt); }, 1300); }
-  function stopVoix(msg) { voiceMode = false; recActive = false; awaitingCmd = false; if (phraseTimer) { clearTimeout(phraseTimer); phraseTimer = null; } finalBuf = ''; micUI(false); if (rec) { try { rec.abort(); } catch (e) {} } try { window.speechSynthesis.cancel(); } catch (e) {} if (msg) bulle('err', msg); }
-  function traiter(cmd) { awaitingCmd = false; soumettre(cmd, true); }
-  function onPhrase(raw) {
-    var text = (raw || '').trim(); if (!text || busyVoice || !voiceMode) return;
-    failCount = 0;
-    if (wakeWord && !awaitingCmd) {
-      var low = text.toLowerCase(), idx = low.lastIndexOf('sami');
-      if (idx === -1) { idx = low.lastIndexOf('samy'); }
-      if (idx === -1) return; // pas de réveil : on ignore
-      var cmd = text.slice(idx + 4).replace(/^[\s,.:!?…\-]+/, '').trim();
-      if (cmd.length < 2) { awaitingCmd = true; parle('Oui ?'); return; }
-      traiter(cmd); return;
-    }
-    traiter(text);
-  }
-  function ecoute() {
-    if (!voiceMode || !SR || recActive) return;
-    var r; try { r = new SR(); } catch (e) { return; }
-    rec = r; recActive = true; finalBuf = ''; r.lang = 'fr-FR'; r.interimResults = true; r.continuous = true;
-    var t0 = Date.now();
-    r.onresult = function (e) {
-      for (var i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) { finalBuf += (finalBuf ? ' ' : '') + e.results[i][0].transcript; }
-        else if (!wakeWord) { $('asst-input').value = (finalBuf ? finalBuf + ' ' : '') + e.results[i][0].transcript; }
-      }
-      planifierTraitement();
-    };
-    r.onerror = function (e) {
-      recActive = false; var er = e && e.error;
-      if (er === 'not-allowed' || er === 'service-not-allowed' || er === 'audio-capture') { stopVoix("Micro non autorisé. Clique sur l'icône à gauche de l'adresse (🔒/🎤), autorise le micro pour ce site, puis réactive le 🎤."); return; }
-      if (voiceMode && !busyVoice) { if (Date.now() - t0 < 600 && ++failCount >= 4) { stopVoix("Le micro ne démarre pas correctement ici. Vérifie qu'aucune autre appli ne l'utilise, puis réessaie."); return; } setTimeout(ecoute, 800); }
-    };
-    r.onend = function () {
-      recActive = false;
-      if (phraseTimer) { clearTimeout(phraseTimer); phraseTimer = null; }
-      var txt = finalBuf.trim(); finalBuf = '';
-      if (voiceMode && !busyVoice) {
-        if (txt) { onPhrase(txt); return; }
-        if (Date.now() - t0 < 600 && ++failCount >= 4) { stopVoix('Micro instable ici — écoute arrêtée. Réessaie plus tard.'); return; }
-        setTimeout(ecoute, 500);
-      }
-    };
-    try { r.start(); } catch (e) { recActive = false; if (voiceMode) setTimeout(ecoute, 800); }
-  }
-  function toggleVoix() {
-    if (!SR) { bulle('err', 'Reconnaissance vocale indisponible ici (Chrome / Android recommandé).'); return; }
-    if (voiceMode) { stopVoix(null); return; }
-    voiceMode = true; failCount = 0; busyVoice = false; awaitingCmd = false; micUI(true);
-    bulle('ai', wakeWord ? '🎙️ Mains-libres avec réveil : dites « Sami … » suivi de votre question. Re-cliquez 🔴 pour arrêter.'
-                         : '🎙️ Mains-libres : parlez, je réponds à voix haute puis je vous réécoute. Re-cliquez 🔴 pour arrêter.');
-    ecoute();
-  }
-
-  /* ---- Ouverture / câblage ---- */
-  function ouvrir() {
-    majDossier();
-    if (!$('asst-msgs').children.length) {
-      loadHist().forEach(function (m) { bulle(m.role, m.content); });
-      if (!$('asst-msgs').children.length) {
-        var accueil = MODE_PERSO
-          ? "Bonjour Alain, c'est Sami. On peut discuter librement — dites-moi si vous voulez que j'ouvre un dossier précis."
-          : "Bonjour Alain, c'est Sami. Ouvrez un dossier et posez-moi vos questions — je raisonne sur ce chantier précis, et sur celui-là seulement.";
-        bulle('ai', accueil);
-      }
-    }
-    $('asst-panel').classList.add('open'); $('asst-input').focus();
-  }
-  $('asst-fab').onclick = function () { $('asst-panel').classList.contains('open') ? $('asst-panel').classList.remove('open') : ouvrir(); };
-  $('asst-close').onclick = function () { $('asst-panel').classList.remove('open'); };
-  $('asst-send').onclick = function () { soumettre($('asst-input').value, false); };
-  $('asst-mic').onclick = toggleVoix;
-  $('asst-purge').onclick = purge;
-  $('asst-photo').onclick = function () { $('asst-photo-in').click(); };
-  $('asst-photo-in').addEventListener('change', function () { onPhoto(this.files[0]); });
-  $('asst-set').onclick = function () { var c = $('asst-cfg'); c.style.display = c.style.display === 'block' ? 'none' : 'block'; remplirVoix(); };
-  $('asst-input').addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); soumettre($('asst-input').value, false); } });
-
-  // réglages voix
-  $('asst-wake').checked = wakeWord;
-  $('asst-wake').addEventListener('change', function () { wakeWord = this.checked; cfg.wake = wakeWord; saveCfg(); });
-  $('asst-rate').value = cfg.rate; $('asst-rate-v').textContent = Number(cfg.rate).toFixed(2);
-  $('asst-rate').addEventListener('input', function () { cfg.rate = parseFloat(this.value); $('asst-rate-v').textContent = cfg.rate.toFixed(2); saveCfg(); });
-  $('asst-voice').addEventListener('change', function () { cfg.voiceURI = this.value; saveCfg(); });
-  $('asst-test').onclick = function () { parle('Bonjour Alain, c\'est Sami. Voici ma voix à cette vitesse.'); };
-  if (window.speechSynthesis) { window.speechSynthesis.onvoiceschanged = remplirVoix; setTimeout(remplirVoix, 300); }
-
-  // recharge l'historique du bon dossier quand on change d'affaire
-  window.asstMajDossier = function () { majDossier(); $('asst-msgs').innerHTML = ''; };
-
-  // Mode "perso" : adresse dediee (?mode=perso), pour une icone d'accueil a
-  // part — comme Leo. Ouvre directement Sami, cache la gestion de dossiers,
-  // et favorise la conversation libre (mais un dossier reste ouvrable si demande).
-  if (MODE_PERSO) {
-    document.title = 'Sami';
-    var mc = document.getElementById('main-content'); if (mc) mc.style.display = 'none';
-    var hd = document.querySelector('header'); if (hd) hd.style.display = 'none';
-    ouvrir();
-  }
-})();
-</script>
-<!-- =================== FIN ASSISTANT CSPS INTÉGRÉ =================== -->
-
 </body>
 </html>
