@@ -99,6 +99,48 @@ app.post('/api/claude', async (req, res) => {
   }
 });
 
+// ── OCR des scans par Gemini (pour l'analyse au depot) ──────────────────────
+// Le navigateur rend chaque page scannee en image JPEG compressee et nous les
+// envoie par petits lots (pour ne pas saturer la memoire ni la limite de body).
+// On transmet le lot a Gemini qui en fait l'OCR. Aucune limite de pages : un
+// PPSPS de 80 pages est simplement traite en plusieurs lots par le navigateur.
+// La cle GEMINI_API_KEY se lit dans l'environnement (jamais dans le code).
+async function ocrImagesGemini(images) {
+  const key = process.env.GEMINI_API_KEY || '';
+  if (!key) throw new Error('GEMINI_API_KEY absente');
+  const model = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
+  const parts = [{ text: 'Transcris integralement, en texte brut, tout le texte de ces pages de document (un PPSPS ou une piece de chantier), dans l\'ordre, page apres page. Restitue les titres, les tableaux sous forme de texte lisible, les listes et les mentions manuscrites. Ne resume pas, ne commente pas : uniquement le texte.' }];
+  for (const img of images) {
+    const m = String(img || '').match(/^data:(image\/[\w.+-]+);base64,(.+)$/);
+    if (m) parts.push({ inlineData: { mimeType: m[1], data: m[2] } });
+  }
+  if (parts.length < 2) return '';
+  const body = { contents: [{ role: 'user', parts: parts }], generationConfig: { maxOutputTokens: 16384, temperature: 0 } };
+  const ctrl = new AbortController();
+  const to = setTimeout(function () { ctrl.abort(); }, 90000);
+  try {
+    const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent',
+      { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body), signal: ctrl.signal });
+    if (!r.ok) throw new Error('Gemini HTTP ' + r.status);
+    const j = await r.json();
+    const p = j && j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts;
+    return p ? p.map(function (x) { return x.text || ''; }).join('') : '';
+  } finally {
+    clearTimeout(to);
+  }
+}
+
+app.post('/api/ocr-images', async (req, res) => {
+  try {
+    const images = (req.body && req.body.images) || [];
+    if (!Array.isArray(images) || !images.length) return res.json({ texte: '' });
+    const texte = await ocrImagesGemini(images);
+    res.json({ texte: texte || '' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Proxy annuaire officiel des entreprises (recherche-entreprises.api.gouv.fr).
 // Sert a rechercher/remplir ET a VERIFIER un SIRET fourni par une entreprise
 // (nom coherent ? entreprise active ou radiee ?) — utile avec la facturation
