@@ -33,15 +33,33 @@ app.post('/api/claude', async (req, res) => {
     return res.status(500).json({ error: 'Cle API Groq non configuree' });
   }
   try {
-    // Adapter le body Anthropic vers Groq
+    // Adapter le body Anthropic vers Groq.
+    // Modele texte par defaut ; on autorise un modele VISION si le client le demande
+    // (Sami : commentaire de photos de visite). Liste blanche = securite.
+    const MODELES_OK = [
+      'openai/gpt-oss-20b',
+      'qwen/qwen3.6-27b'
+    ];
+    const modele = MODELES_OK.indexOf(req.body.model) !== -1 ? req.body.model : 'qwen/qwen3.6-27b';
     const body = {
-      model: 'llama-3.3-70b-versatile',
+      model: modele,
       max_tokens: req.body.max_tokens || 4096,
       messages: req.body.messages || [],
     };
-    if (req.body.system) {
-      body.messages = [{ role: 'system', content: req.body.system }, ...body.messages];
-    }
+    // Controle de la reflexion (Qwen 3.6 : 'none' = pas de <think>, reponse directe)
+    if (req.body.reasoning_effort) body.reasoning_effort = req.body.reasoning_effort;
+    // 'hidden' : le modele raisonne mais ne renvoie pas son raisonnement (reponse propre)
+    if (req.body.reasoning_format) body.reasoning_format = req.body.reasoning_format;
+    // Règle de style CSPS17 injectée sur TOUT texte rédigé (analyses, PGC, CR,
+    // visites, harmonisation...), présent et futur. Elle soigne le fond ; le
+    // correcteur de Word (langue fr-FR active) rattrape les coquilles résiduelles.
+    const STYLE_CSPS = "Directive de style CSPS17, a appliquer a tout texte que tu rediges, y compris les champs texte d'un JSON (n'altere jamais la STRUCTURE d'un JSON demande, seulement la qualite du texte a l'interieur) : "
+      + "1) Francais correct, sans faute d'accord ni coquille (jamais \"d'personnels\" : ecris \"de personnels\"). "
+      + "2) Bannis les formules creuses et interchangeables (\"respecter les consignes de securite\", \"mettre en place des mesures de securite\", \"respecter les regles de circulation\", \"assurer la separation des phases\") : chaque affirmation doit nommer une zone, une phase, un corps d'etat, une date ou une mesure precise ; a defaut, ne l'ecris pas. "
+      + "3) Ton sobre et professionnel de coordonnateur SPS : pas de majuscules criardes, pas de points d'exclamation superflus. "
+      + "4) Ne mentionne jamais qu'un texte est genere, redige ou assiste par une IA.";
+    const sysContent = req.body.system ? (STYLE_CSPS + '\n\n' + req.body.system) : STYLE_CSPS;
+    body.messages = [{ role: 'system', content: sysContent }, ...body.messages];
     const payload = JSON.stringify(body);
     const options = {
       hostname: 'api.groq.com',
@@ -603,6 +621,265 @@ app.post('/api/envoyer-rjc', async (req, res) => {
     console.error('Erreur envoi RJC:', err.message);
     res.status(500).json({ error: err.message });
   }
+});
+
+/* =====================================================================
+   VEILLE QUOTIDIENNE — bulletin de controle des dossiers par mail
+   ---------------------------------------------------------------------
+   Route volontairement hors /api : elle est appelee par un declencheur
+   externe (GitHub Actions) qui n'a pas le mot de passe de l'application.
+   Elle ne renvoie AUCUNE donnee de dossier et n'ecrit rien : au pire,
+   elle envoie a Alain un bulletin qu'il recevrait de toute facon.
+   Un verrou de 6 h empeche tout envoi en rafale.
+     /cron/veille            -> calcule et envoie le bulletin
+     /cron/veille?apercu=1   -> affiche le bulletin sans l'envoyer
+   ===================================================================== */
+/* ---- Memoire longue de Sami : historique de conversation par dossier ---- */
+app.get('/api/sami-memoire', async (req, res) => {
+  const cle = String(req.query.dossier || 'general').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 120);
+  if (!firebaseOk) return res.json({ messages: [] });
+  try {
+    const doc = await db.collection('sami_memoire').doc(cle).get();
+    return res.json(doc.exists ? (doc.data() || { messages: [] }) : { messages: [] });
+  } catch (e) { return res.json({ messages: [] }); }
+});
+app.post('/api/sami-memoire', async (req, res) => {
+  const cle = String((req.body && req.body.dossier) || 'general').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 120);
+  const messages = Array.isArray(req.body && req.body.messages) ? req.body.messages.slice(-40) : [];
+  if (!firebaseOk) return res.json({ ok: false, raison: 'firestore indisponible' });
+  try {
+    await db.collection('sami_memoire').doc(cle).set({ messages: messages, maj: new Date().toISOString() });
+    return res.json({ ok: true, n: messages.length });
+  } catch (e) { return res.status(500).json({ error: e.message }); }
+});
+
+/* ---- Pont avec le tri des mails (alimente par le script Google Apps Script) ---- */
+app.post('/cron/mails', async (req, res) => {
+  const b = req.body || {};
+  const etat = {
+    maj: new Date().toISOString(),
+    nouveaux: Number(b.nouveaux || 0),
+    aVerifier: Number(b.aVerifier || 0),
+    ranges: Array.isArray(b.ranges) ? b.ranges.slice(0, 30) : [],
+    resume: String(b.resume || '').slice(0, 2000)
+  };
+  if (!firebaseOk) return res.json({ ok: false, raison: 'firestore indisponible' });
+  try {
+    await db.collection('sami_mails').doc('dernier').set(etat);
+    return res.json({ ok: true });
+  } catch (e) { return res.status(500).json({ error: e.message }); }
+});
+app.get('/api/mails', async (req, res) => {
+  if (!firebaseOk) return res.json({ vide: true });
+  try {
+    const doc = await db.collection('sami_mails').doc('dernier').get();
+    return res.json(doc.exists ? doc.data() : { vide: true });
+  } catch (e) { return res.json({ vide: true }); }
+});
+
+const moteurVeille = require('./veille-csps.js');
+const VEILLE_DEST = process.env.VEILLE_MAIL || 'coordo17sps@gmail.com';
+const VEILLE_VERROU_MS = 6 * 60 * 60 * 1000;
+let veilleDernierEnvoi = 0;
+
+async function chargerAffaires() {
+  if (firebaseOk) {
+    const snapshot = await db.collection('affaires').get();
+    return snapshot.docs.map(function (doc) { return doc.data(); });
+  }
+  try { return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); } catch (e) { return []; }
+}
+
+app.get('/cron/veille', async (req, res) => {
+  try {
+    const affaires = await chargerAffaires();
+    const alertes = moteurVeille.veille(affaires);
+    const texte = moteurVeille.veilleTexte(alertes);
+    const critiques = alertes.filter(function (a) { return a.gravite === 'critique'; }).length;
+
+    if (req.query.apercu === '1') {
+      return res.type('text/plain; charset=utf-8')
+        .send('BULLETIN DE VEILLE (apercu, non envoye)\n' + affaires.length + ' dossier(s) analyse(s)\n\n' + texte);
+    }
+
+    if (!alertes.length && req.query.force !== '1') {
+      return res.json({ envoye: false, raison: 'rien a signaler', dossiers: affaires.length });
+    }
+    const maintenant = Date.now();
+    if (maintenant - veilleDernierEnvoi < VEILLE_VERROU_MS && req.query.force !== '1') {
+      return res.json({ envoye: false, raison: 'bulletin deja envoye il y a moins de 6 h' });
+    }
+    veilleDernierEnvoi = maintenant;
+
+    const jour = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+    const sujet = 'CSPS17 — Veille dossiers'
+      + (critiques ? ' — ' + critiques + ' point(s) CRITIQUE(S)' : '')
+      + ' (' + alertes.length + ')';
+    const corps = 'Bulletin de veille du ' + jour + '\n'
+      + affaires.length + ' dossier(s) analyse(s), ' + alertes.length + ' point(s) a traiter.\n\n'
+      + texte
+      + '\n\n—\nBulletin automatique de csps17. Seuils reglables dans veille-csps.js.\n'
+      + 'Pour le detail : https://csps17.onrender.com';
+
+    await envoyerEmail({ to: VEILLE_DEST, subject: sujet, text: corps });
+    console.log('Veille : bulletin envoye (' + alertes.length + ' alertes)');
+    res.json({ envoye: true, alertes: alertes.length, critiques: critiques, dossiers: affaires.length });
+  } catch (err) {
+    console.error('Erreur veille:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* =====================================================================
+   LECTURE DES PIÈCES — palier 2 de Sami
+   ---------------------------------------------------------------------
+   Le texte intégral des fichiers déposés (PGC, PPSPS, diagnostics, IC…)
+   est extrait une fois pour toutes et conservé dans Firestore
+   (collection "sami_docs", un document par pièce, id = chemin nettoyé).
+   Sami interroge ensuite ces textes pour répondre en CITANT les pièces.
+   Moteur d'extraction et réglages : lecture-docs.js (racine du dépôt).
+     POST /api/sami-docs/indexer    -> indexe ce qui manque (tout ou un dossier)
+     GET  /api/sami-docs?dossier=ID -> catalogue des pièces et de leur état
+     POST /api/sami-docs/extraits   -> extraits pertinents pour une question
+     GET  /cron/lecture-docs        -> même indexation, pour GitHub Actions
+   ===================================================================== */
+const lectureDocs = require('./lecture-docs.js');
+
+function idPiece(entree) {
+  const base = entree.fichierPath || ('data_' + (entree.id || ''));
+  return String(base).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 900);
+}
+
+// Les pièces d'une affaire = les entrées du registre-journal munies d'un fichier
+// (nouveau format fichierPath/Supabase, ou ancien format fichierData/base64).
+function piecesDe(affaire) {
+  return (Array.isArray(affaire.rjc) ? affaire.rjc : []).filter(function (e) {
+    return e && (e.fichierPath || e.fichierData);
+  });
+}
+
+async function bufferDePiece(entree) {
+  if (entree.fichierPath && supabaseOk) {
+    let res = await supabase.storage.from(SUPABASE_BUCKET).download(entree.fichierPath);
+    if (res.error) {
+      // seconde chance : les erreurs reseau transitoires existent sur Render gratuit
+      await new Promise(function (r) { setTimeout(r, 500); });
+      res = await supabase.storage.from(SUPABASE_BUCKET).download(entree.fichierPath);
+    }
+    if (res.error) throw res.error;
+    return Buffer.from(await res.data.arrayBuffer());
+  }
+  if (entree.fichierData) {
+    const b64 = String(entree.fichierData).includes(',') ? String(entree.fichierData).split(',')[1] : entree.fichierData;
+    return Buffer.from(b64, 'base64');
+  }
+  throw new Error('pièce sans fichier');
+}
+
+// Indexe ce qui manque. affaireId facultatif (sinon : tous les dossiers actifs).
+// Une pièce déjà indexée n'est JAMAIS re-téléchargée : coût quasi nul quand
+// tout est à jour, donc appelable sans arrière-pensée avant chaque question.
+let lectureEnCours = false;
+async function indexerPieces(affaireId) {
+  if (!firebaseOk) return { ok: false, raison: 'firestore indisponible' };
+  if (lectureEnCours) return { ok: false, raison: 'indexation deja en cours' };
+  lectureEnCours = true;
+  try {
+    const affaires = (await chargerAffaires()).filter(function (a) {
+      if (!a || a.archive) return false;
+      return affaireId ? String(a.id) === String(affaireId) : true;
+    });
+    // ids déjà indexés (lecture des ids seuls, pas des textes)
+    const dejaSnap = await db.collection('sami_docs').select('statut').get();
+    const deja = {};
+    dejaSnap.docs.forEach(function (d) { deja[d.id] = true; });
+
+    let indexes = 0, illisibles = 0, erreurs = 0, existants = 0;
+    const details = []; // premiers messages d'erreur, pour diagnostiquer sans les logs Render
+    for (const a of affaires) {
+      for (const e of piecesDe(a)) {
+        const id = idPiece(e);
+        if (deja[id]) { existants++; continue; }
+        try {
+          const buf = await bufferDePiece(e);
+          const r = await lectureDocs.extraireTexte(buf, e.fichierNom || e.fichierPath || '');
+          await db.collection('sami_docs').doc(id).set({
+            affaireId: String(a.id || ''),
+            nom: e.fichierNom || String(e.fichierPath || '').split('/').pop() || 'document',
+            docRef: e.docRef || '',
+            date: e.date || '',
+            intervenants: e.intervenants || '',
+            statut: r.statut,
+            pages: r.pages || 0,
+            chars: (r.texte || '').length,
+            texte: r.texte || '',
+            maj: new Date().toISOString()
+          });
+          if (r.statut === 'ok') indexes++; else illisibles++;
+        } catch (err) {
+          erreurs++;
+          if (details.length < 5) {
+            // remonter la cause reseau reelle : undici la met dans err.cause,
+            // supabase-js l'enveloppe dans err.originalError
+            var prof = (err && err.originalError) || err || {};
+            var cause = prof.cause ? (prof.cause.code || prof.cause.message || String(prof.cause)) : '';
+            details.push((e.fichierNom || e.fichierPath || '?') + ' : ' + err.message + (cause ? ' [' + String(cause).slice(0, 120) + ']' : ''));
+          }
+          console.error('Lecture pièce impossible (' + (e.fichierNom || e.fichierPath) + '):', err.message);
+        }
+      }
+    }
+    // Battement de coeur Supabase : un appel reel chaque jour via le cron,
+    // meme quand il n'y a rien a indexer. Supabase gratuit met le projet en
+    // PAUSE apres ~1 semaine sans activite (vecu le 20/07/2026 : apercu et
+    // depot de pieces morts en silence). Ceci l'en empeche.
+    if (supabaseOk) {
+      try { await supabase.storage.from(SUPABASE_BUCKET).list('', { limit: 1 }); } catch (e) {}
+    }
+    return { ok: true, indexes, illisibles, erreurs, existants, dossiers: affaires.length, details };
+  } finally {
+    lectureEnCours = false;
+  }
+}
+
+async function docsDuDossier(affaireId, avecTexte) {
+  const snap = await db.collection('sami_docs').where('affaireId', '==', String(affaireId)).get();
+  return snap.docs.map(function (d) {
+    const x = d.data() || {};
+    if (!avecTexte) delete x.texte;
+    return x;
+  });
+}
+
+app.post('/api/sami-docs/indexer', async (req, res) => {
+  try {
+    const r = await indexerPieces((req.body || {}).dossier || null);
+    res.json(r);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/sami-docs', async (req, res) => {
+  if (!firebaseOk) return res.json({ docs: [] });
+  try {
+    const docs = await docsDuDossier(String(req.query.dossier || ''), false);
+    res.json({ docs: docs, catalogue: lectureDocs.catalogue(docs) });
+  } catch (e) { res.json({ docs: [], erreur: e.message }); }
+});
+
+app.post('/api/sami-docs/extraits', async (req, res) => {
+  if (!firebaseOk) return res.json({ extraits: '', catalogue: '' });
+  try {
+    const b = req.body || {};
+    const docs = await docsDuDossier(String(b.dossier || ''), true);
+    const ext = lectureDocs.extraits(docs, String(b.question || ''), Number(b.budget) || undefined);
+    res.json({ extraits: ext, catalogue: lectureDocs.catalogue(docs), nbPieces: docs.length });
+  } catch (e) { res.json({ extraits: '', catalogue: '', erreur: e.message }); }
+});
+
+// Pour GitHub Actions (pas de mot de passe côté cron) : ne renvoie que des compteurs.
+app.get('/cron/lecture-docs', async (req, res) => {
+  try { res.json(await indexerPieces(null)); }
+  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Fallback
