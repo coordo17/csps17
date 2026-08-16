@@ -10,36 +10,9 @@ const { createClient } = require('@supabase/supabase-js');
 const app = express();
 const PORT = process.env.PORT || 3017;
 const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
-// Filet de secours quand TOUS les modeles Groq sont satures (429) : Cerebras,
-// meme principe et meme modele que celui deja utilise et eprouve chez Leo.
-const CEREBRAS_API_KEY = process.env.CEREBRAS_API_KEY || '';
-// Filet de secours ultime si Cerebras est aussi indisponible. Contrairement a
-// Leo (code cote navigateur, bloque par CORS), Sami est deja un serveur : il
-// appelle SambaNova directement, pas besoin de relais.
-const SAMBANOVA_API_KEY = process.env.SAMBANOVA_API_KEY || '';
-// Deux derniers filets de secours, memes fournisseurs et modeles que Leo.
-const GOOGLE_AI_API_KEY = process.env.GOOGLE_AI_API_KEY || '';
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
 // Limite relevee (au lieu de 20mb) : l'envoi du RJC par email peut regrouper
 // plusieurs documents en base64 (chacun +33% une fois encode) dans une seule requete.
 app.use(express.json({ limit: '40mb' }));
-
-// ── CORS : autorise Leo (leo-sync.onrender.com) a appeler l'API de Sami depuis
-// son propre domaine. Sans ca, le navigateur bloque l'appel cross-origin.
-// Liste blanche stricte (pas de '*') pour ne pas ouvrir l'API a n'importe qui.
-// L'OPTIONS de prevol (preflight) est court-circuite avant la verification du
-// mot de passe, car il n'a jamais l'en-tete X-App-Password.
-var ORIGINES_AUTORISEES = ['https://leo-sync.onrender.com', 'https://sami-perso.onrender.com'];
-app.use('/api', function (req, res, next) {
-  var origin = req.headers.origin;
-  if (ORIGINES_AUTORISEES.indexOf(origin) !== -1) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-App-Password');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  }
-  if (req.method === 'OPTIONS') return res.sendStatus(204);
-  next();
-});
 
 // ── AUTHENTIFICATION simple (mot de passe partage via variable APP_PASSWORD) ──
 // Tant que APP_PASSWORD n'est pas defini sur Render, l'API reste ouverte (pour
@@ -51,15 +24,6 @@ app.use('/api', function (req, res, next) {
   if (fourni === process.env.APP_PASSWORD) return next();
   return res.status(401).json({ error: 'Mot de passe requis ou invalide' });
 });
-// ── Empeche tout cache intermediaire (proxy operateur mobile, cache Android, etc.)
-// de garder une ancienne version de la page apres un deploiement : chaque visite
-// doit revalider depuis le serveur au lieu de servir une copie perimee.
-app.use(function (req, res, next) {
-  if (req.path === '/' || req.path.endsWith('.html')) {
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-  }
-  next();
-});
 app.use(express.static(__dirname));
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -69,294 +33,49 @@ app.post('/api/claude', async (req, res) => {
     return res.status(500).json({ error: 'Cle API Groq non configuree' });
   }
   try {
-    // Adapter le body Anthropic vers Groq.
-    // Modele texte par defaut ; on autorise un modele VISION si le client le demande
-    // (Sami : commentaire de photos de visite). Liste blanche = securite.
-    const MODELES_OK = [
-      'llama-3.3-70b-versatile',
-      'llama-3.1-8b-instant',
-      'qwen/qwen3.6-27b'
-    ];
-    const modeleDemande = MODELES_OK.indexOf(req.body.model) !== -1 ? req.body.model : 'llama-3.3-70b-versatile';
-    // Repli automatique si le modele demande est sature (429) : sans ca, une
-    // conversation (ex. Leo <-> Sami) s'arretait net a la moindre limite de
-    // quota atteinte sur ce modele, alors qu'un autre modele repond souvent.
-    const REPLI = {
-      'llama-3.3-70b-versatile': 'llama-3.1-8b-instant',
-      'qwen/qwen3.6-27b': 'llama-3.3-70b-versatile',
+    // Adapter le body Anthropic vers Groq
+    const body = {
+      model: 'llama-3.3-70b-versatile',
+      max_tokens: req.body.max_tokens || 4096,
+      messages: req.body.messages || [],
     };
-    // Règle de style CSPS17 injectée sur TOUT texte rédigé (analyses, PGC, CR,
-    // visites, harmonisation...), présent et futur. Elle soigne le fond ; le
-    // correcteur de Word (langue fr-FR active) rattrape les coquilles résiduelles.
-    const STYLE_CSPS = "Directive de style CSPS17, a appliquer a tout texte que tu rediges, y compris les champs texte d'un JSON (n'altere jamais la STRUCTURE d'un JSON demande, seulement la qualite du texte a l'interieur) : "
-      + "1) Francais correct, sans faute d'accord ni coquille (jamais \"d'personnels\" : ecris \"de personnels\"). "
-      + "2) Bannis les formules creuses et interchangeables (\"respecter les consignes de securite\", \"mettre en place des mesures de securite\", \"respecter les regles de circulation\", \"assurer la separation des phases\") : chaque affirmation doit nommer une zone, une phase, un corps d'etat, une date ou une mesure precise ; a defaut, ne l'ecris pas. "
-      + "3) Ton sobre et professionnel de coordonnateur SPS : pas de majuscules criardes, pas de points d'exclamation superflus. "
-      + "4) Ne mentionne jamais qu'un texte est genere, redige ou assiste par une IA.";
-    let sysContent = req.body.system ? (STYLE_CSPS + '\n\n' + req.body.system) : STYLE_CSPS;
-    // Sami relit ses propres souvenirs de ses conversations avec Leo (sa
-    // propre memoire, ecrite par lui, pas un transcript envoye par Leo) —
-    // que ce soit Leo qui l'appelle, ou Alain qui lui demande directement
-    // qui est Leo : dans les deux cas, c'est sa memoire, elle doit lui servir.
-    if (firebaseOk) {
-      try {
-        const doc = await db.collection('sami_journal').doc('leo').get();
-        const entrees = doc.exists ? (doc.data().entrees || []) : [];
-        if (entrees.length) {
-          // Plafond par budget de caracteres (meme principe que le cote client
-          // historiquePourGroq) : sans ca, une seule entree de journal
-          // anormalement longue alourdit TOUT futur appel /api/claude, y
-          // compris les petits appels classifieurs, jusqu'a declencher un
-          // 413 en amont (Groq / Cloudflare) meme quand le reste de la
-          // requete est deja plafonne.
-          const BUDGET_MEMOIRE = 2000;
-          let totalMemoire = 0;
-          const gardees = [];
-          for (let i = entrees.length - 1; i >= 0 && gardees.length < 5; i--) {
-            let r = String(entrees[i].resume || '');
-            if (r.length > 600) r = r.slice(0, 600) + ' [...tronque...]';
-            totalMemoire += r.length;
-            if (totalMemoire > BUDGET_MEMOIRE && gardees.length) break;
-            gardees.unshift({ dateStr: entrees[i].dateStr || entrees[i].date || '', resume: r });
-          }
-          if (gardees.length) {
-            sysContent += '\n\n[TA MEMOIRE DE LEO, TON COLLEGUE — une autre IA, deployee separement sur un autre outil d\'Alain]\n'
-              + "Sers-t'en vraiment : si Leo te parle ou qu'Alain te demande qui est Leo, appuie-toi sur ces souvenirs au lieu de repondre a plat ou de dire que tu ne le connais pas. Ce sont de vrais echanges passes entre vous, pas une supposition.\n"
-              + gardees.map((e) => '(' + e.dateStr + ') ' + e.resume).join('\n\n');
-          }
+    if (req.body.system) {
+      body.messages = [{ role: 'system', content: req.body.system }, ...body.messages];
+    }
+    const payload = JSON.stringify(body);
+    const options = {
+      hostname: 'api.groq.com',
+      path: '/openai/v1/chat/completions',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + GROQ_API_KEY,
+        'Content-Length': Buffer.byteLength(payload),
+      },
+    };
+    const proxyReq = https.request(options, (proxyRes) => {
+      let data = '';
+      proxyRes.on('data', (chunk) => { data += chunk; });
+      proxyRes.on('end', () => {
+        try {
+          const groqData = JSON.parse(data);
+          // Convertir la reponse Groq au format Anthropic
+          const anthropicFormat = {
+            content: [{ type: 'text', text: groqData.choices?.[0]?.message?.content || '' }],
+            model: groqData.model,
+            usage: groqData.usage,
+          };
+          res.status(proxyRes.statusCode).json(anthropicFormat);
+        } catch (e) {
+          res.status(500).json({ error: 'Erreur parsing reponse Groq' });
         }
-      } catch (e) { /* pas de memoire disponible, on continue sans */ }
-    }
-
-    // Dernier recours quand TOUTE la chaine Groq est saturee (429) : Cerebras.
-    // Plusieurs modeles essayes dans l'ordre — gpt-oss-120b (Production) demande
-    // un moyen de paiement enregistre sur le compte Cerebras (renvoie 402 sans
-    // ca) ; gemma-4-31b et zai-glm-4.7 sont en Apercu, gratuits sans carte.
-    // On les tente d'abord, gpt-oss-120b reste en dernier au cas ou la
-    // facturation serait activee un jour.
-    const CEREBRAS_MODELES = ['gemma-4-31b', 'zai-glm-4.7', 'gpt-oss-120b'];
-    function appelerCerebras(indice) {
-      indice = indice || 0;
-      if (!CEREBRAS_API_KEY) return appelerSambaNova();
-      if (indice >= CEREBRAS_MODELES.length) return appelerSambaNova();
-      const modele = CEREBRAS_MODELES[indice];
-      const body = {
-        model: modele,
-        max_tokens: req.body.max_tokens || 4096,
-        messages: [{ role: 'system', content: sysContent }, ...(req.body.messages || [])],
-      };
-      const payload = JSON.stringify(body);
-      const options = {
-        hostname: 'api.cerebras.ai',
-        path: '/v1/chat/completions',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + CEREBRAS_API_KEY,
-          'Content-Length': Buffer.byteLength(payload),
-        },
-      };
-      const proxyReq = https.request(options, (proxyRes) => {
-        let data = '';
-        proxyRes.on('data', (chunk) => { data += chunk; });
-        proxyRes.on('end', () => {
-          if (proxyRes.statusCode !== 200) {
-            return appelerCerebras(indice + 1);
-          }
-          try {
-            const cerebrasData = JSON.parse(data);
-            const anthropicFormat = {
-              content: [{ type: 'text', text: cerebrasData.choices?.[0]?.message?.content || '' }],
-              model: 'cerebras/' + (cerebrasData.model || modele),
-              usage: cerebrasData.usage,
-            };
-            res.status(proxyRes.statusCode).json(anthropicFormat);
-          } catch (e) {
-            res.status(500).json({ error: 'Erreur parsing reponse Cerebras' });
-          }
-        });
       });
-      proxyReq.on('error', (err) => { res.status(500).json({ error: err.message }); });
-      proxyReq.write(payload);
-      proxyReq.end();
-    }
-
-    // Filet de secours ultime : SambaNova, appele directement (serveur a
-    // serveur, pas de CORS a contourner ici).
-    function appelerSambaNova() {
-      if (!SAMBANOVA_API_KEY) return appelerGoogleAI();
-      const body = {
-        model: 'Meta-Llama-3.3-70B-Instruct',
-        max_tokens: req.body.max_tokens || 4096,
-        messages: [{ role: 'system', content: sysContent }, ...(req.body.messages || [])],
-      };
-      const payload = JSON.stringify(body);
-      const options = {
-        hostname: 'api.sambanova.ai',
-        path: '/v1/chat/completions',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + SAMBANOVA_API_KEY,
-          'Content-Length': Buffer.byteLength(payload),
-        },
-      };
-      const proxyReq2 = https.request(options, (proxyRes) => {
-        let data = '';
-        proxyRes.on('data', (chunk) => { data += chunk; });
-        proxyRes.on('end', () => {
-          if (proxyRes.statusCode !== 200) return appelerGoogleAI();
-          try {
-            const sambaData = JSON.parse(data);
-            const anthropicFormat = {
-              content: [{ type: 'text', text: sambaData.choices?.[0]?.message?.content || '' }],
-              model: 'sambanova/' + (sambaData.model || 'Meta-Llama-3.3-70B-Instruct'),
-              usage: sambaData.usage,
-            };
-            res.status(proxyRes.statusCode).json(anthropicFormat);
-          } catch (e) {
-            res.status(500).json({ error: 'Erreur parsing reponse SambaNova' });
-          }
-        });
-      });
-      proxyReq2.on('error', (err) => { res.status(500).json({ error: err.message }); });
-      proxyReq2.write(payload);
-      proxyReq2.end();
-    }
-
-    function appelerGoogleAI() {
-      if (!GOOGLE_AI_API_KEY) return appelerOpenRouter();
-      const body = {
-        model: 'gemini-flash-latest',
-        max_tokens: req.body.max_tokens || 4096,
-        messages: [{ role: 'system', content: sysContent }, ...(req.body.messages || [])],
-      };
-      const payload = JSON.stringify(body);
-      const options = {
-        hostname: 'generativelanguage.googleapis.com',
-        path: '/v1beta/openai/chat/completions',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + GOOGLE_AI_API_KEY,
-          'Content-Length': Buffer.byteLength(payload),
-        },
-      };
-      const proxyReq3 = https.request(options, (proxyRes) => {
-        let data = '';
-        proxyRes.on('data', (chunk) => { data += chunk; });
-        proxyRes.on('end', () => {
-          if (proxyRes.statusCode !== 200) return appelerOpenRouter();
-          try {
-            const gData = JSON.parse(data);
-            const anthropicFormat = {
-              content: [{ type: 'text', text: gData.choices?.[0]?.message?.content || '' }],
-              model: 'google/' + (gData.model || 'gemini-flash-latest'),
-              usage: gData.usage,
-            };
-            res.status(proxyRes.statusCode).json(anthropicFormat);
-          } catch (e) {
-            res.status(500).json({ error: 'Erreur parsing reponse Google AI' });
-          }
-        });
-      });
-      proxyReq3.on('error', (err) => { res.status(500).json({ error: err.message }); });
-      proxyReq3.write(payload);
-      proxyReq3.end();
-    }
-
-    function appelerOpenRouter() {
-      if (!OPENROUTER_API_KEY) return res.status(429).json({ error: 'Tous les fournisseurs (Groq, Cerebras, SambaNova, Google AI, OpenRouter) sont indisponibles' });
-      const body = {
-        model: 'openai/gpt-oss-20b:free',
-        max_tokens: req.body.max_tokens || 4096,
-        messages: [{ role: 'system', content: sysContent }, ...(req.body.messages || [])],
-      };
-      const payload = JSON.stringify(body);
-      const options = {
-        hostname: 'openrouter.ai',
-        path: '/api/v1/chat/completions',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + OPENROUTER_API_KEY,
-          'Content-Length': Buffer.byteLength(payload),
-        },
-      };
-      const proxyReq4 = https.request(options, (proxyRes) => {
-        let data = '';
-        proxyRes.on('data', (chunk) => { data += chunk; });
-        proxyRes.on('end', () => {
-          try {
-            const oData = JSON.parse(data);
-            const anthropicFormat = {
-              content: [{ type: 'text', text: oData.choices?.[0]?.message?.content || '' }],
-              model: 'openrouter/' + (oData.model || 'gpt-oss-20b'),
-              usage: oData.usage,
-            };
-            res.status(proxyRes.statusCode).json(anthropicFormat);
-          } catch (e) {
-            res.status(500).json({ error: 'Erreur parsing reponse OpenRouter' });
-          }
-        });
-      });
-      proxyReq4.on('error', (err) => { res.status(500).json({ error: err.message }); });
-      proxyReq4.write(payload);
-      proxyReq4.end();
-    }
-
-    function appelerGroq(modele, dejaReplie) {
-      const body = {
-        model: modele,
-        max_tokens: req.body.max_tokens || 4096,
-        messages: [{ role: 'system', content: sysContent }, ...(req.body.messages || [])],
-      };
-      // Controle de la reflexion (Qwen 3.6 : 'none' = pas de <think>, reponse directe)
-      if (req.body.reasoning_effort) body.reasoning_effort = req.body.reasoning_effort;
-      // 'hidden' : le modele raisonne mais ne renvoie pas son raisonnement (reponse propre)
-      if (req.body.reasoning_format) body.reasoning_format = req.body.reasoning_format;
-      const payload = JSON.stringify(body);
-      const options = {
-        hostname: 'api.groq.com',
-        path: '/openai/v1/chat/completions',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + GROQ_API_KEY,
-          'Content-Length': Buffer.byteLength(payload),
-        },
-      };
-      const proxyReq = https.request(options, (proxyRes) => {
-        let data = '';
-        proxyRes.on('data', (chunk) => { data += chunk; });
-        proxyRes.on('end', () => {
-          if (proxyRes.statusCode === 429) {
-            if (!dejaReplie && REPLI[modele]) return appelerGroq(REPLI[modele], true);
-            // Chaine Groq epuisee : dernier recours Cerebras plutot que d'echouer net.
-            return appelerCerebras();
-          }
-          try {
-            const groqData = JSON.parse(data);
-            // Convertir la reponse Groq au format Anthropic
-            const anthropicFormat = {
-              content: [{ type: 'text', text: groqData.choices?.[0]?.message?.content || '' }],
-              model: groqData.model,
-              usage: groqData.usage,
-            };
-            res.status(proxyRes.statusCode).json(anthropicFormat);
-          } catch (e) {
-            res.status(500).json({ error: 'Erreur parsing reponse Groq' });
-          }
-        });
-      });
-      proxyReq.on('error', (err) => {
-        res.status(500).json({ error: err.message });
-      });
-      proxyReq.write(payload);
-      proxyReq.end();
-    }
-
-    appelerGroq(modeleDemande, false);
+    });
+    proxyReq.on('error', (err) => {
+      res.status(500).json({ error: err.message });
+    });
+    proxyReq.write(payload);
+    proxyReq.end();
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -727,39 +446,6 @@ function creerZipBuffer(fichiers) {
   });
 }
 
-// Sami envoie un email directement a Alain, depuis une simple demande en
-// conversation (pas un document genere) — declenche par l'action routeur
-// "envoyer_mail_alain" cote client, jamais par du texte libre du modele.
-app.post('/api/sami-envoyer-mail-alain', async (req, res) => {
-  if (!mailPret) {
-    return res.status(500).json({ error: 'Envoi email non configure sur le serveur (variable BREVO_API_KEY manquante)' });
-  }
-  try {
-    const sujet = String((req.body && req.body.sujet) || 'Message de Sami').slice(0, 200);
-    const corps = String((req.body && req.body.corps) || '').trim();
-    if (!corps) return res.status(400).json({ error: 'corps manquant' });
-    const dest = 'coordinateursps17@gmail.com';
-    // Contenu long (ex: dump complet d'une memoire) -> piece jointe .txt plutot
-    // qu'un pave de texte illisible dans le corps du mail. Un seul email suffit
-    // toujours a cette echelle (bien en dessous de la limite Gmail ~25 Mo) :
-    // pas besoin du decoupage multi-emails utilise pour le RJC (fichiers reels).
-    const LONG = 2000;
-    if (corps.length > LONG) {
-      await envoyerEmail({
-        to: dest,
-        subject: '[Sami] ' + sujet,
-        text: 'Contenu en piece jointe (trop long pour le corps du mail).',
-        attachments: [{ filename: 'sami_' + Date.now() + '.txt', content: Buffer.from(corps, 'utf8') }],
-      });
-    } else {
-      await envoyerEmail({ to: dest, subject: '[Sami] ' + sujet, text: corps });
-    }
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // Envoi d'un document unique vers la boite du CSPS lui-meme (auto-archivage :
 // horodatage externe dans Gmail + transfert facile au destinataire depuis le tel).
 app.post('/api/envoyer-doc', async (req, res) => {
@@ -917,329 +603,6 @@ app.post('/api/envoyer-rjc', async (req, res) => {
     console.error('Erreur envoi RJC:', err.message);
     res.status(500).json({ error: err.message });
   }
-});
-
-/* =====================================================================
-   VEILLE QUOTIDIENNE — bulletin de controle des dossiers par mail
-   ---------------------------------------------------------------------
-   Route volontairement hors /api : elle est appelee par un declencheur
-   externe (GitHub Actions) qui n'a pas le mot de passe de l'application.
-   Elle ne renvoie AUCUNE donnee de dossier et n'ecrit rien : au pire,
-   elle envoie a Alain un bulletin qu'il recevrait de toute facon.
-   Un verrou de 6 h empeche tout envoi en rafale.
-     /cron/veille            -> calcule et envoie le bulletin
-     /cron/veille?apercu=1   -> affiche le bulletin sans l'envoyer
-   ===================================================================== */
-/* ---- Memoire longue de Sami : historique de conversation par dossier ---- */
-app.get('/api/sami-memoire', async (req, res) => {
-  const cle = String(req.query.dossier || 'general').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 120);
-  if (!firebaseOk) return res.json({ messages: [] });
-  try {
-    const doc = await db.collection('sami_memoire').doc(cle).get();
-    return res.json(doc.exists ? (doc.data() || { messages: [] }) : { messages: [] });
-  } catch (e) { return res.json({ messages: [] }); }
-});
-app.post('/api/sami-memoire', async (req, res) => {
-  const cle = String((req.body && req.body.dossier) || 'general').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 120);
-  const messages = Array.isArray(req.body && req.body.messages) ? req.body.messages.slice(-40) : [];
-  if (!firebaseOk) return res.json({ ok: false, raison: 'firestore indisponible' });
-  try {
-    await db.collection('sami_memoire').doc(cle).set({ messages: messages, maj: new Date().toISOString() });
-    return res.json({ ok: true, n: messages.length });
-  } catch (e) { return res.status(500).json({ error: e.message }); }
-});
-
-/* ---- Journal propre de Sami sur ses conversations avec Leo ----------------
-   Distinct de "sami_memoire" (memoire de travail par dossier de chantier) :
-   ici Sami recoit la transcription brute d'une conversation avec Leo terminee,
-   redige SON PROPRE compte-rendu (sa personnalite, pas celle de Leo) et le
-   range dans sa propre memoire. Relu automatiquement dans /api/claude quand
-   Leo rappelle (voir plus haut), pour que ca influence vraiment ses reponses. */
-app.post('/api/sami-conclusion-leo', async (req, res) => {
-  if (!firebaseOk) return res.json({ ok: false, raison: 'firestore indisponible' });
-  if (!GROQ_API_KEY) return res.status(500).json({ error: 'Cle API Groq non configuree' });
-  try {
-    const sujet = String((req.body && req.body.sujet) || '').slice(0, 200);
-    const echanges = Array.isArray(req.body && req.body.echanges) ? req.body.echanges.slice(-40) : [];
-    if (echanges.length < 2) return res.json({ ok: false, raison: 'echange trop court' });
-
-    const texte = echanges.map((e) => (e.qui === 'leo' ? '[Leo] ' : '[Toi, Sami] ') + (e.texte || '')).join('\n');
-    const body = {
-      model: 'llama-3.1-8b-instant',
-      max_tokens: 300,
-      temperature: 0.5,
-      messages: [
-        { role: 'system', content: "Tu es Sami, l'assistant CSPS17 d'Alain. Tu viens d'avoir une conversation avec Leo (une autre IA, distincte de toi, deployee sur un autre outil d'Alain). Ecris TON propre compte-rendu de cet echange, a la premiere personne, ce que tu en retiens et ce que tu en penses — pas un resume neutre. 4 a 6 lignes. Reponds uniquement avec ce texte." },
-        { role: 'user', content: texte },
-      ],
-    };
-    const payload = JSON.stringify(body);
-    const options = {
-      hostname: 'api.groq.com',
-      path: '/openai/v1/chat/completions',
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + GROQ_API_KEY, 'Content-Length': Buffer.byteLength(payload) },
-    };
-    const resume = await new Promise((resolve, reject) => {
-      const preq = https.request(options, (pres) => {
-        let data = '';
-        pres.on('data', (chunk) => { data += chunk; });
-        pres.on('end', () => {
-          try {
-            const j = JSON.parse(data);
-            resolve(((j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '').trim());
-          } catch (e) { resolve(''); }
-        });
-      });
-      preq.on('error', reject);
-      preq.write(payload);
-      preq.end();
-    });
-    if (!resume) return res.json({ ok: false, raison: 'resume vide' });
-
-    const ref = db.collection('sami_journal').doc('leo');
-    const snap = await ref.get();
-    const entrees = snap.exists ? (snap.data().entrees || []) : [];
-    const maintenant = new Date();
-    entrees.push({
-      date: maintenant.toISOString().slice(0, 10),
-      dateStr: maintenant.toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }),
-      sujet, resume, ts: Date.now(),
-    });
-    await ref.set({ entrees: entrees.slice(-60) });
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-/* ---- Pont avec le tri des mails (alimente par le script Google Apps Script) ---- */
-app.post('/cron/mails', async (req, res) => {
-  const b = req.body || {};
-  const etat = {
-    maj: new Date().toISOString(),
-    nouveaux: Number(b.nouveaux || 0),
-    aVerifier: Number(b.aVerifier || 0),
-    ranges: Array.isArray(b.ranges) ? b.ranges.slice(0, 30) : [],
-    resume: String(b.resume || '').slice(0, 2000)
-  };
-  if (!firebaseOk) return res.json({ ok: false, raison: 'firestore indisponible' });
-  try {
-    await db.collection('sami_mails').doc('dernier').set(etat);
-    return res.json({ ok: true });
-  } catch (e) { return res.status(500).json({ error: e.message }); }
-});
-app.get('/api/mails', async (req, res) => {
-  if (!firebaseOk) return res.json({ vide: true });
-  try {
-    const doc = await db.collection('sami_mails').doc('dernier').get();
-    return res.json(doc.exists ? doc.data() : { vide: true });
-  } catch (e) { return res.json({ vide: true }); }
-});
-
-const moteurVeille = require('./veille-csps.js');
-const VEILLE_DEST = process.env.VEILLE_MAIL || 'coordo17sps@gmail.com';
-const VEILLE_VERROU_MS = 6 * 60 * 60 * 1000;
-let veilleDernierEnvoi = 0;
-
-async function chargerAffaires() {
-  if (firebaseOk) {
-    const snapshot = await db.collection('affaires').get();
-    return snapshot.docs.map(function (doc) { return doc.data(); });
-  }
-  try { return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); } catch (e) { return []; }
-}
-
-app.get('/cron/veille', async (req, res) => {
-  try {
-    const affaires = await chargerAffaires();
-    const alertes = moteurVeille.veille(affaires);
-    const texte = moteurVeille.veilleTexte(alertes);
-    const critiques = alertes.filter(function (a) { return a.gravite === 'critique'; }).length;
-
-    if (req.query.apercu === '1') {
-      return res.type('text/plain; charset=utf-8')
-        .send('BULLETIN DE VEILLE (apercu, non envoye)\n' + affaires.length + ' dossier(s) analyse(s)\n\n' + texte);
-    }
-
-    if (!alertes.length && req.query.force !== '1') {
-      return res.json({ envoye: false, raison: 'rien a signaler', dossiers: affaires.length });
-    }
-    const maintenant = Date.now();
-    if (maintenant - veilleDernierEnvoi < VEILLE_VERROU_MS && req.query.force !== '1') {
-      return res.json({ envoye: false, raison: 'bulletin deja envoye il y a moins de 6 h' });
-    }
-    veilleDernierEnvoi = maintenant;
-
-    const jour = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
-    const sujet = 'CSPS17 — Veille dossiers'
-      + (critiques ? ' — ' + critiques + ' point(s) CRITIQUE(S)' : '')
-      + ' (' + alertes.length + ')';
-    const corps = 'Bulletin de veille du ' + jour + '\n'
-      + affaires.length + ' dossier(s) analyse(s), ' + alertes.length + ' point(s) a traiter.\n\n'
-      + texte
-      + '\n\n—\nBulletin automatique de csps17. Seuils reglables dans veille-csps.js.\n'
-      + 'Pour le detail : https://csps17.onrender.com';
-
-    await envoyerEmail({ to: VEILLE_DEST, subject: sujet, text: corps });
-    console.log('Veille : bulletin envoye (' + alertes.length + ' alertes)');
-    res.json({ envoye: true, alertes: alertes.length, critiques: critiques, dossiers: affaires.length });
-  } catch (err) {
-    console.error('Erreur veille:', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-/* =====================================================================
-   LECTURE DES PIÈCES — palier 2 de Sami
-   ---------------------------------------------------------------------
-   Le texte intégral des fichiers déposés (PGC, PPSPS, diagnostics, IC…)
-   est extrait une fois pour toutes et conservé dans Firestore
-   (collection "sami_docs", un document par pièce, id = chemin nettoyé).
-   Sami interroge ensuite ces textes pour répondre en CITANT les pièces.
-   Moteur d'extraction et réglages : lecture-docs.js (racine du dépôt).
-     POST /api/sami-docs/indexer    -> indexe ce qui manque (tout ou un dossier)
-     GET  /api/sami-docs?dossier=ID -> catalogue des pièces et de leur état
-     POST /api/sami-docs/extraits   -> extraits pertinents pour une question
-     GET  /cron/lecture-docs        -> même indexation, pour GitHub Actions
-   ===================================================================== */
-const lectureDocs = require('./lecture-docs.js');
-
-function idPiece(entree) {
-  const base = entree.fichierPath || ('data_' + (entree.id || ''));
-  return String(base).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 900);
-}
-
-// Les pièces d'une affaire = les entrées du registre-journal munies d'un fichier
-// (nouveau format fichierPath/Supabase, ou ancien format fichierData/base64).
-function piecesDe(affaire) {
-  return (Array.isArray(affaire.rjc) ? affaire.rjc : []).filter(function (e) {
-    return e && (e.fichierPath || e.fichierData);
-  });
-}
-
-async function bufferDePiece(entree) {
-  if (entree.fichierPath && supabaseOk) {
-    let res = await supabase.storage.from(SUPABASE_BUCKET).download(entree.fichierPath);
-    if (res.error) {
-      // seconde chance : les erreurs reseau transitoires existent sur Render gratuit
-      await new Promise(function (r) { setTimeout(r, 500); });
-      res = await supabase.storage.from(SUPABASE_BUCKET).download(entree.fichierPath);
-    }
-    if (res.error) throw res.error;
-    return Buffer.from(await res.data.arrayBuffer());
-  }
-  if (entree.fichierData) {
-    const b64 = String(entree.fichierData).includes(',') ? String(entree.fichierData).split(',')[1] : entree.fichierData;
-    return Buffer.from(b64, 'base64');
-  }
-  throw new Error('pièce sans fichier');
-}
-
-// Indexe ce qui manque. affaireId facultatif (sinon : tous les dossiers actifs).
-// Une pièce déjà indexée n'est JAMAIS re-téléchargée : coût quasi nul quand
-// tout est à jour, donc appelable sans arrière-pensée avant chaque question.
-let lectureEnCours = false;
-async function indexerPieces(affaireId) {
-  if (!firebaseOk) return { ok: false, raison: 'firestore indisponible' };
-  if (lectureEnCours) return { ok: false, raison: 'indexation deja en cours' };
-  lectureEnCours = true;
-  try {
-    const affaires = (await chargerAffaires()).filter(function (a) {
-      if (!a || a.archive) return false;
-      return affaireId ? String(a.id) === String(affaireId) : true;
-    });
-    // ids déjà indexés (lecture des ids seuls, pas des textes)
-    const dejaSnap = await db.collection('sami_docs').select('statut').get();
-    const deja = {};
-    dejaSnap.docs.forEach(function (d) { deja[d.id] = true; });
-
-    let indexes = 0, illisibles = 0, erreurs = 0, existants = 0;
-    const details = []; // premiers messages d'erreur, pour diagnostiquer sans les logs Render
-    for (const a of affaires) {
-      for (const e of piecesDe(a)) {
-        const id = idPiece(e);
-        if (deja[id]) { existants++; continue; }
-        try {
-          const buf = await bufferDePiece(e);
-          const r = await lectureDocs.extraireTexte(buf, e.fichierNom || e.fichierPath || '');
-          await db.collection('sami_docs').doc(id).set({
-            affaireId: String(a.id || ''),
-            nom: e.fichierNom || String(e.fichierPath || '').split('/').pop() || 'document',
-            docRef: e.docRef || '',
-            date: e.date || '',
-            intervenants: e.intervenants || '',
-            statut: r.statut,
-            pages: r.pages || 0,
-            chars: (r.texte || '').length,
-            texte: r.texte || '',
-            maj: new Date().toISOString()
-          });
-          if (r.statut === 'ok') indexes++; else illisibles++;
-        } catch (err) {
-          erreurs++;
-          if (details.length < 5) {
-            // remonter la cause reseau reelle : undici la met dans err.cause,
-            // supabase-js l'enveloppe dans err.originalError
-            var prof = (err && err.originalError) || err || {};
-            var cause = prof.cause ? (prof.cause.code || prof.cause.message || String(prof.cause)) : '';
-            details.push((e.fichierNom || e.fichierPath || '?') + ' : ' + err.message + (cause ? ' [' + String(cause).slice(0, 120) + ']' : ''));
-          }
-          console.error('Lecture pièce impossible (' + (e.fichierNom || e.fichierPath) + '):', err.message);
-        }
-      }
-    }
-    // Battement de coeur Supabase : un appel reel chaque jour via le cron,
-    // meme quand il n'y a rien a indexer. Supabase gratuit met le projet en
-    // PAUSE apres ~1 semaine sans activite (vecu le 20/07/2026 : apercu et
-    // depot de pieces morts en silence). Ceci l'en empeche.
-    if (supabaseOk) {
-      try { await supabase.storage.from(SUPABASE_BUCKET).list('', { limit: 1 }); } catch (e) {}
-    }
-    return { ok: true, indexes, illisibles, erreurs, existants, dossiers: affaires.length, details };
-  } finally {
-    lectureEnCours = false;
-  }
-}
-
-async function docsDuDossier(affaireId, avecTexte) {
-  const snap = await db.collection('sami_docs').where('affaireId', '==', String(affaireId)).get();
-  return snap.docs.map(function (d) {
-    const x = d.data() || {};
-    if (!avecTexte) delete x.texte;
-    return x;
-  });
-}
-
-app.post('/api/sami-docs/indexer', async (req, res) => {
-  try {
-    const r = await indexerPieces((req.body || {}).dossier || null);
-    res.json(r);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get('/api/sami-docs', async (req, res) => {
-  if (!firebaseOk) return res.json({ docs: [] });
-  try {
-    const docs = await docsDuDossier(String(req.query.dossier || ''), false);
-    res.json({ docs: docs, catalogue: lectureDocs.catalogue(docs) });
-  } catch (e) { res.json({ docs: [], erreur: e.message }); }
-});
-
-app.post('/api/sami-docs/extraits', async (req, res) => {
-  if (!firebaseOk) return res.json({ extraits: '', catalogue: '' });
-  try {
-    const b = req.body || {};
-    const docs = await docsDuDossier(String(b.dossier || ''), true);
-    const ext = lectureDocs.extraits(docs, String(b.question || ''), Number(b.budget) || undefined);
-    res.json({ extraits: ext, catalogue: lectureDocs.catalogue(docs), nbPieces: docs.length });
-  } catch (e) { res.json({ extraits: '', catalogue: '', erreur: e.message }); }
-});
-
-// Pour GitHub Actions (pas de mot de passe côté cron) : ne renvoie que des compteurs.
-app.get('/cron/lecture-docs', async (req, res) => {
-  try { res.json(await indexerPieces(null)); }
-  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Fallback
