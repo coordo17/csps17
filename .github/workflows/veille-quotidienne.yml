@@ -9,7 +9,7 @@ name: Veille CSPS17
 
 on:
   schedule:
-    - cron: '0 5 * * 1-5'
+    - cron: '0 5 * * 1'  # lundi uniquement (charge reduite volontairement, le 29/08)
   workflow_dispatch:        # permet de lancer le bulletin a la main depuis l'onglet Actions
 
 jobs:
