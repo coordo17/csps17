@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1F4E79">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<title>CR de terrain — CSPS17</title>
+<style>
+:root{
+  --encre:#16324F;      /* bleu CSPS17 fonce : textes et titres */
+  --bleu:#1F4E79;       /* bleu CSPS17 : barre et boutons secondaires */
+  --fond:#EEF2F6;       /* gris-bleu clair, lisible en plein soleil */
+  --papier:#FFFFFF;
+  --trait:#C7D2DE;
+  --signal:#F2A900;     /* jaune signalisation : action principale */
+  --danger:#C62828;     /* danger grave imminent */
+  --ok:#2E7D32;
+  --gris:#5B6B7C;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:Roboto,"Segoe UI",Arial,sans-serif;background:var(--fond);color:var(--encre);font-size:17px;line-height:1.45;-webkit-tap-highlight-color:transparent}
+header{position:sticky;top:0;z-index:10;background:var(--bleu);color:#fff;display:flex;align-items:center;gap:10px;padding:calc(10px + env(safe-area-inset-top,0px)) 14px 10px;min-height:60px}
+header h1{font-size:19px;font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.retour{background:none;border:0;color:#fff;font-size:26px;width:44px;height:44px;border-radius:8px}
+.retour:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid var(--signal);outline-offset:2px}
+main{max-width:860px;margin:0 auto;padding:14px 14px calc(110px + env(safe-area-inset-bottom,0px))}
+h2{font-size:15px;font-weight:600;color:var(--gris);margin:22px 4px 8px}
+.bloc{background:var(--papier);border:1px solid var(--trait);border-radius:10px;padding:14px;margin-bottom:10px}
+label{display:block;font-size:14px;color:var(--gris);margin:10px 0 4px}
+label:first-child{margin-top:0}
+input,select,textarea{width:100%;font:inherit;color:var(--encre);background:#fff;border:1.5px solid var(--trait);border-radius:8px;padding:11px 12px;min-height:48px}
+textarea{min-height:96px;resize:vertical}
+.deux{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.trois{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+@media (max-width:560px){.deux,.trois{grid-template-columns:1fr}}
+button{font:inherit;cursor:pointer}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:52px;padding:0 18px;border-radius:10px;border:1.5px solid var(--bleu);background:#fff;color:var(--bleu);font-weight:600}
+.btn.plein{background:var(--bleu);color:#fff}
+.btn.principal{background:var(--signal);border-color:var(--signal);color:#1b1b1b}
+.btn.danger{border-color:var(--danger);color:var(--danger)}
+.btn.large{width:100%}
+.ligne{display:flex;gap:10px;flex-wrap:wrap}
+.ligne>.btn{flex:1}
+.carte{display:flex;align-items:center;gap:12px;background:var(--papier);border:1px solid var(--trait);border-radius:10px;padding:14px;margin-bottom:10px;width:100%;text-align:left;color:inherit}
+.carte .t{font-weight:600;font-size:17px}
+.carte .s{color:var(--gris);font-size:14px}
+.carte .grow{flex:1;min-width:0}
+.badge{font-size:13px;font-weight:600;padding:3px 9px;border-radius:20px;white-space:nowrap}
+.badge.brouillon{background:#FFF3CD;color:#7A5A00}
+.badge.fini{background:#E3F1E4;color:var(--ok)}
+.vide{color:var(--gris);text-align:center;padding:26px 10px}
+.types{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.types button{min-height:48px;border-radius:8px;border:1.5px solid var(--trait);background:#fff;color:var(--encre);font-weight:600;font-size:15px}
+.types button[aria-pressed="true"]{background:var(--bleu);border-color:var(--bleu);color:#fff}
+.types button.dgi[aria-pressed="true"]{background:var(--danger);border-color:var(--danger)}
+.obs{border-left:5px solid var(--bleu)}
+.obs.dgi{border-left-color:var(--danger)}
+.obs .entete{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;font-weight:600}
+.vignettes{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.vignettes figure{position:relative}
+.vignettes img{width:96px;height:96px;object-fit:cover;border-radius:8px;border:1px solid var(--trait);display:block}
+.vignettes button{position:absolute;top:-8px;right:-8px;width:30px;height:30px;border-radius:50%;border:0;background:var(--danger);color:#fff;font-weight:700}
+.ent{display:grid;grid-template-columns:auto 1fr 110px;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--fond)}
+.ent:last-child{border-bottom:0}
+.ent input[type=checkbox]{width:28px;height:28px;min-height:0}
+.ent .nom{font-weight:600}
+.ent .lot{font-size:14px;color:var(--gris)}
+.ent input[type=number]{min-height:44px;padding:8px}
+canvas.sig{width:100%;height:170px;border:1.5px dashed var(--gris);border-radius:10px;background:#fff;touch-action:none;display:block}
+.barre-bas{position:fixed;left:0;right:0;bottom:0;z-index:10;background:var(--papier);border-top:1px solid var(--trait);padding:10px 14px calc(10px + env(safe-area-inset-bottom,0px))}
+.barre-bas .ligne{max-width:860px;margin:0 auto}
+.etat{font-size:13px;color:var(--gris);text-align:center;margin-top:4px}
+#toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--encre);color:#fff;padding:12px 18px;border-radius:10px;font-size:15px;max-width:90vw;opacity:0;pointer-events:none;transition:opacity .2s;z-index:50}
+#toast.vu{opacity:1}
+dialog{border:0;border-radius:12px;padding:18px;max-width:520px;width:92vw}
+dialog::backdrop{background:rgba(22,50,79,.45)}
+dialog h3{font-size:18px;margin-bottom:10px}
+.aide{font-size:14px;color:var(--gris);margin-top:6px}
+@media (prefers-reduced-motion:reduce){#toast{transition:none}}
+</style>
+</head>
+<body>
+<header>
+  <button class="retour" id="btn-retour" aria-label="Retour" hidden>‹</button>
+  <h1 id="titre">CR de terrain</h1>
+</header>
+<main id="vue"></main>
+<div id="toast" role="status" aria-live="polite"></div>
+<dialog id="dlg"></dialog>
+
+<script>/*LIB_PIZZIP*/</script>
+<script>/*LIB_DOCXTEMPLATER*/</script>
+<script>/*GEN_VISITE*/</script>
+<script>
+"use strict";
+var MODELE_VISITE_B64 = "/*MODELE_VISITE*/";
+var CSPS = { nom: "Alain SUZANNE — CSPS17" };
+
+/* ================= STOCKAGE (IndexedDB, dans la tablette) ================= */
+var db;
+function ouvrirBase(){
+  return new Promise(function(ok, ko){
+    var r = indexedDB.open("cr-terrain", 1);
+    r.onupgradeneeded = function(){
+      var d = r.result;
+      d.createObjectStore("chantiers", { keyPath: "id" });
+      var c = d.createObjectStore("crs", { keyPath: "id" }); c.createIndex("chantier", "chantierId");
+      d.createObjectStore("docs", { keyPath: "id" });
+    };
+    r.onsuccess = function(){ db = r.result; ok(); };
+    r.onerror = function(){ ko(r.error); };
+  });
+}
+function tx(store, mode, fn){
+  return new Promise(function(ok, ko){
+    var t = db.transaction(store, mode), s = t.objectStore(store), res;
+    var req = fn(s); if (req) req.onsuccess = function(){ res = req.result; };
+    t.oncomplete = function(){ ok(res); }; t.onerror = function(){ ko(t.error); };
+  });
+}
+var lire = function(store, id){ return tx(store, "readonly", function(s){ return s.get(id); }); };
+var tous = function(store){ return tx(store, "readonly", function(s){ return s.getAll(); }); };
+var ecrire = function(store, obj){ return tx(store, "readwrite", function(s){ return s.put(obj); }); };
+var effacer = function(store, id){ return tx(store, "readwrite", function(s){ return s.delete(id); }); };
+function crsDe(chantierId){ return tx("crs", "readonly", function(s){ return s.index("chantier").getAll(chantierId); }); }
+function nouvelId(p){ return p + "-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+/* ================= OUTILS ================= */
+function $(sel, root){ return (root || document).querySelector(sel); }
+function esc(s){ return String(s == null ? "" : s).replace(/[&<>"]/g, function(c){ return { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]; }); }
+function aujourdhui(){ var d = new Date(); return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); }
+function heureNow(){ var d = new Date(); return String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0"); }
+var dateFR = GenVisite.dateFR;
+var tToast;
+function toast(msg){ var t = $("#toast"); t.textContent = msg; t.classList.add("vu"); clearTimeout(tToast); tToast = setTimeout(function(){ t.classList.remove("vu"); }, 3200); }
+function titre(t, retour){
+  $("#titre").textContent = t;
+  var b = $("#btn-retour"); b.hidden = !retour; b.onclick = retour || null;
+  window.scrollTo(0, 0);
+}
+function confirmer(message, libelle){
+  return new Promise(function(ok){
+    var d = $("#dlg");
+    d.innerHTML = "<h3>" + esc(message) + "</h3><div class='ligne' style='margin-top:14px'><button class='btn' value='non'>Annuler</button><button class='btn plein' value='oui'>" + esc(libelle || "Confirmer") + "</button></div>";
+    d.querySelectorAll("button").forEach(function(b){ b.onclick = function(){ d.close(); ok(b.value === "oui"); }; });
+    d.showModal();
+  });
+}
+function b64EnOctets(b64){ var bin = atob(b64), a = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return a; }
+
+// Photo : reduite a 1600 px, JPEG, pour garder la tablette legere
+function lirePhoto(fichier){
+  return new Promise(function(ok, ko){
+    var fr = new FileReader();
+    fr.onload = function(){
+      var img = new Image();
+      img.onload = function(){
+        var max = 1600, w = img.width, h = img.height;
+        if (w > max || h > max){ if (w >= h){ h = Math.round(h * max / w); w = max; } else { w = Math.round(w * max / h); h = max; } }
+        var c = document.createElement("canvas"); c.width = w; c.height = h;
+        c.getContext("2d").drawImage(img, 0, 0, w, h);
+        ok({ url: c.toDataURL("image/jpeg", 0.78), w: w, h: h });
+      };
+      img.onerror = function(){ ko(new Error("Image illisible")); };
+      img.src = fr.result;
+    };
+    fr.onerror = function(){ ko(fr.error); };
+    fr.readAsDataURL(fichier);
+  });
+}
+
+/* ================= ECRAN 1 : CHANTIERS ================= */
+async function ecranAccueil(){
+  titre("CR de terrain", null);
+  var liste = (await tous("chantiers")).sort(function(a, b){ return (b.maj || "").localeCompare(a.maj || ""); });
+  var h = "<h2>Chantiers</h2>";
+  if (!liste.length) h += "<div class='bloc vide'>Aucun chantier sur cette tablette. Créez-en un pour commencer un compte rendu.</div>";
+  liste.forEach(function(c){
+    h += "<button class='carte' data-id='" + esc(c.id) + "'><div class='grow'><div class='t'>" + esc(c.nom || "Sans nom") + "</div><div class='s'>" + esc(c.adresse || "") + "</div></div><span aria-hidden='true'>›</span></button>";
+  });
+  h += "<div class='ligne' style='margin-top:14px'><button class='btn principal' id='nv'>Nouveau chantier</button></div>";
+  h += "<h2>Sauvegarde</h2><div class='bloc'><p class='aide' style='margin-top:0'>Les données restent sur cette tablette. Exportez-les régulièrement vers votre PC (en cas de perte ou de changement de tablette).</p>"
+    + "<div class='ligne' style='margin-top:10px'><button class='btn' id='exp'>Exporter la sauvegarde</button><button class='btn' id='imp'>Restaurer une sauvegarde</button></div>"
+    + "<input type='file' id='imp-f' accept='.json,application/json' hidden></div>";
+  $("#vue").innerHTML = h;
+  document.querySelectorAll(".carte").forEach(function(b){ b.onclick = function(){ ecranChantier(b.dataset.id); }; });
+  $("#nv").onclick = function(){ ecranFicheChantier(null); };
+  $("#exp").onclick = exporter;
+  $("#imp").onclick = function(){ $("#imp-f").click(); };
+  $("#imp-f").onchange = function(){ if (this.files[0]) restaurer(this.files[0]); };
+}
+
+/* ================= ECRAN 2 : FICHE CHANTIER (creation / modification) ================= */
+async function ecranFicheChantier(id){
+  var c = id ? await lire("chantiers", id) : { id: nouvelId("ch"), nom: "", adresse: "", nature: "", moa: "", cat: "", refPgc: "", entreprises: [] };
+  titre(id ? "Modifier le chantier" : "Nouveau chantier", function(){ id ? ecranChantier(id) : ecranAccueil(); });
+  var ents = (c.entreprises || []).slice();
+  function rendreEnts(){
+    $("#ents").innerHTML = ents.length ? ents.map(function(e, i){
+      return "<div class='bloc' style='background:var(--fond)'><div class='deux'><div><label>Raison sociale</label><input data-i='" + i + "' data-k='nom' value='" + esc(e.nom) + "'></div>"
+        + "<div><label>Lot</label><input data-i='" + i + "' data-k='lot' value='" + esc(e.lot) + "'></div></div>"
+        + "<div class='trois'><div><label>Statut</label><select data-i='" + i + "' data-k='type'>" + ["EE","ST","Prestataire"].map(function(t){ return "<option" + (e.type === t ? " selected" : "") + " value='" + t + "'>" + (t === "EE" ? "Entreprise (EE)" : t === "ST" ? "Sous-traitant" : "Prestataire") + "</option>"; }).join("") + "</select></div>"
+        + "<div><label>Représentant sur chantier</label><input data-i='" + i + "' data-k='contact' value='" + esc(e.contact) + "'></div>"
+        + "<div><label>Téléphone</label><input type='tel' data-i='" + i + "' data-k='tel' value='" + esc(e.tel) + "'></div></div>"
+        + "<button class='btn danger' style='margin-top:10px' data-suppr='" + i + "'>Retirer cette entreprise</button></div>";
+    }).join("") : "<p class='aide'>Aucune entreprise. Elles pourront aussi être ajoutées pendant une visite.</p>";
+    $("#ents").querySelectorAll("[data-k]").forEach(function(el){ el.oninput = el.onchange = function(){ ents[el.dataset.i][el.dataset.k] = el.value; }; });
+    $("#ents").querySelectorAll("[data-suppr]").forEach(function(b){ b.onclick = function(){ ents.splice(+b.dataset.suppr, 1); rendreEnts(); }; });
+  }
+  $("#vue").innerHTML = "<h2>Opération</h2><div class='bloc'>"
+    + "<label for='f-nom'>Désignation du chantier</label><input id='f-nom' value='" + esc(c.nom) + "' placeholder='Ex : Chausson Matériaux Plonéour'>"
+    + "<label for='f-adr'>Adresse</label><input id='f-adr' value='" + esc(c.adresse) + "'>"
+    + "<label for='f-nat'>Nature des travaux</label><input id='f-nat' value='" + esc(c.nature) + "'>"
+    + "<div class='trois'><div><label for='f-moa'>Maître d'ouvrage</label><input id='f-moa' value='" + esc(c.moa) + "'></div>"
+    + "<div><label for='f-cat'>Catégorie</label><select id='f-cat'><option value=''>—</option>" + [1,2,3].map(function(n){ return "<option" + (String(c.cat) === String(n) ? " selected" : "") + ">" + n + "</option>"; }).join("") + "</select></div>"
+    + "<div><label for='f-pgc'>Réf. du PGC</label><input id='f-pgc' value='" + esc(c.refPgc) + "' placeholder='Ex : indice 00'></div></div></div>"
+    + "<h2>Entreprises</h2><div id='ents'></div><button class='btn large' id='add-ent'>Ajouter une entreprise</button>"
+    + "<div class='barre-bas'><div class='ligne'><button class='btn principal' id='save'>Enregistrer le chantier</button></div></div>";
+  rendreEnts();
+  $("#add-ent").onclick = function(){ ents.push({ nom: "", lot: "", type: "EE", contact: "", tel: "" }); rendreEnts(); };
+  $("#save").onclick = async function(){
+    c.nom = $("#f-nom").value.trim(); c.adresse = $("#f-adr").value.trim(); c.nature = $("#f-nat").value.trim();
+    c.moa = $("#f-moa").value.trim(); c.cat = $("#f-cat").value; c.refPgc = $("#f-pgc").value.trim();
+    c.entreprises = ents.filter(function(e){ return (e.nom || "").trim(); });
+    if (!c.nom){ toast("Indiquez au moins la désignation du chantier."); $("#f-nom").focus(); return; }
+    c.maj = new Date().toISOString();
+    await ecrire("chantiers", c); toast("Chantier enregistré."); ecranChantier(c.id);
+  };
+}
+
+/* ================= ECRAN 3 : UN CHANTIER ET SES CR ================= */
+async function ecranChantier(id){
+  var c = await lire("chantiers", id); if (!c) return ecranAccueil();
+  titre(c.nom, ecranAccueil);
+  var crs = (await crsDe(id)).sort(function(a, b){ return (b.date + (b.heure || "")).localeCompare(a.date + (a.heure || "")); });
+  var h = "<div class='bloc'><div class='t' style='font-weight:600'>" + esc(c.nom) + "</div><div class='s aide' style='margin-top:2px'>" + esc([c.adresse, c.moa ? "MOA : " + c.moa : "", c.cat ? "Catégorie " + c.cat : ""].filter(Boolean).join(" — ")) + "</div>"
+    + "<div class='ligne' style='margin-top:10px'><button class='btn' id='modif'>Modifier le chantier</button></div></div>";
+  h += "<div class='ligne' style='margin:14px 0 4px'><button class='btn principal' id='nv-vis'>Nouveau CR de visite</button></div>";
+  h += "<h2>Comptes rendus</h2>";
+  if (!crs.length) h += "<div class='bloc vide'>Aucun compte rendu pour ce chantier.</div>";
+  crs.forEach(function(r){
+    h += "<button class='carte' data-id='" + esc(r.id) + "'><div class='grow'><div class='t'>CR de visite n° " + esc(r.no) + "</div><div class='s'>" + esc(dateFR(r.date)) + (r.heure ? " à " + esc(r.heure) : "") + " — " + ((r.observations || []).length) + " observation(s)</div></div>"
+      + "<span class='badge " + (r.statut === "fini" ? "fini" : "brouillon") + "'>" + (r.statut === "fini" ? "Terminé" : "Brouillon") + "</span></button>";
+  });
+  $("#vue").innerHTML = h;
+  $("#modif").onclick = function(){ ecranFicheChantier(id); };
+  $("#nv-vis").onclick = async function(){
+    var existants = await crsDe(id);
+    var annee = new Date().getFullYear();
+    var no = existants.reduce(function(m, r){ return Math.max(m, +r.no || 0); }, 0) + 1;
+    var r = { id: nouvelId("cr"), chantierId: id, type: "VIS", statut: "brouillon", no: no,
+      ref: "CSPS17/VIS/" + annee + "-" + String(no).padStart(3, "0"), date: aujourdhui(), heure: heureNow(),
+      meteo: "", phase: "", avancement: "", prochaine: "",
+      entreprises: (c.entreprises || []).map(function(e){ return { nom: e.nom, lot: e.lot, type: e.type, contact: e.contact, present: false, effectif: "" }; }),
+      observations: [], signatureCsps: null };
+    await ecrire("crs", r); ecranVisite(r.id);
+  };
+  document.querySelectorAll(".carte").forEach(function(b){ b.onclick = function(){ ecranCR(b.dataset.id); }; });
+}
+
+async function ecranCR(crId){
+  var r = await lire("crs", crId); if (!r) return;
+  if (r.statut !== "fini") return ecranVisite(crId);
+  var c = await lire("chantiers", r.chantierId);
+  titre("CR de visite n° " + r.no, function(){ ecranChantier(r.chantierId); });
+  $("#vue").innerHTML = "<div class='bloc'><div style='font-weight:600'>" + esc(c.nom) + "</div><div class='aide'>Visite du " + esc(dateFR(r.date)) + " à " + esc(r.heure || "") + " — " + esc(r.ref) + "</div></div>"
+    + "<div class='ligne'><button class='btn principal' id='share'>Partager le Word</button><button class='btn' id='dl'>Télécharger</button></div>"
+    + "<h2>Correction</h2><div class='bloc'><p class='aide' style='margin-top:0'>Rouvrir le compte rendu pour le corriger. Il faudra le signer et le terminer à nouveau.</p><div class='ligne' style='margin-top:10px'><button class='btn' id='rouvrir'>Rouvrir en brouillon</button><button class='btn danger' id='suppr'>Supprimer</button></div></div>";
+  $("#share").onclick = function(){ partagerDoc(r, c, true); };
+  $("#dl").onclick = function(){ partagerDoc(r, c, false); };
+  $("#rouvrir").onclick = async function(){ r.statut = "brouillon"; r.signatureCsps = null; await ecrire("crs", r); await effacer("docs", r.id); ecranVisite(r.id); };
+  $("#suppr").onclick = async function(){
+    if (!(await confirmer("Supprimer définitivement ce compte rendu de la tablette ?", "Supprimer"))) return;
+    await effacer("crs", r.id); await effacer("docs", r.id); toast("Compte rendu supprimé."); ecranChantier(r.chantierId);
+  };
+}
+
+/* ================= ECRAN 4 : SAISIE DU CR DE VISITE ================= */
+async function ecranVisite(crId){
+  var r = await lire("crs", crId); var c = await lire("chantiers", r.chantierId);
+  titre("CR de visite n° " + r.no, function(){ ecranChantier(r.chantierId); });
+  var tSave;
+  function sauver(immediat){
+    clearTimeout(tSave);
+    var go = function(){ return ecrire("crs", r).then(function(){ var e = $("#etat"); if (e) e.textContent = "Brouillon enregistré à " + heureNow(); }); };
+    if (immediat) return go();
+    tSave = setTimeout(go, 600);
+  }
+  var champ = function(id, lab, val, type, ph){
+    return "<div><label for='" + id + "'>" + lab + "</label><input id='" + id + "' type='" + (type || "text") + "' value='" + esc(val) + "'" + (ph ? " placeholder='" + esc(ph) + "'" : "") + "></div>";
+  };
+  $("#vue").innerHTML = "<h2>Visite</h2><div class='bloc'>"
+    + "<div class='trois'>" + champ("v-date", "Date", r.date, "date") + champ("v-heure", "Heure", r.heure, "time") + champ("v-no", "N° de visite", r.no, "number") + "</div>"
+    + "<div class='deux'>" + champ("v-meteo", "Conditions météo", r.meteo, "text", "Ex : ensoleillé, vent faible") + champ("v-av", "Avancement global estimé", r.avancement, "text", "Ex : 35 %") + "</div>"
+    + champ("v-phase", "Phase / travaux en cours", r.phase, "text", "Ex : gros œuvre, élévation des murs")
+    + champ("v-proch", "Prochaine intervention prévue", r.prochaine, "text", "Facultatif")
+    + "</div>"
+    + "<h2>Entreprises présentes</h2><div class='bloc' id='ents'></div>"
+    + "<div class='ligne'><button class='btn' id='add-ent'>Ajouter une entreprise présente</button></div>"
+    + "<h2>Observations</h2><div id='obs'></div>"
+    + "<div class='ligne'><button class='btn plein' id='add-obs'>Ajouter une observation</button></div>"
+    + "<h2>Signature du coordonnateur</h2><div class='bloc'><canvas class='sig' id='sig'></canvas>"
+    + "<div class='ligne' style='margin-top:10px'><button class='btn' id='sig-eff'>Effacer la signature</button></div></div>"
+    + "<div class='ligne' style='margin-top:18px'><button class='btn danger' id='suppr'>Supprimer ce brouillon</button></div>"
+    + "<div class='barre-bas'><div class='ligne'><button class='btn principal' id='fin'>Terminer et créer le Word</button></div><div class='etat' id='etat'>Brouillon enregistré automatiquement</div></div>";
+
+  [["v-date","date"],["v-heure","heure"],["v-no","no"],["v-meteo","meteo"],["v-av","avancement"],["v-phase","phase"],["v-proch","prochaine"]].forEach(function(p){
+    $("#" + p[0]).oninput = function(){ r[p[1]] = this.value; sauver(); };
+  });
+
+  function rendreEnts(){
+    var box = $("#ents");
+    if (!r.entreprises.length){ box.innerHTML = "<p class='aide' style='margin:0'>Aucune entreprise enregistrée pour ce chantier.</p>"; return; }
+    box.innerHTML = r.entreprises.map(function(e, i){
+      return "<div class='ent'><input type='checkbox' aria-label='Présente' data-i='" + i + "' data-k='present'" + (e.present ? " checked" : "") + ">"
+        + "<div><div class='nom'>" + esc(e.nom) + "</div><div class='lot'>" + esc([e.lot, e.type === "ST" ? "sous-traitant" : e.type === "Prestataire" ? "prestataire" : ""].filter(Boolean).join(" — ")) + "</div></div>"
+        + "<input type='number' min='0' inputmode='numeric' placeholder='Effectif' aria-label='Effectif ce jour' data-i='" + i + "' data-k='effectif' value='" + esc(e.effectif) + "'></div>";
+    }).join("");
+    box.querySelectorAll("[data-k]").forEach(function(el){
+      el.onchange = el.oninput = function(){ var e = r.entreprises[el.dataset.i]; e[el.dataset.k] = el.type === "checkbox" ? el.checked : el.value; if (el.dataset.k === "effectif" && el.value) { e.present = true; rendreEnts(); } sauver(); };
+    });
+  }
+  $("#add-ent").onclick = function(){
+    var d = $("#dlg");
+    d.innerHTML = "<h3>Entreprise présente</h3><label for='ne-nom'>Raison sociale</label><input id='ne-nom'><label for='ne-lot'>Lot / travaux</label><input id='ne-lot'>"
+      + "<label for='ne-type'>Statut</label><select id='ne-type'><option value='EE'>Entreprise (EE)</option><option value='ST'>Sous-traitant</option><option value='Prestataire'>Prestataire</option></select>"
+      + "<label for='ne-contact'>Représentant présent</label><input id='ne-contact'>"
+      + "<label style='display:flex;gap:10px;align-items:center;margin-top:12px'><input type='checkbox' id='ne-keep' style='width:26px;min-height:0' checked> L'ajouter aussi à la fiche du chantier</label>"
+      + "<div class='ligne' style='margin-top:14px'><button class='btn' id='ne-no'>Annuler</button><button class='btn plein' id='ne-ok'>Ajouter</button></div>";
+    d.showModal();
+    $("#ne-no").onclick = function(){ d.close(); };
+    $("#ne-ok").onclick = async function(){
+      var e = { nom: $("#ne-nom").value.trim(), lot: $("#ne-lot").value.trim(), type: $("#ne-type").value, contact: $("#ne-contact").value.trim() };
+      if (!e.nom){ $("#ne-nom").focus(); return; }
+      d.close();
+      r.entreprises.push({ nom: e.nom, lot: e.lot, type: e.type, contact: e.contact, present: true, effectif: "" });
+      if ($("#ne-keep").checked){ c.entreprises = (c.entreprises || []).concat([{ nom: e.nom, lot: e.lot, type: e.type, contact: e.contact, tel: "" }]); c.maj = new Date().toISOString(); await ecrire("chantiers", c); }
+      rendreEnts(); sauver();
+    };
+  };
+
+  function rendreObs(){
+    var box = $("#obs");
+    if (!r.observations.length){ box.innerHTML = "<div class='bloc vide'>Aucune observation. Sans observation, le compte rendu l'indiquera.</div>"; return; }
+    var responsables = r.entreprises.map(function(e){ return e.nom; });
+    box.innerHTML = r.observations.map(function(o, i){
+      return "<div class='bloc obs" + (o.type === "dgi" ? " dgi" : "") + "'><div class='entete'><span>Observation " + (i + 1) + "</span><button class='btn danger' style='min-height:40px' data-suppr='" + i + "'>Retirer</button></div>"
+        + "<div class='types' role='group' aria-label='Nature'>"
+        + [["obs","Observation"],["notif","Notification"],["dgi","Danger grave"]].map(function(t){ return "<button class='" + t[0] + "' data-i='" + i + "' data-type='" + t[0] + "' aria-pressed='" + (o.type === t[0]) + "'>" + t[1] + "</button>"; }).join("") + "</div>"
+        + "<label>Description</label><textarea data-i='" + i + "' data-k='description' placeholder='Constat précis : lieu, situation, risque'>" + esc(o.description) + "</textarea>"
+        + "<div class='deux'><div><label>Délai</label><input data-i='" + i + "' data-k='delai' value='" + esc(o.delai) + "' placeholder='Ex : immédiat, 48 h'></div>"
+        + "<div><label>Responsable</label><input data-i='" + i + "' data-k='responsable' list='liste-resp' value='" + esc(o.responsable) + "' placeholder='Entreprise concernée'></div></div>"
+        + "<label>Photos</label><div class='vignettes'>" + (o.photos || []).map(function(p, j){ return "<figure><img src='" + p.url + "' alt='Photo " + (j + 1) + "'><button aria-label='Retirer la photo' data-i='" + i + "' data-rph='" + j + "'>×</button></figure>"; }).join("") + "</div>"
+        + "<div class='ligne' style='margin-top:10px'><button class='btn' data-photo='" + i + "' data-cam='1'>Prendre une photo</button><button class='btn' data-photo='" + i + "'>Choisir dans la galerie</button></div></div>";
+    }).join("") + "<datalist id='liste-resp'>" + responsables.map(function(n){ return "<option value='" + esc(n) + "'>"; }).join("") + "</datalist>";
+    box.querySelectorAll("[data-k]").forEach(function(el){ el.oninput = function(){ r.observations[el.dataset.i][el.dataset.k] = el.value; sauver(); }; });
+    box.querySelectorAll("[data-type]").forEach(function(b){ b.onclick = function(){ r.observations[b.dataset.i].type = b.dataset.type; sauver(); rendreObs(); }; });
+    box.querySelectorAll("[data-suppr]").forEach(function(b){ b.onclick = async function(){ if (await confirmer("Retirer l'observation " + (+b.dataset.suppr + 1) + " ?", "Retirer")){ r.observations.splice(+b.dataset.suppr, 1); sauver(); rendreObs(); } }; });
+    box.querySelectorAll("[data-rph]").forEach(function(b){ b.onclick = function(){ r.observations[b.dataset.i].photos.splice(+b.dataset.rph, 1); sauver(); rendreObs(); }; });
+    box.querySelectorAll("[data-photo]").forEach(function(b){ b.onclick = function(){
+      var inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/*";
+      if (b.dataset.cam) inp.setAttribute("capture", "environment"); else inp.multiple = true;
+      inp.onchange = async function(){
+        var o = r.observations[b.dataset.photo]; o.photos = o.photos || [];
+        for (var k = 0; k < inp.files.length; k++){ try { o.photos.push(await lirePhoto(inp.files[k])); } catch (e){ toast(e.message); } }
+        await sauver(true); rendreObs();
+      };
+      inp.click();
+    }; });
+  }
+  $("#add-obs").onclick = function(){ r.observations.push({ type: "obs", description: "", delai: "", responsable: "", photos: [] }); sauver(); rendreObs(); var l = document.querySelectorAll(".obs"); if (l.length) l[l.length - 1].scrollIntoView({ behavior: "smooth", block: "start" }); };
+
+  // Signature
+  var cv = $("#sig"), ctx2 = cv.getContext("2d"), trace = false;
+  function dimensionner(){
+    var ratio = window.devicePixelRatio || 1, rect = cv.getBoundingClientRect();
+    cv.width = rect.width * ratio; cv.height = rect.height * ratio; ctx2.scale(ratio, ratio);
+    ctx2.lineWidth = 2.6; ctx2.lineCap = "round"; ctx2.lineJoin = "round"; ctx2.strokeStyle = "#16324F";
+    if (r.signatureCsps){ var im = new Image(); im.onload = function(){ ctx2.drawImage(im, 0, 0, rect.width, rect.height); }; im.src = r.signatureCsps; }
+  }
+  function pos(e){ var rect = cv.getBoundingClientRect(); return [e.clientX - rect.left, e.clientY - rect.top]; }
+  cv.onpointerdown = function(e){ trace = true; cv.setPointerCapture(e.pointerId); var p = pos(e); ctx2.beginPath(); ctx2.moveTo(p[0], p[1]); };
+  cv.onpointermove = function(e){ if (!trace) return; var p = pos(e); ctx2.lineTo(p[0], p[1]); ctx2.stroke(); };
+  cv.onpointerup = cv.onpointercancel = function(){ if (!trace) return; trace = false; r.signatureCsps = cv.toDataURL("image/png"); sauver(); };
+  $("#sig-eff").onclick = function(){ ctx2.clearRect(0, 0, cv.width, cv.height); r.signatureCsps = null; sauver(); };
+
+  $("#suppr").onclick = async function(){
+    if (!(await confirmer("Supprimer ce brouillon ?", "Supprimer"))) return;
+    await effacer("crs", r.id); ecranChantier(r.chantierId);
+  };
+  $("#fin").onclick = async function(){
+    var manque = [];
+    if (!r.date) manque.push("la date");
+    if (!r.signatureCsps) manque.push("votre signature");
+    r.observations.forEach(function(o, i){ if (!(o.description || "").trim()) manque.push("la description de l'observation " + (i + 1)); });
+    if (manque.length){ toast("Il manque " + manque.join(", ") + "."); return; }
+    await sauver(true);
+    try {
+      await creerWord(r, c);
+      r.statut = "fini"; r.termineLe = new Date().toISOString(); await ecrire("crs", r);
+      toast("Compte rendu terminé.");
+      ecranCR(r.id);
+    } catch (e){ toast("Le Word n'a pas pu être créé : " + (e.message || e)); console.error(e); }
+  };
+
+  rendreEnts(); rendreObs();
+  requestAnimationFrame(dimensionner);
+}
+
+async function creerWord(r, c){
+  var zip = GenVisite.genererCRVisite(b64EnOctets(MODELE_VISITE_B64), c, crPourWord(r), PizZip, window.docxtemplater || window.Docxtemplater);
+  var blob = zip.generate({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+  var d = { id: r.id, blob: blob, nom: nomFichier(r, c) };
+  await ecrire("docs", d);
+  return d;
+}
+// Les entreprises cochees presentes (ou avec un effectif) vont au Word
+function crPourWord(r){
+  var o = JSON.parse(JSON.stringify(r));
+  o.entreprises = (r.entreprises || []).filter(function(e){ return e.present; });
+  return o;
+}
+function nomFichier(r, c){
+  var n = String(c.nom || "chantier").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 40);
+  return "CR_visite_" + String(r.no).padStart(2, "0") + "_" + n + "_" + (r.date || "").replace(/-/g, "") + ".docx";
+}
+
+/* ================= PARTAGE / TELECHARGEMENT ================= */
+async function partagerDoc(r, c, partager){
+  var d = await lire("docs", r.id);
+  if (!d){ try { d = await creerWord(r, c); } catch (e){ toast("Le Word n'a pas pu être recréé : " + (e.message || e)); return; } }
+  var f = new File([d.blob], d.nom, { type: d.blob.type });
+  if (partager && navigator.canShare && navigator.canShare({ files: [f] })){
+    try { await navigator.share({ files: [f], title: d.nom, text: "CR de visite n° " + r.no + " — " + c.nom + " — " + dateFR(r.date) }); return; }
+    catch (e){ if (e.name === "AbortError") return; }
+  }
+  var url = URL.createObjectURL(d.blob), a = document.createElement("a");
+  a.href = url; a.download = d.nom; document.body.appendChild(a); a.click();
+  setTimeout(function(){ a.remove(); URL.revokeObjectURL(url); }, 2000);
+  if (partager) toast("Partage indisponible ici : le fichier a été téléchargé.");
+}
+
+/* ================= SAUVEGARDE ================= */
+async function exporter(){
+  var data = { format: "cr-terrain", version: 1, exporteLe: new Date().toISOString(), chantiers: await tous("chantiers"), crs: await tous("crs") };
+  var blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+  var nom = "CR_terrain_sauvegarde_" + aujourdhui().replace(/-/g, "") + ".json";
+  var f = new File([blob], nom, { type: "application/json" });
+  if (navigator.canShare && navigator.canShare({ files: [f] })){ try { await navigator.share({ files: [f], title: nom }); return; } catch (e){ if (e.name === "AbortError") return; } }
+  var url = URL.createObjectURL(blob), a = document.createElement("a"); a.href = url; a.download = nom; document.body.appendChild(a); a.click(); setTimeout(function(){ a.remove(); URL.revokeObjectURL(url); }, 2000);
+}
+async function restaurer(fichier){
+  try {
+    var data = JSON.parse(await fichier.text());
+    if (data.format !== "cr-terrain") throw new Error("ce fichier n'est pas une sauvegarde de CR de terrain");
+    var nC = 0, nR = 0;
+    for (var i = 0; i < (data.chantiers || []).length; i++){ var c = data.chantiers[i], l = await lire("chantiers", c.id); if (!l || (c.maj || "") >= (l.maj || "")){ await ecrire("chantiers", c); nC++; } }
+    for (var j = 0; j < (data.crs || []).length; j++){ var r = data.crs[j]; if (!(await lire("crs", r.id))){ await ecrire("crs", r); nR++; } }
+    toast("Restauré : " + nC + " chantier(s), " + nR + " compte(s) rendu(s).");
+    ecranAccueil();
+  } catch (e){ toast("Restauration impossible : " + e.message); }
+}
+
+/* ================= DEMARRAGE ================= */
+ouvrirBase().then(function(){
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
+  ecranAccueil();
+}).catch(function(e){ $("#vue").innerHTML = "<div class='bloc'>Stockage indisponible sur ce navigateur : " + esc(e.message) + "</div>"; });
+if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js");
+</script>
+</body>
+</html>
