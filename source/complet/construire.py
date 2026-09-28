@@ -148,7 +148,35 @@ async function crVisiteV3(data, ta){
     signatureCsps: (typeof sigData !== 'undefined' && sigData) ? sigData.csps : null };
   return GenVisite.genererCRVisite(modele, chantier, cr, PizZip, window.docxtemplater || window.Docxtemplater);
 }""")
+# 9d. bouton "Mettre a jour" (remplace Ctrl+Maj+R, utile sur la tablette)
+rep('<button class="btn btn-outline btn-sm" onclick="ouvrirSauvegardes()"', '<button class="btn btn-outline btn-sm" onclick="mettreAJourAppli()" title="Charger la derniere version de l\'application">&#8635; Mettre \u00e0 jour</button>\n    <button class="btn btn-outline btn-sm" onclick="ouvrirSauvegardes()"')
+rep("async function genTerrainDoc(ref) { ouvrirFormulaireDoc(ref); }", r"""async function genTerrainDoc(ref) { ouvrirFormulaireDoc(ref); }
+
+// Mettre a jour : vide les copies gardees de complet/ (page, scripts, modeles Word)
+// puis recharge depuis GitHub. Les affaires et fichiers du registre ne sont pas touches.
+async function mettreAJourAppli(){
+  showToast('Mise \u00e0 jour en cours...');
+  try {
+    if ('caches' in window) {
+      var noms = await caches.keys();
+      for (var i = 0; i < noms.length; i++) {
+        var c = await caches.open(noms[i]), reqs = await c.keys();
+        for (var j = 0; j < reqs.length; j++) if (reqs[j].url.indexOf('/complet/') !== -1) await c.delete(reqs[j]);
+      }
+    }
+    var fichiers = ['index.html', 'local-api.js', 'gen-visite.js', 'lib/pizzip.js', 'lib/docxtemplater.js'];
+    Object.keys(DOC_FILES).forEach(function(k){ fichiers.push('modeles/' + DOC_FILES[k]); });
+    fichiers.push('modeles/CR_Visite_Chantier_CSPS17_v3.docx');
+    await Promise.all(fichiers.map(function(f){ return fetch(f, { cache: 'reload' }).catch(function(){}); }));
+    if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+      var regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(function(r){ return r.update().catch(function(){}); }));
+    }
+  } catch (e) {}
+  location.reload();
+}""")
 # 10. version
-s = re.sub(r'v2\.46 &middot; build [^<]*', 'v3.0 &middot; sans serveur', s, count=1)
+import datetime
+s = re.sub(r'v2\.46 &middot; build [^<]*', 'v3.0 &middot; ' + datetime.datetime.now(__import__('zoneinfo').ZoneInfo('Europe/Paris')).strftime('%d/%m %H:%M'), s, count=1)
 open(sys.argv[2], 'w', encoding='utf-8', newline='\n').write(s)
 print('ok', len(s))

@@ -645,12 +645,13 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v3.0 &middot; sans serveur</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v3.0 &middot; 28/09 23:22</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
     <button class="btn btn-outline btn-sm" id="btn-import-pgc" style="display:none" onclick="showPage('import')">&#128229; Importer PGC</button>
     <button class="btn btn-outline btn-sm" onclick="showPage('terrain');setTimeout(populateTerrainSelect,100);" style="background:#e8f5e9;color:#2e7d52;border-color:#2e7d52;">&#128241; Terrain</button>
+    <button class="btn btn-outline btn-sm" onclick="mettreAJourAppli()" title="Charger la derniere version de l'application">&#8635; Mettre à jour</button>
     <button class="btn btn-outline btn-sm" onclick="ouvrirSauvegardes()" title="Exporter / importer une sauvegarde de toutes vos affaires">&#128190; Sauvegardes</button>
     <span id="sync-indic" onclick="resyncMaintenant()" title="Etat de la sauvegarde serveur" style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 9px;border-radius:12px;cursor:pointer;background:#eee;color:#666;"><span id="sync-dot" style="width:9px;height:9px;border-radius:50%;background:#999;"></span><span id="sync-txt">—</span></span>
   </div>
@@ -7931,6 +7932,30 @@ async function genererDocTerrain() {
 }
 
 async function genTerrainDoc(ref) { ouvrirFormulaireDoc(ref); }
+
+// Mettre a jour : vide les copies gardees de complet/ (page, scripts, modeles Word)
+// puis recharge depuis GitHub. Les affaires et fichiers du registre ne sont pas touches.
+async function mettreAJourAppli(){
+  showToast('Mise \u00e0 jour en cours...');
+  try {
+    if ('caches' in window) {
+      var noms = await caches.keys();
+      for (var i = 0; i < noms.length; i++) {
+        var c = await caches.open(noms[i]), reqs = await c.keys();
+        for (var j = 0; j < reqs.length; j++) if (reqs[j].url.indexOf('/complet/') !== -1) await c.delete(reqs[j]);
+      }
+    }
+    var fichiers = ['index.html', 'local-api.js', 'gen-visite.js', 'lib/pizzip.js', 'lib/docxtemplater.js'];
+    Object.keys(DOC_FILES).forEach(function(k){ fichiers.push('modeles/' + DOC_FILES[k]); });
+    fichiers.push('modeles/CR_Visite_Chantier_CSPS17_v3.docx');
+    await Promise.all(fichiers.map(function(f){ return fetch(f, { cache: 'reload' }).catch(function(){}); }));
+    if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+      var regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(function(r){ return r.update().catch(function(){}); }));
+    }
+  } catch (e) {}
+  location.reload();
+}
 
 // CR de visite v3 (modele corrige et valide le 28/09) a partir de la saisie terrain
 function dimensionsPhoto(url){
