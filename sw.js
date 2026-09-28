@@ -1,6 +1,6 @@
 // Fonctionnement hors reseau : la page et ses fichiers sont gardes en cache.
 // Changer VERSION a chaque mise a jour publiee pour que la tablette la recupere.
-const VERSION = 'cr-terrain-v1';
+const VERSION = '2026-09-28-enregistrer';
 const FICHIERS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(FICHIERS))); self.skipWaiting(); });
 self.addEventListener('activate', e => {
