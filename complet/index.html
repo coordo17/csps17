@@ -16,6 +16,7 @@
 <script src="lib/pizzip.js"></script>
 <script src="lib/docxtemplater.js"></script>
 <script src="local-api.js"></script>
+<script src="gen-visite.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mammoth@1.7.2/mammoth.browser.min.js"></script>
 <style>
   :root {
@@ -5317,6 +5318,9 @@ async function generateDoc(ref, previewMode) {
     }
     // Nettoyer les lignes vides (apres injection photos)
     finalZip = nettoyerDocx(finalZip, data);
+    if (ref === 'VIS' && window.GenVisite && typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire._visite) {
+      finalZip = await crVisiteV3(data, terrainAffaire);
+    }
     var out = finalZip.generate({
       type: 'blob',
       mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -7927,6 +7931,26 @@ async function genererDocTerrain() {
 }
 
 async function genTerrainDoc(ref) { ouvrirFormulaireDoc(ref); }
+
+// CR de visite v3 (modele corrige et valide le 28/09) a partir de la saisie terrain
+function dimensionsPhoto(url){
+  return new Promise(function(ok){ var im = new Image(); im.onload = function(){ ok({ w: im.naturalWidth, h: im.naturalHeight }); }; im.onerror = function(){ ok({ w: 4, h: 3 }); }; im.src = url; });
+}
+async function crVisiteV3(data, ta){
+  var r = await fetch('modeles/CR_Visite_Chantier_CSPS17_v3.docx');
+  if (!r.ok) throw new Error('Modele CR de visite v3 introuvable');
+  var modele = new Uint8Array(await r.arrayBuffer());
+  var v = ta._visite || {}, c = data.chantier || {}, tags = buildTagData(data);
+  var no = parseInt(v.noVisite, 10) || 1, annee = (v.date || '').slice(0, 4) || String(new Date().getFullYear());
+  var photos = [], lp = ta._photos || [], lg = ta._photosLegendes || [];
+  for (var i = 0; i < lp.length; i++){ var d = await dimensionsPhoto(lp[i]); photos.push({ url: lp[i], w: d.w, h: d.h, legende: lg[i] || '' }); }
+  var chantier = { nom: c.nom, adresse: c.adresse, nature: c.nature, moa: (data.moa || {}).nom, cat: data.cat, refPgc: tags.ref_pgc || '' };
+  var cr = { date: v.date, heure: v.heure, no: no, ref: 'CSPS17/VIS/' + annee + '-' + String(no).padStart(3, '0'),
+    meteo: v.meteo, phase: v.phase || '', avancement: v.avancement, prochaine: v.prochaine || '',
+    entreprises: ta._entreprisesPresentes || [], observations: ta._observations || [], photos: photos,
+    signatureCsps: (typeof sigData !== 'undefined' && sigData) ? sigData.csps : null };
+  return GenVisite.genererCRVisite(modele, chantier, cr, PizZip, window.docxtemplater || window.Docxtemplater);
+}
 async function genererCRVisite() { await genererDocTerrain(); }
 function sauvegarderVisite() { showToast('Visite sauvegardee', 'success'); }
 function addObs() {}

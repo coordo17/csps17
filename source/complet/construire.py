@@ -119,6 +119,35 @@ rep("'<p style=\"margin-bottom:12px;\">Vos affaires sont stockees dans ce naviga
     "'<p style=\"margin-bottom:12px;\">Vos affaires et les fichiers du registre sont enregistr\u00e9s dans cet appareil uniquement. '\n    + 'Exportez r\u00e9guli\u00e8rement : la sauvegarde sert aussi \u00e0 passer vos affaires du PC \u00e0 la tablette (par mail).</p>'")
 # 9b. plus d'envoi automatique (il n'y a plus de serveur de mail)
 rep("if (opts.auto) { return envoyerDocReel(affaire, e, ''); }", "if (opts.auto) { return; }")
+# 9c. CR de visite : modele v3 et generateur valide le 28/09 (gen-visite.js)
+rep('<script src="local-api.js"></script>', '<script src="local-api.js"></script>\n<script src="gen-visite.js"></script>')
+rep("""    finalZip = nettoyerDocx(finalZip, data);
+    var out = finalZip.generate({""", """    finalZip = nettoyerDocx(finalZip, data);
+    if (ref === 'VIS' && window.GenVisite && typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire._visite) {
+      finalZip = await crVisiteV3(data, terrainAffaire);
+    }
+    var out = finalZip.generate({""")
+rep("async function genTerrainDoc(ref) { ouvrirFormulaireDoc(ref); }", r"""async function genTerrainDoc(ref) { ouvrirFormulaireDoc(ref); }
+
+// CR de visite v3 (modele corrige et valide le 28/09) a partir de la saisie terrain
+function dimensionsPhoto(url){
+  return new Promise(function(ok){ var im = new Image(); im.onload = function(){ ok({ w: im.naturalWidth, h: im.naturalHeight }); }; im.onerror = function(){ ok({ w: 4, h: 3 }); }; im.src = url; });
+}
+async function crVisiteV3(data, ta){
+  var r = await fetch('modeles/CR_Visite_Chantier_CSPS17_v3.docx');
+  if (!r.ok) throw new Error('Modele CR de visite v3 introuvable');
+  var modele = new Uint8Array(await r.arrayBuffer());
+  var v = ta._visite || {}, c = data.chantier || {}, tags = buildTagData(data);
+  var no = parseInt(v.noVisite, 10) || 1, annee = (v.date || '').slice(0, 4) || String(new Date().getFullYear());
+  var photos = [], lp = ta._photos || [], lg = ta._photosLegendes || [];
+  for (var i = 0; i < lp.length; i++){ var d = await dimensionsPhoto(lp[i]); photos.push({ url: lp[i], w: d.w, h: d.h, legende: lg[i] || '' }); }
+  var chantier = { nom: c.nom, adresse: c.adresse, nature: c.nature, moa: (data.moa || {}).nom, cat: data.cat, refPgc: tags.ref_pgc || '' };
+  var cr = { date: v.date, heure: v.heure, no: no, ref: 'CSPS17/VIS/' + annee + '-' + String(no).padStart(3, '0'),
+    meteo: v.meteo, phase: v.phase || '', avancement: v.avancement, prochaine: v.prochaine || '',
+    entreprises: ta._entreprisesPresentes || [], observations: ta._observations || [], photos: photos,
+    signatureCsps: (typeof sigData !== 'undefined' && sigData) ? sigData.csps : null };
+  return GenVisite.genererCRVisite(modele, chantier, cr, PizZip, window.docxtemplater || window.Docxtemplater);
+}""")
 # 10. version
 s = re.sub(r'v2\.46 &middot; build [^<]*', 'v3.0 &middot; sans serveur', s, count=1)
 open(sys.argv[2], 'w', encoding='utf-8', newline='\n').write(s)
