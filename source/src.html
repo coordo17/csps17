@@ -267,10 +267,9 @@ async function ecranCR(crId){
   var c = await lire("chantiers", r.chantierId);
   titre("CR de visite n° " + r.no, function(){ ecranChantier(r.chantierId); });
   $("#vue").innerHTML = "<div class='bloc'><div style='font-weight:600'>" + esc(c.nom) + "</div><div class='aide'>Visite du " + esc(dateFR(r.date)) + " à " + esc(r.heure || "") + " — " + esc(r.ref) + "</div></div>"
-    + "<div class='ligne'><button class='btn principal' id='share'>Partager le Word</button><button class='btn' id='dl'>Télécharger</button></div>"
+    + "<div class='ligne'><button class='btn principal' id='save-doc'>Enregistrer le Word</button></div>"
     + "<h2>Correction</h2><div class='bloc'><p class='aide' style='margin-top:0'>Rouvrir le compte rendu pour le corriger. Il faudra le signer et le terminer à nouveau.</p><div class='ligne' style='margin-top:10px'><button class='btn' id='rouvrir'>Rouvrir en brouillon</button><button class='btn danger' id='suppr'>Supprimer</button></div></div>";
-  $("#share").onclick = function(){ partagerDoc(r, c, true); };
-  $("#dl").onclick = function(){ partagerDoc(r, c, false); };
+  $("#save-doc").onclick = function(){ enregistrerDoc(r, c); };
   $("#rouvrir").onclick = async function(){ r.statut = "brouillon"; r.signatureCsps = null; await ecrire("crs", r); await effacer("docs", r.id); ecranVisite(r.id); };
   $("#suppr").onclick = async function(){
     if (!(await confirmer("Supprimer définitivement ce compte rendu de la tablette ?", "Supprimer"))) return;
@@ -428,19 +427,30 @@ function nomFichier(r, c){
   return "CR_visite_" + String(r.no).padStart(2, "0") + "_" + n + "_" + (r.date || "").replace(/-/g, "") + ".docx";
 }
 
-/* ================= PARTAGE / TELECHARGEMENT ================= */
-async function partagerDoc(r, c, partager){
+/* ================= ENREGISTREMENT DES FICHIERS ================= */
+// Chrome Android refuse de partager un .docx : on enregistre le fichier
+// dans Telechargements, puis on explique ou le trouver et comment l'envoyer.
+var SUR_ANDROID = /Android/i.test(navigator.userAgent);
+function enregistrerFichier(blob, nom, titreDlg){
+  var url = URL.createObjectURL(blob), a = document.createElement("a");
+  a.href = url; a.download = nom; document.body.appendChild(a); a.click();
+  setTimeout(function(){ a.remove(); URL.revokeObjectURL(url); }, 4000);
+  var d = $("#dlg");
+  var ou = SUR_ANDROID
+    ? "<p>Il se trouve dans le dossier <b>Téléchargements</b> de la tablette (application <b>Fichiers</b> → Téléchargements).</p>"
+      + "<h3 style='font-size:16px;margin:14px 0 6px'>Pour l'envoyer par mail</h3>"
+      + "<p>Ouvrez <b>Gmail</b> → <b>Nouveau message</b> → trombone <b>Joindre un fichier</b> → <b>Téléchargements</b> → choisissez le fichier.</p>"
+      + "<p class='aide'>Autre possibilité : dans l'application Fichiers, appui long sur le fichier → Partager → Gmail.</p>"
+    : "<p>Il se trouve dans le dossier <b>Téléchargements</b> de l'ordinateur. Pour l'envoyer, joignez-le à un nouveau mail.</p>";
+  d.innerHTML = "<h3>" + esc(titreDlg) + "</h3><p style='word-break:break-all;margin-bottom:10px'><b>" + esc(nom) + "</b></p>" + ou
+    + "<div class='ligne' style='margin-top:16px'><button class='btn plein' id='dlg-ok'>Compris</button></div>";
+  $("#dlg-ok").onclick = function(){ d.close(); };
+  d.showModal();
+}
+async function enregistrerDoc(r, c){
   var d = await lire("docs", r.id);
   if (!d){ try { d = await creerWord(r, c); } catch (e){ toast("Le Word n'a pas pu être recréé : " + (e.message || e)); return; } }
-  var f = new File([d.blob], d.nom, { type: d.blob.type });
-  if (partager && navigator.canShare && navigator.canShare({ files: [f] })){
-    try { await navigator.share({ files: [f], title: d.nom, text: "CR de visite n° " + r.no + " — " + c.nom + " — " + dateFR(r.date) }); return; }
-    catch (e){ if (e.name === "AbortError") return; }
-  }
-  var url = URL.createObjectURL(d.blob), a = document.createElement("a");
-  a.href = url; a.download = d.nom; document.body.appendChild(a); a.click();
-  setTimeout(function(){ a.remove(); URL.revokeObjectURL(url); }, 2000);
-  if (partager) toast("Partage indisponible ici : le fichier a été téléchargé.");
+  enregistrerFichier(d.blob, d.nom, "Word enregistré");
 }
 
 /* ================= SAUVEGARDE ================= */
@@ -448,9 +458,7 @@ async function exporter(){
   var data = { format: "cr-terrain", version: 1, exporteLe: new Date().toISOString(), chantiers: await tous("chantiers"), crs: await tous("crs") };
   var blob = new Blob([JSON.stringify(data)], { type: "application/json" });
   var nom = "CR_terrain_sauvegarde_" + aujourdhui().replace(/-/g, "") + ".json";
-  var f = new File([blob], nom, { type: "application/json" });
-  if (navigator.canShare && navigator.canShare({ files: [f] })){ try { await navigator.share({ files: [f], title: nom }); return; } catch (e){ if (e.name === "AbortError") return; } }
-  var url = URL.createObjectURL(blob), a = document.createElement("a"); a.href = url; a.download = nom; document.body.appendChild(a); a.click(); setTimeout(function(){ a.remove(); URL.revokeObjectURL(url); }, 2000);
+  enregistrerFichier(blob, nom, "Sauvegarde enregistrée");
 }
 async function restaurer(fichier){
   try {
