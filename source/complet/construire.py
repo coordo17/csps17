@@ -297,6 +297,24 @@ rep("situations: ['Zone VIGILANCE ROUGE possible'], mesures: ['• Le chef d\\'e
 rep("if (ficData.meteoArret) canicule.push('arret travaux 12h-15h');", "if (ficData.meteoArret) canicule.push('horaires adaptes / taches penibles suspendues aux heures chaudes');")
 rep("checkRow('Harnais antichute (> 2m)',", "checkRow('Harnais antichute (si protection collective impossible)',")
 rep("checkRow('Arret travaux 12h-15h (canicule)',", "checkRow('Horaires adapt\u00e9s / t\u00e2ches p\u00e9nibles suspendues aux heures chaudes (canicule)',")
+# 9j. mesures pre-remplies des risques verifiees (validees par Alain 30/09)
+rep("mesures: ['• Rapport SS4 obligatoire avant intervention.', '• Procédure de décontamination stricte.', '• EPI niveau 3 obligatoires.']",
+    "mesures: ['• Entreprise certifiée ; plan de démolition, de retrait ou d\\'encapsulage transmis via DEMAT@MIANTE au moins 30 jours avant le démarrage (R.4412-133).', '• Procédure de décontamination stricte.', '• EPI selon le niveau d\\'empoussièrement défini dans le plan de retrait.']")
+rep("situations: ['☐ Charges > 25 kg', '☐ Gestes répétitifs'], mesures: ['• Aide mécanique obligatoire au-delà de 25 kg.', '• Rotation des postes si gestes répétitifs.']",
+    "situations: ['☐ Charges lourdes ou répétées', '☐ Gestes répétitifs'], mesures: ['• Aides mécaniques à privilégier (R.4541-3 à R.4541-5).', '• Port habituel de plus de 55 kg seulement avec aptitude reconnue par le médecin du travail, jamais plus de 105 kg ; 25 kg maximum pour les femmes, 40 kg à la brouette (R.4541-9).']")
+rep("mesures: ['• Protection auditive obligatoire si exposition > 80 dB.', '• Phasage des travaux bruyants si possible.']",
+    "mesures: ['• Protection collective d\\'abord (R.4434-1 et s.) ; phasage des travaux bruyants.', '• Protections auditives mises à disposition dès 80 dB(A), port obligatoire dès 85 dB(A), 87 dB(A) valeur limite (R.4431-2).']")
+rep("'• Masque FFP2 minimum.'", "'• Protection respiratoire adaptée, définie dans le PPSPS de l\\'entreprise.'")
+rep("'• Vitesse limitée à 10 km/h sur chantier.'", "'• Vitesse limitée sur le chantier (valeur fixée par le PGC / plan de circulation).'")
+rep("'• Arrêt des travaux en hauteur ou de levage si vent > 50-60 km/h ou alerte vigilance orange/rouge.'",
+    "'• Arrêt des travaux en hauteur et du levage au-delà de la vitesse de vent maximale fixée par la notice du constructeur (grue, nacelle, échafaudage), ou en vigilance orange/rouge.'")
+rep("checkRow('Arret travaux hauteur/levage si vent fort (>50-60 km/h)',", "checkRow('Arr\u00eat travaux hauteur/levage si vent au-del\u00e0 de la limite constructeur',")
+# 9k. bug ancien : le nettoyage des lignes vides du CR de visite s'appliquait a tous les
+# documents ; sur la fiche IC Cat.3, le risque « Intemperies — Conditions meteo » faisait
+# effacer tout le tableau des risques. Limite au CR de visite + reperage de ligne fiable.
+rep("    finalZip = nettoyerDocx(finalZip, data);\n    if (ref === 'VIS'", "    if (ref === 'VIS') finalZip = nettoyerDocx(finalZip, data);\n    if (ref === 'VIS'")
+rep("    var trStart = xmlStr.lastIndexOf('<w:tr ', pos);\n    var trEnd = xmlStr.indexOf('</w:tr>', pos) + 7;\n    if (trStart === -1 || trEnd < 7) continue;",
+    "    var trStart = Math.max(xmlStr.lastIndexOf('<w:tr ', pos), xmlStr.lastIndexOf('<w:tr>', pos));\n    var trEnd = xmlStr.indexOf('</w:tr>', pos) + 7;\n    if (trStart === -1 || trEnd < 7) continue;")
 # 10. version
 import datetime
 s = re.sub(r'v2\.46 &middot; build [^<]*', 'v3.0 &middot; ' + datetime.datetime.now(__import__('zoneinfo').ZoneInfo('Europe/Paris')).strftime('%d/%m %H:%M'), s, count=1)

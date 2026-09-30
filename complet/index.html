@@ -647,7 +647,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v3.0 &middot; 30/09 12:23</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v3.0 &middot; 30/09 15:33</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -4106,7 +4106,7 @@ function injecterRisquesIC(zip, risquesIC, ficData) {
     r1:  { label: 'Chute de Hauteur',                   situations: ['☐ Travail sur échafaudage', '☐ Baies ouvertes sur le vide', '☐ Travaux sous plafond (Faux plafond/Réseaux)', '☐ AUTRES'], mesures: ['• Utilisation de PIRL, échafaudage de pieds ou roulants conforme à la réglementation avec personnel formé.', '• Règle du PGC de ce chantier : les échelles et escabeaux ne sont pas utilisés comme postes de travail (le Code du travail ne les admet qu\'à titre exceptionnel, R.4323-63).'] },
     r2:  { label: 'Ensevelissement / Enlisement',        situations: ['☐ Fouille > 1,30m', '☐ Tranchée non blindée'], mesures: ['• Blindage ou talutage obligatoire pour toute fouille > 1,30m.', '• Accès interdit à toute personne non autorisée dans les zones de fouille.'] },
     r3:  { label: 'Substances chimiques / Biologiques',  situations: ['☐ Produits chimiques utilisés', '☐ Agents biologiques'], mesures: ['• FDS disponibles sur le poste de travail.', '• EPI adaptés obligatoires (gants, masque, lunettes).'] },
-    r4:  { label: 'Amiante — retrait / confinement',     situations: ['☐ Retrait amiante friable', '☐ Confinement'], mesures: ['• Rapport SS4 obligatoire avant intervention.', '• Procédure de décontamination stricte.', '• EPI niveau 3 obligatoires.'] },
+    r4:  { label: 'Amiante — retrait / confinement',     situations: ['☐ Retrait amiante friable', '☐ Confinement'], mesures: ['• Entreprise certifiée ; plan de démolition, de retrait ou d\'encapsulage transmis via DEMAT@MIANTE au moins 30 jours avant le démarrage (R.4412-133).', '• Procédure de décontamination stricte.', '• EPI selon le niveau d\'empoussièrement défini dans le plan de retrait.'] },
     r5:  { label: 'Radiations ionisantes',               situations: ['☐ Zone contrôlée', '☐ Zone surveillée'], mesures: ['• Dosimétrie obligatoire pour tout intervenant.', '• Accès réservé aux personnels habilités.'] },
     r6:  { label: 'Réseaux & Électricité',               situations: ['☐ Intervention en plénum (Électricité/Plomberie)', '☐ Intervention sur réseau'], mesures: ['• Câbles de chantier provisoires impérativement fixés en hauteur.', '• Consignation stricte des circuits lors des phases d\'essais.', '• Habilitations électriques à jour requises pour tout le personnel.'] },
     r7:  { label: 'Risque de noyade',                    situations: ['☐ Travaux à proximité eau', '☐ Traversée cours d\'eau'], mesures: ['• Gilet de sauvetage obligatoire.', '• Dispositif de récupération en place.'] },
@@ -4120,16 +4120,16 @@ function injecterRisquesIC(zip, risquesIC, ficData) {
     r15: { label: 'Chute de Plain-pied',                 situations: ['Ensemble des travaux'], mesures: ['• Nettoyage du poste de travail.', '• Respect des zones de stockage. Pas de stockage dans les circulations.'] },
     r16: { label: 'Projections — Chutes de matériaux',   situations: ['☐ Tous travaux'], mesures: ['• Mise en place d\'écran ou neutralisation des zones pouvant être impactées par les projections ou chutes de matériaux.'] },
     r17: { label: 'Points Chauds / Incendie',            situations: ['☐ OUI', '☐ NON'], mesures: ['• Permis de feu obligatoire avant démarrage.', '• Présence d\'un système pour combattre le feu (extincteur portatif dédié vérifié sur le poste par exemple ou autre moyen équivalent).'] },
-    r18: { label: 'Manutention manuelle / TMS',          situations: ['☐ Charges > 25 kg', '☐ Gestes répétitifs'], mesures: ['• Aide mécanique obligatoire au-delà de 25 kg.', '• Rotation des postes si gestes répétitifs.'] },
-    r19: { label: 'Bruit',                               situations: ['☐ Outils bruyants', '☐ Engins à proximité'], mesures: ['• Protection auditive obligatoire si exposition > 80 dB.', '• Phasage des travaux bruyants si possible.'] },
-    r20: { label: 'Poussières (hors amiante)',           situations: ['☐ Découpe matériaux', '☐ Terrassement'], mesures: ['• Aspiration à la source obligatoire.', '• Masque FFP2 minimum.', '• Arrosage si poussières de chantier.'] },
+    r18: { label: 'Manutention manuelle / TMS',          situations: ['☐ Charges lourdes ou répétées', '☐ Gestes répétitifs'], mesures: ['• Aides mécaniques à privilégier (R.4541-3 à R.4541-5).', '• Port habituel de plus de 55 kg seulement avec aptitude reconnue par le médecin du travail, jamais plus de 105 kg ; 25 kg maximum pour les femmes, 40 kg à la brouette (R.4541-9).'] },
+    r19: { label: 'Bruit',                               situations: ['☐ Outils bruyants', '☐ Engins à proximité'], mesures: ['• Protection collective d\'abord (R.4434-1 et s.) ; phasage des travaux bruyants.', '• Protections auditives mises à disposition dès 80 dB(A), port obligatoire dès 85 dB(A), 87 dB(A) valeur limite (R.4431-2).'] },
+    r20: { label: 'Poussières (hors amiante)',           situations: ['☐ Découpe matériaux', '☐ Terrassement'], mesures: ['• Aspiration à la source obligatoire.', '• Protection respiratoire adaptée, définie dans le PPSPS de l\'entreprise.', '• Arrosage si poussières de chantier.'] },
     r21: { label: 'Produits dangereux / CMR',            situations: ['☐ Solvants', '☐ Colles', '☐ Peintures'], mesures: ['• FDS disponibles sur chantier.', '• Ventilation du local de travail.', '• EPI adaptés selon FDS.'] },
-    r22: { label: 'Engins / Heurt de véhicules',         situations: ['☐ Engins de chantier', '☐ Livraisons'], mesures: ['• Séparation engins / piétons obligatoire.', '• Gilet HV obligatoire dans zones de circulation engins.', '• Vitesse limitée à 10 km/h sur chantier.'] },
+    r22: { label: 'Engins / Heurt de véhicules',         situations: ['☐ Engins de chantier', '☐ Livraisons'], mesures: ['• Séparation engins / piétons obligatoire.', '• Gilet HV obligatoire dans zones de circulation engins.', '• Vitesse limitée sur le chantier (valeur fixée par le PGC / plan de circulation).'] },
     r23: { label: 'Coupures / Blessures outils',         situations: ['☐ Outillage électroportatif', '☐ Outils tranchants'], mesures: ['• Gants anti-coupure obligatoires.', '• Vérification état des outils avant utilisation.'] },
     r24: { label: 'Coactivité / Superposition tâches',   situations: ['☐ Activités simultanées', '☐ Zones partagées'], mesures: ['• Planning de coactivité établi et affiché.', '• La superposition des tâches est interdite.', '• Les zones de travaux devront être balisées hermétiquement.'] },
     r25: { label: 'Risque Canicule',                     situations: ['Vigilance canicule Météo-France jaune, orange ou rouge'], mesures: ['• Dès la vigilance jaune, l\'employeur met en œuvre et adapte les mesures de prévention (décret n°2025-482 du 27 mai 2025, art. R.4463-1 et s.).', '• Eau potable fraîche en quantité suffisante.', '• Adaptation des horaires, pauses, suspension des tâches pénibles aux heures les plus chaudes.'] },
     r26: { label: 'AUTRES — Précision de l\'entreprise', situations: [''], mesures: ['• Les zones de travaux devront être balisées de façon à les rendre hermétiques aux autres corps d\'état.', '• La superposition des tâches est interdite.'] },
-    r27: { label: 'Intempéries — Conditions météo dégradées', situations: ['☐ Vent fort / rafales', '☐ Pluie / verglas / neige', '☐ Travaux exterieurs en hauteur'], mesures: ['• Arrêt des travaux en hauteur ou de levage si vent > 50-60 km/h ou alerte vigilance orange/rouge.', '• Suivi des bulletins Météo-France avant et pendant l\'intervention.', '• Report ou adaptation des travaux extérieurs en cas de verglas, neige ou fortes pluies.', '• Equipements adaptés au froid (gants, vêtements) en période hivernale.'] },
+    r27: { label: 'Intempéries — Conditions météo dégradées', situations: ['☐ Vent fort / rafales', '☐ Pluie / verglas / neige', '☐ Travaux exterieurs en hauteur'], mesures: ['• Arrêt des travaux en hauteur et du levage au-delà de la vitesse de vent maximale fixée par la notice du constructeur (grue, nacelle, échafaudage), ou en vigilance orange/rouge.', '• Suivi des bulletins Météo-France avant et pendant l\'intervention.', '• Report ou adaptation des travaux extérieurs en cas de verglas, neige ou fortes pluies.', '• Equipements adaptés au froid (gants, vêtements) en période hivernale.'] },
   };
 
   // Générer une <w:tr> pour chaque risque coché
@@ -4782,7 +4782,7 @@ function nettoyerDocx(zip, data) {
 
   for (var p = 0; p < positions.length; p++) {
     var pos = positions[p];
-    var trStart = xmlStr.lastIndexOf('<w:tr ', pos);
+    var trStart = Math.max(xmlStr.lastIndexOf('<w:tr ', pos), xmlStr.lastIndexOf('<w:tr>', pos));
     var trEnd = xmlStr.indexOf('</w:tr>', pos) + 7;
     if (trStart === -1 || trEnd < 7) continue;
 
@@ -5318,7 +5318,7 @@ async function generateDoc(ref, previewMode) {
       finalZip = injecterPhotos(finalZip, terrainAffaire._photos, terrainAffaire._photosLegendes);
     }
     // Nettoyer les lignes vides (apres injection photos)
-    finalZip = nettoyerDocx(finalZip, data);
+    if (ref === 'VIS') finalZip = nettoyerDocx(finalZip, data);
     if (ref === 'VIS' && window.GenVisite && typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire._visite) {
       finalZip = await crVisiteV3(data, terrainAffaire);
     }
@@ -6261,7 +6261,7 @@ function genFormulaireFIC() {
   html2 += checkRow('Arret immediat orage / alerte rouge', 'fic-meteo-orage', false);
   html2 += fieldRow('Referent canicule — Nom', 'fic-meteo-referent', 'text', 'Nom du referent canicule', '');
   html2 += '<p style="font-size:11px;font-weight:600;color:var(--blue-dark);margin:14px 0 6px;">&#10052; Conditions hivernales / Intemperies</p>';
-  html2 += checkRow('Arret travaux hauteur/levage si vent fort (>50-60 km/h)', 'fic-meteo-vent', false);
+  html2 += checkRow('Arrêt travaux hauteur/levage si vent au-delà de la limite constructeur', 'fic-meteo-vent', false);
   html2 += checkRow('Report travaux exterieurs si verglas / neige', 'fic-meteo-verglas', false);
   html2 += checkRow('Suivi vigilance Meteo-France avant intervention', 'fic-meteo-vigilance', false);
   html2 += checkRow('Equipements froid (gants, vetements adaptes)', 'fic-meteo-froid', false);
