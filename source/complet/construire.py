@@ -410,6 +410,63 @@ rep("  html2 += fieldRow('Decisions prises / Actions', 'rco-decisions', 'textare
 rep("    if (ref === 'DGI') Object.assign(_tags, tagsDGI(data));", "    if (ref === 'DGI') Object.assign(_tags, tagsDGI(data));\n    if (ref === 'RCO') Object.assign(_tags, tagsRCO(data));")
 rep("    var finalZip = doc.getZip();\n    if (typeof sigData", "    var finalZip = doc.getZip();\n    if (ref === 'RCO') finalZip = injecterRCO(finalZip, data);\n    if (typeof sigData")
 rep("function genFormulaireRCO() {", open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'gen-reunion.part.js'), encoding='utf-8').read() + "function genFormulaireRCO() {")
+# 9p. Intervenants rattaches + fiche IC complete (v17 / Cat.3 v6) — decisions d'Alain 30/09 soir
+ICP = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ic-complete.part.js'), encoding='utf-8').read()
+a = s.index('var RISQUES_DEF = {'); k = s.index('{', a); dep = 0
+for j in range(k, len(s)):
+    if s[j] == '{': dep += 1
+    elif s[j] == '}':
+        dep -= 1
+        if dep == 0: break
+ICP = '// Mesures des risques verifiees et validees le 30/09 (meme table que la fiche Cat.3)\nvar IC_RISQUES_DEF = ' + s[k:j+1] + ';\n' + ICP
+rep("function genFormulaireFIC() {", ICP + "\nfunction genFormulaireFIC() {")
+rep("  xmlStr = remplirCellule(xmlStr, 'Date fin pr\u00e9visionnelle', formatDateFR(d.dateFin || ''));\n", "")
+rep("  xmlStr = remplirCellule(xmlStr, 'Nb. intervenants pr\u00e9vu', d.effectif || '');\n", "")
+rep("  { ref: 'FIC',       title: 'Fiche IC Vierge',", "  { ref: 'FIC',       title: 'Fiche d\u2019inspection commune',")
+rep("  'FIC':         'Fiche_IC_Vierge_CSPS17_v16.docx',", "  'FIC':         'Fiche_IC_CSPS17_v17.docx',")
+rep("  'FIC3':        'Fiche_IC_Cat3_CSPS17_v5.docx',", "  'FIC3':        'Fiche_IC_Cat3_CSPS17_v6.docx',")
+# intervenants : identifiant permanent, rattachement, affichage par lot
+rep("  div.innerHTML = h;\n  document.getElementById('entreprise-list').appendChild(div);\n}",
+    "  div.innerHTML = h;\n  document.getElementById('entreprise-list').appendChild(div);\n  if (typeof icCarteEntreprise === 'function') icCarteEntreprise(div, type);\n}")
+rep("  document.getElementById(id).remove();\n}", "  document.getElementById(id).remove();\n  try { icMajSelectsParent(); icRegrouperEntreprises(); } catch (er) {}\n}")
+rep("      effectif: card.querySelector('.ent-effectif') ? card.querySelector('.ent-effectif').value : '',\n",
+    "      effectif: card.querySelector('.ent-effectif') ? card.querySelector('.ent-effectif').value : '',\n      id: card.querySelector('.ent-id') ? card.querySelector('.ent-id').value : '',\n      parent: card.querySelector('.ent-parent') ? card.querySelector('.ent-parent').value : '',\n")
+rep("    var elTF = last.querySelector('.ent-tel-fixe'); if(elTF) elTF.value = ent.telFixe||'';\n  });",
+    "    var elTF = last.querySelector('.ent-tel-fixe'); if(elTF) elTF.value = ent.telFixe||'';\n  });\n  icApresChargementEntreprises(a.entreprises);")
+# formulaire FIC
+a = s.index('function genFormulaireFIC() {')
+old = "  (terrainAffaire.entreprises || []).forEach(function(e, i) {\n    html2 += '<option value=\"' + i + '\">' + (e.nom || 'Entreprise ' + (i+1)) + ' \u2014 ' + (e.lot || e.type || '') + '</option>';\n  });\n"
+i = s.index(old, a); s = s[:i] + "  html2 += icOptionsEntreprises();\n" + s[i+len(old):]
+rep("    + '<option>Version mise a jour</option>'\n    + '</select></div>';\n",
+    "    + '<option>Version mise a jour</option>'\n    + '</select></div>';\n  html2 += twoCol(fieldRow('D\\u00e9j\\u00e0 transmis le', 'fic-pgc-date', 'date', '', ''), fieldRow('N\\u00b0 de version mise \\u00e0 jour', 'fic-pgc-version', 'text', 'Ex : indice B', ''));\n")
+rep("  html2 += fieldRow('Compagnon referent', 'fic-ent-ref', 'text', 'Nom du compagnon referent', '');\n",
+    "  html2 += fieldRow('Compagnon referent', 'fic-ent-ref', 'text', 'Nom du compagnon referent', '');\n  html2 += icRepresentantHtml();\n")
+a = s.index("  // Section 4 - Infos prealables"); b = s.index("  // Section 4bis - Sous-traitance")
+s = s[:a] + "  // Section 4 - Infos prealables (grille = lignes du modele Word)\n  if (terrainAffaire.cat !== 3) html2 += icGrilleSection('4');\n\n" + s[b:]
+a = s.index("  // Section 5 - Organisation du site"); b = s.index("  // Section 7 - Analyse risques IMP/EX")
+s = s[:a] + "  html2 += icPrestatairesHtml();\n  // Sections 5 et 6 (grille = lignes du modele Word ; la fiche Cat.3 a sa section I)\n  if (terrainAffaire.cat !== 3) { html2 += icGrilleSection('5'); html2 += icGrilleSection('6'); }\n\n" + s[b:]
+a = s.index("  // Section 8 - CMR"); b = s.index("  // Section 10bis - Vigilance meteorologique")
+s = s[:a] + "  // 7D risques propres, puis sections 8, 9, 10\n  html2 += ic7dHtml();\n  if (terrainAffaire.cat !== 3) { html2 += icGrilleSection('8'); html2 += icGrilleSection('9'); html2 += icGrilleSection('10'); }\n\n" + s[b:]
+rep('<div id="meteo-section" style="display:none;padding:16px;">', '<div id="meteo-section" style="display:block;padding:16px;">')
+a = s.index('function genFormulaireFIC() {'); b = s.index('var visObsCount = 0;', a)
+seg = s[a:b]; old = "  html2 += sectionEnd();\n\n  return html2;\n}"; assert seg.count(old) == 1
+s = s[:a] + seg.replace(old, "  html2 += sectionEnd();\n  html2 += icFinHtml();\n\n  return html2;\n}") + s[b:]
+rep("    setTimeout(function() { initRisquesWidget(); }, 50);", "    setTimeout(function() { initRisquesWidget(); icInitFormulaire(); }, 50);")
+# section 7 : risques issus du PGC ; ceux du lot sont proposes en 7D ; observations par risque
+rep("    var deMetier = risquesMetier.indexOf(r.id) !== -1;", "    var deMetier = false; // risques typiques du lot : proposes en 7D (risques propres)")
+rep("id=\"rqlbl-' + r.id + '\">' + r.label + origine + '</td>';",
+    "id=\"rqlbl-' + r.id + '\">' + r.label + origine + '<input type=\"text\" id=\"rqobs-' + r.id + '\" placeholder=\"Observations entreprise / exploitant\" style=\"display:' + (pre ? 'block' : 'none') + ';width:100%;margin-top:4px;padding:5px;font-size:12px;border:1px solid var(--border);border-radius:4px;\"></td>';")
+rep("  if (!on) { imp.checked = false; ex.checked = false; }", "  if (!on) { imp.checked = false; ex.checked = false; }\n  var obsRq = document.getElementById('rqobs-' + id); if (obsRq) obsRq.style.display = on ? 'block' : 'none';")
+rep("      data.push({ id: id, imp: imp, ex: ex });", "      data.push({ id: id, imp: imp, ex: ex, obs: getVal('rqobs-' + id) });")
+rep("function recroiserRisquesLot() {\n", "function recroiserRisquesLot() {\n  if (typeof ic7dProposer === 'function') { ic7dProposer(true); return; }\n")
+rep("      if (typeLabel) transmisEl.value = typeLabel;\n    }\n  }\n}",
+    "      if (typeLabel) transmisEl.value = typeLabel;\n    }\n  }\n  if (ref === 'FIC' && typeof icApresChoixEntreprise === 'function') icApresChoixEntreprise(ent);\n}")
+# generation
+rep("  var entData = {}, visiteData = {};\n", "  if (ref === 'FIC' && typeof icControleDelegation === 'function' && !icControleDelegation()) return;\n  var entData = {}, visiteData = {};\n")
+rep("        return arr;\n      })(),\n    };\n  } else if (ref === 'VIS') {", "        return arr;\n      })(),\n    };\n    if (typeof countRQ === 'function') { countRQ(); terrainAffaire._ficData.risquesIC = window._risquesICData || []; }\n    icCompleterFicData(terrainAffaire._ficData);\n  } else if (ref === 'VIS') {")
+rep("  await generateDoc(ref);\n}", "  await generateDoc(ref);\n  if (ref === 'FIC' && typeof icProposerSuivante === 'function') icProposerSuivante();\n}")
+rep("      finalZip = injecterFIC(finalZip, terrainAffaire._ficData);\n", "      finalZip = injecterFIC(finalZip, terrainAffaire._ficData);\n      finalZip = injecterICComplete(finalZip, terrainAffaire._ficData, isCat3);\n")
+rep("if (data.risques && !isCat3) xmlStr2 = cocherRisques(xmlStr2, data.risques);", "if (data.risques && !isCat3 && ref !== 'FIC') xmlStr2 = cocherRisques(xmlStr2, data.risques);")
 # 10. version
 import datetime
 s = re.sub(r'v2\.46 &middot; build [^<]*', 'v3.0 &middot; ' + datetime.datetime.now(__import__('zoneinfo').ZoneInfo('Europe/Paris')).strftime('%d/%m %H:%M'), s, count=1)
