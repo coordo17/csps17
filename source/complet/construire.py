@@ -208,6 +208,45 @@ rep("  reminder.textContent = 'Categorie ' + currentCat + ' - ' + docsForCat.len
 # plus d'analyse IA au depot d'une piece : le fichier est simplement range au dossier
 a = s.index("    ANALYSES_EN_COURS[type] = true;"); b = s.index("  } catch (err) {\n    showToast('Erreur depot : '", a)
 s = s[:a] + s[b:]
+# 9h. registre : chaque entree peut etre classee dans son document (demande d'Alain 30/09)
+rep("""      if (e.objet && e.objet !== titre) html += '<div style="font-size:12px;color:var(--text-light);margin-top:2px;">' + escHtml(e.objet) + '</div>';
+      html += '</div>'""", """      if (e.objet && e.objet !== titre) html += '<div style="font-size:12px;color:var(--text-light);margin-top:2px;">' + escHtml(e.objet) + '</div>';
+      html += selectClassementRJC(e);
+      html += '</div>'""")
+rep("function libelleRJC(e) {", r"""// Classement d'une entree du registre dans un document de l'onglet Documents.
+// Automatique pour les documents generes (nom CSPS17_<REF>_...), a choisir a la
+// main pour les entrees ajoutees autrement (scan, note, ancien document...).
+function classementActuelRJC(e) {
+  if (e.docRef === 'AUCUN') return '';
+  if (e.docRef) return e.docRef;
+  var r = entryDocRef(e);
+  if (r) return r;
+  if (/pgc/i.test(e.fichierNom || '')) return 'PGC';
+  return '';
+}
+function selectClassementRJC(e) {
+  var actuel = classementActuelRJC(e);
+  var opts = '<option value="">\u2014 non class\u00e9 \u2014</option>';
+  var groupes = [['Pi\u00e8ces re\u00e7ues', PIECES_DOSSIER], ['Documents CSPS17', DOCS.filter(function(d){ return d.ref !== 'RJC'; })]];
+  groupes.forEach(function(g){
+    opts += '<optgroup label="' + g[0] + '">' + g[1].map(function(d){
+      return '<option value="' + d.ref + '"' + (d.ref === actuel ? ' selected' : '') + '>' + d.title + '</option>';
+    }).join('') + '</optgroup>';
+  });
+  return '<div style="margin-top:4px;font-size:11px;color:' + (actuel ? 'var(--text-light)' : '#b45309') + ';">Class\u00e9 dans : '
+    + '<select onchange="classerEntreeRJC(\'' + e.id + '\', this.value)" style="font-size:11px;padding:2px 4px;border:1px solid ' + (actuel ? 'var(--border)' : '#f59e0b') + ';border-radius:4px;max-width:260px;">' + opts + '</select></div>';
+}
+function classerEntreeRJC(id, ref) {
+  var affaire = currentAffaireObj(); if (!affaire) return;
+  var e = (affaire.rjc || []).find(function(x){ return x.id === id; }); if (!e) return;
+  e.docRef = ref || 'AUCUN';
+  persistAffaires();
+  try { renderRJCTab(); } catch (er) {}
+  try { renderDocsGrid(); } catch (er2) {}
+  showToast(ref ? 'Entr\u00e9e class\u00e9e' : 'Entr\u00e9e retir\u00e9e de son document', 'success');
+}
+
+function libelleRJC(e) {""")
 # 10. version
 import datetime
 s = re.sub(r'v2\.46 &middot; build [^<]*', 'v3.0 &middot; ' + datetime.datetime.now(__import__('zoneinfo').ZoneInfo('Europe/Paris')).strftime('%d/%m %H:%M'), s, count=1)
