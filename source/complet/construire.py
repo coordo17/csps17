@@ -329,6 +329,44 @@ rep("    signatureCsps: (typeof sigData !== 'undefined' && sigData) ? sigData.cs
   try { localStorage.setItem('csps17_affaires', JSON.stringify(affaires)); } catch (eS) {}
   return GenVisite.genererCRVisite(""")
 rep("fichiers.push('modeles/CR_Visite_Chantier_CSPS17_v3.docx');", "fichiers.push('modeles/CR_Visite_Chantier_CSPS17_v4.docx');")
+# 9m. Signalement DGI v5 verifie (OPPBTP pouvoir d'arret, L.4131-1) — decisions d'Alain 30/09
+rep("  'DGI':         'CSPS17_Signalement_DGI_v4.docx',", "  'DGI':         'CSPS17_Signalement_DGI_v5.docx',")
+rep("  html2 += fieldRow('Reference reglementaire', 'dgi-ref', 'text', 'Ex: R4534-1', '');",
+    """  html2 += fieldRow('Reference reglementaire', 'dgi-ref', 'text', 'Ex: R4534-1', '');
+  html2 += twoCol(fieldRow('Lot / Travaux', 'dgi-lot', 'text', 'Ex: Gros oeuvre', ''), fieldRow('Responsable présent', 'dgi-resp', 'text', 'Nom du chef équipe', ''));
+  html2 += fieldRow('Travailleurs exposés (nombre / entreprise)', 'dgi-exposes', 'text', 'Ex: 3 compagnons LEROUX TP', '');
+  html2 += fieldRow('Mesure complémentaire 1', 'dgi-mes1', 'text', 'Si nécessaire', '');
+  html2 += fieldRow('Mesure complémentaire 2', 'dgi-mes2', 'text', 'Si nécessaire', '');
+  html2 += fieldRow('Conditions de reprise', 'dgi-reprise', 'textarea', 'Ex: garde-corps posé et vérifié par le CSPS', '');""")
+rep("    doc.render(buildTagData(data));\n    var finalZip = doc.getZip();",
+    "    var _tags = buildTagData(data);\n    if (ref === 'DGI') Object.assign(_tags, tagsDGI(data));\n    doc.render(_tags);\n    var finalZip = doc.getZip();")
+rep("function genFormulaireDGI() {", r"""// Balises du signalement DGI : saisie Terrain + pouvoir d'arret du contrat (fiche affaire)
+function tagsDGI(data) {
+  function v(id){ var e = document.getElementById(id); return e ? String(e.value || '').trim() : ''; }
+  var moa = data.moa || {}, statut = moa.pouvoirArret || '';
+  var aff = affaires.find(function(a){ return a.id === data.id; }) || data;
+  var n = 1; try { n = rjcEntriesForDoc(aff, 'DGI').length + 1; } catch (e) {}
+  var type = v('dgi-ent-type');
+  var m1 = v('dgi-mes1'), m2 = v('dgi-mes2');
+  var d = v('dgi-date');
+  return {
+    dgi_titre: statut === 'oui' ? "Arr\u00eat des travaux dans la zone concern\u00e9e (pouvoir d\u00e9l\u00e9gu\u00e9 par le ma\u00eetre d'ouvrage \u2014 contrat de coordination)"
+                                : "Demande d'arr\u00eat des travaux adress\u00e9e au ma\u00eetre d'ouvrage et \u00e0 l'entreprise",
+    dgi_bandeau: statut === 'oui' ? 'ARR\u00caT DES TRAVAUX DANS LA ZONE CONCERN\u00c9E' : 'ARR\u00caT DES TRAVAUX DEMAND\u00c9 DANS LA ZONE CONCERN\u00c9E',
+    dgi_pouvoir: statut === 'oui' ? ('accord\u00e9 par le contrat de coordination' + (moa.pouvoirClause ? ' (' + moa.pouvoirClause + ')' : ''))
+               : statut === 'non' ? "non accord\u00e9 \u2014 la d\u00e9cision d'arr\u00eat appartient au ma\u00eetre d'ouvrage" : 'non pr\u00e9cis\u00e9 dans le contrat de coordination',
+    dgi_ref: 'CSPS17/DGI-' + (data.num || '') + '-' + String(n).padStart(2, '0'),
+    dgi_types: (type === 'Entreprise principale' ? '\u2611' : '\u2610') + ' Entreprise principale ' + (type === 'Sous-traitant' ? '\u2611' : '\u2610') + ' Sous-traitant ' + (type === 'Prestataire' ? '\u2611' : '\u2610') + ' Prestataire',
+    dgi_date: d ? d.split('-').reverse().join('/') : '', dgi_heure: v('dgi-heure'),
+    dgi_entreprise: v('dgi-ent'), dgi_lot: v('dgi-lot'), dgi_zone: v('dgi-zone'), dgi_responsable: v('dgi-resp'),
+    dgi_danger: v('dgi-danger'), dgi_refregl: v('dgi-ref'), dgi_exposes: v('dgi-exposes'),
+    dgi_photos: (typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire._photos && terrainAffaire._photos.length) ? terrainAffaire._photos.length + ' photo(s) jointe(s) au registre' : '',
+    dgi_mesure1: m1, dgi_mesure2: m2, dgi_aide: (m1 || m2) ? '' : '(Mesure compl\u00e9mentaire \u00e0 pr\u00e9ciser si n\u00e9cessaire)',
+    dgi_reprise: v('dgi-reprise')
+  };
+}
+
+function genFormulaireDGI() {""")
 # 10. version
 import datetime
 s = re.sub(r'v2\.46 &middot; build [^<]*', 'v3.0 &middot; ' + datetime.datetime.now(__import__('zoneinfo').ZoneInfo('Europe/Paris')).strftime('%d/%m %H:%M'), s, count=1)
