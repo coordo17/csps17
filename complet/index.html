@@ -647,7 +647,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v3.0 &middot; 30/09 15:48</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v3.0 &middot; 30/09 15:56</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -4895,10 +4895,10 @@ var DOC_FILES = {
   'DIF':         'CSPS17_Fiche_Diffusion_PGC_v3.docx',
   'FIC':         'Fiche_IC_Vierge_CSPS17_v16.docx',
   'FIC3':        'Fiche_IC_Cat3_CSPS17_v5.docx',
-  'IC':          'CSPS17_Courrier_CSPS_v1.docx',
+  'IC':          'CSPS17_Courrier_CSPS_v2.docx',
   'PPP':         'CSPS17_Grille_Analyse_PPSPS_v4.docx',
   'VIS':         'CR_Visite_Chantier_CSPS17_v2.docx',
-  'OBS':         'CSPS17_Courrier_CSPS_v1.docx',
+  'OBS':         'CSPS17_Courrier_CSPS_v2.docx',
   'DGI':         'CSPS17_Signalement_DGI_v5.docx',
   'RCO':         'CSPS17_CR_Reunion_Coordination_v2.docx',
   'DIUO':        'CSPS17_DIUO_Trame_v3.docx',
@@ -4969,6 +4969,12 @@ function buildTagData(data) {
     courrier_objet:         (data._courrier && data._courrier.objet) ? data._courrier.objet : '',
     courrier_corps:         (data._courrier && data._courrier.corps) ? data._courrier.corps : '',
     courrier_pj:            (data._courrier && data._courrier.pj) ? data._courrier.pj : '',
+    courrier_titre:         titreCourrier(data._courrier),
+    obs_notif:              !!(data._courrier && /^(Observation|Notification|Relance)$/.test(data._courrier.nature || '')),
+    notif:                  !!(data._courrier && /^(Notification|Relance)$/.test(data._courrier.nature || '')),
+    courrier_ref:           (data._courrier && data._courrier.refPgc) || '',
+    courrier_delai:         (data._courrier && data._courrier.delai) || '',
+    courrier_pied:          piedCourrier(data._courrier),
     // Tags Grille d'analyse PPSPS (structure exacte du modele CSPS17_Grille_Analyse_PPSPS_v4.docx)
     ppsps_chantier:     c.nom ? (c.nom + (c.adresse ? ' — ' + c.adresse : '')) : '',
     ppsps_date_analyse: today,
@@ -6726,6 +6732,19 @@ function remplirDestinataireIC() {
 }
 
 var COURRIER_NATURES = ['Transmission simple', 'Observation', 'Notification', 'Relance', 'Autre'];
+function titreCourrier(c) {
+  var n = (c && c.nature) || '';
+  if (n === 'Observation') return 'OBSERVATION DU COORDONNATEUR SPS';
+  if (n === 'Notification') return 'NOTIFICATION DU COORDONNATEUR SPS';
+  if (n === 'Relance') return 'RELANCE DU COORDONNATEUR SPS';
+  return 'COURRIER CSPS';
+}
+function piedCourrier(c) {
+  var n = (c && c.nature) || '';
+  if (/^(Observation|Notification|Relance)$/.test(n))
+    return "Consign\u00e9 au registre-journal de la coordination (R.4532-38) \u2014 visa \u00e0 retourner sous 24 h ; copie au ma\u00eetre d'ouvrage sous 48 h (recommandation CARSAT Centre-Ouest) \u2014 \u00e0 conserver 5 ans apr\u00e8s r\u00e9ception de l'ouvrage (R.4532-41).";
+  return 'Consign\u00e9 au registre-journal de la coordination (R.4532-38).';
+}
 
 function estNatureObsNotif(val) {
   return val === 'Observation' || val === 'Notification';
@@ -7865,12 +7884,7 @@ async function genererDocTerrain() {
     // Pour Observation/Notification : la reference PGC/PPSPS et le delai de
     // correction sont ajoutes en tete du corps, pour rester dans le meme
     // modele docx (un seul tag {{courrier_corps}}) sans complexifier le fichier.
-    if (estNatureObsNotif(natureVal) && (refPgcVal || delaiVal)) {
-      var prefixeLignes = [];
-      if (refPgcVal) prefixeLignes.push('Référence PGC/PPSPS concernée : ' + refPgcVal);
-      if (delaiVal) prefixeLignes.push('Délai de correction demandé : ' + delaiVal);
-      corpsVal = prefixeLignes.join('\n') + '\n\n' + corpsVal;
-    }
+    // (v2) reference et delai ont leurs propres cases dans le modele
     terrainAffaire._courrier = {
       nature: natureVal,
       destNom: getVal('ic-dest-nom'),
@@ -7881,6 +7895,8 @@ async function genererDocTerrain() {
       objet: getVal('ic-objet'),
       corps: corpsVal,
       pj: getVal('ic-pj'),
+      refPgc: refPgcVal,
+      delai: delaiVal,
     };
   } else if (ref === 'PPP') {
     entData = {

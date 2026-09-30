@@ -367,6 +367,38 @@ function tagsDGI(data) {
 }
 
 function genFormulaireDGI() {""")
+# 9n. Observation / notification (courrier v2) — decisions d'Alain 30/09
+rep("  'IC':          'CSPS17_Courrier_CSPS_v1.docx',", "  'IC':          'CSPS17_Courrier_CSPS_v2.docx',")
+rep("  'OBS':         'CSPS17_Courrier_CSPS_v1.docx',", "  'OBS':         'CSPS17_Courrier_CSPS_v2.docx',")
+rep("""    if (estNatureObsNotif(natureVal) && (refPgcVal || delaiVal)) {
+      var prefixeLignes = [];
+      if (refPgcVal) prefixeLignes.push('Référence PGC/PPSPS concernée : ' + refPgcVal);
+      if (delaiVal) prefixeLignes.push('Délai de correction demandé : ' + delaiVal);
+      corpsVal = prefixeLignes.join('\\n') + '\\n\\n' + corpsVal;
+    }""", "    // (v2) reference et delai ont leurs propres cases dans le modele")
+rep("      pj: getVal('ic-pj'),\n    };", "      pj: getVal('ic-pj'),\n      refPgc: refPgcVal,\n      delai: delaiVal,\n    };")
+rep("    courrier_pj:            (data._courrier && data._courrier.pj) ? data._courrier.pj : '',",
+    """    courrier_pj:            (data._courrier && data._courrier.pj) ? data._courrier.pj : '',
+    courrier_titre:         titreCourrier(data._courrier),
+    obs_notif:              !!(data._courrier && /^(Observation|Notification|Relance)$/.test(data._courrier.nature || '')),
+    notif:                  !!(data._courrier && /^(Notification|Relance)$/.test(data._courrier.nature || '')),
+    courrier_ref:           (data._courrier && data._courrier.refPgc) || '',
+    courrier_delai:         (data._courrier && data._courrier.delai) || '',
+    courrier_pied:          piedCourrier(data._courrier),""")
+rep("var COURRIER_NATURES = ['Transmission simple', 'Observation', 'Notification', 'Relance', 'Autre'];", r"""var COURRIER_NATURES = ['Transmission simple', 'Observation', 'Notification', 'Relance', 'Autre'];
+function titreCourrier(c) {
+  var n = (c && c.nature) || '';
+  if (n === 'Observation') return 'OBSERVATION DU COORDONNATEUR SPS';
+  if (n === 'Notification') return 'NOTIFICATION DU COORDONNATEUR SPS';
+  if (n === 'Relance') return 'RELANCE DU COORDONNATEUR SPS';
+  return 'COURRIER CSPS';
+}
+function piedCourrier(c) {
+  var n = (c && c.nature) || '';
+  if (/^(Observation|Notification|Relance)$/.test(n))
+    return "Consign\u00e9 au registre-journal de la coordination (R.4532-38) \u2014 visa \u00e0 retourner sous 24 h ; copie au ma\u00eetre d'ouvrage sous 48 h (recommandation CARSAT Centre-Ouest) \u2014 \u00e0 conserver 5 ans apr\u00e8s r\u00e9ception de l'ouvrage (R.4532-41).";
+  return 'Consign\u00e9 au registre-journal de la coordination (R.4532-38).';
+}""")
 # 10. version
 import datetime
 s = re.sub(r'v2\.46 &middot; build [^<]*', 'v3.0 &middot; ' + datetime.datetime.now(__import__('zoneinfo').ZoneInfo('Europe/Paris')).strftime('%d/%m %H:%M'), s, count=1)
