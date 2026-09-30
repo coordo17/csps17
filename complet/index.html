@@ -647,7 +647,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v3.0 &middot; 30/09 12:06</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v3.0 &middot; 30/09 12:23</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -4103,12 +4103,12 @@ function injecterRisquesIC(zip, risquesIC, ficData) {
 
   // Définition complète des risques avec leurs situations et mesures pré-remplies
   var RISQUES_DEF = {
-    r1:  { label: 'Chute de Hauteur',                   situations: ['☐ Travail sur échafaudage', '☐ Baies ouvertes sur le vide', '☐ Travaux sous plafond (Faux plafond/Réseaux)', '☐ AUTRES'], mesures: ['• Utilisation de PIRL, échafaudage de pieds ou roulants conforme à la réglementation avec personnel formé.', '• L\'utilisation des échelles et escabeaux comme postes de travail est strictement interdite.', '• Habilitations électriques à jour requises pour tout le personnel (si intervention sur réseaux).', '• Mutualisation de l\'échafaudage de l\'ITE validée après contrôle d\'adéquation.'] },
+    r1:  { label: 'Chute de Hauteur',                   situations: ['☐ Travail sur échafaudage', '☐ Baies ouvertes sur le vide', '☐ Travaux sous plafond (Faux plafond/Réseaux)', '☐ AUTRES'], mesures: ['• Utilisation de PIRL, échafaudage de pieds ou roulants conforme à la réglementation avec personnel formé.', '• Règle du PGC de ce chantier : les échelles et escabeaux ne sont pas utilisés comme postes de travail (le Code du travail ne les admet qu\'à titre exceptionnel, R.4323-63).'] },
     r2:  { label: 'Ensevelissement / Enlisement',        situations: ['☐ Fouille > 1,30m', '☐ Tranchée non blindée'], mesures: ['• Blindage ou talutage obligatoire pour toute fouille > 1,30m.', '• Accès interdit à toute personne non autorisée dans les zones de fouille.'] },
     r3:  { label: 'Substances chimiques / Biologiques',  situations: ['☐ Produits chimiques utilisés', '☐ Agents biologiques'], mesures: ['• FDS disponibles sur le poste de travail.', '• EPI adaptés obligatoires (gants, masque, lunettes).'] },
     r4:  { label: 'Amiante — retrait / confinement',     situations: ['☐ Retrait amiante friable', '☐ Confinement'], mesures: ['• Rapport SS4 obligatoire avant intervention.', '• Procédure de décontamination stricte.', '• EPI niveau 3 obligatoires.'] },
     r5:  { label: 'Radiations ionisantes',               situations: ['☐ Zone contrôlée', '☐ Zone surveillée'], mesures: ['• Dosimétrie obligatoire pour tout intervenant.', '• Accès réservé aux personnels habilités.'] },
-    r6:  { label: 'Réseaux & Électricité',               situations: ['☑ Intervention en plénum (Électricité/Plomberie)', '☐ Intervention sur réseau'], mesures: ['• Câbles de chantier provisoires impérativement fixés en hauteur.', '• Consignation stricte des circuits lors des phases d\'essais.', '• Habilitations électriques à jour requises pour tout le personnel.'] },
+    r6:  { label: 'Réseaux & Électricité',               situations: ['☐ Intervention en plénum (Électricité/Plomberie)', '☐ Intervention sur réseau'], mesures: ['• Câbles de chantier provisoires impérativement fixés en hauteur.', '• Consignation stricte des circuits lors des phases d\'essais.', '• Habilitations électriques à jour requises pour tout le personnel.'] },
     r7:  { label: 'Risque de noyade',                    situations: ['☐ Travaux à proximité eau', '☐ Traversée cours d\'eau'], mesures: ['• Gilet de sauvetage obligatoire.', '• Dispositif de récupération en place.'] },
     r8:  { label: 'Puits / Souterrains / Tunnels',       situations: ['☐ Puits', '☐ Galerie souterraine', '☐ Tunnel'], mesures: ['• Ventilation obligatoire.', '• Détection gaz avant entrée.', '• Équipier de sécurité en surface.'] },
     r9:  { label: 'Travaux en plongée appareillée',      situations: ['☐ Plongée en scaphandre'], mesures: ['• Équipe de plongée certifiée.', '• Médecin hyperbariste désigné.'] },
@@ -4127,7 +4127,7 @@ function injecterRisquesIC(zip, risquesIC, ficData) {
     r22: { label: 'Engins / Heurt de véhicules',         situations: ['☐ Engins de chantier', '☐ Livraisons'], mesures: ['• Séparation engins / piétons obligatoire.', '• Gilet HV obligatoire dans zones de circulation engins.', '• Vitesse limitée à 10 km/h sur chantier.'] },
     r23: { label: 'Coupures / Blessures outils',         situations: ['☐ Outillage électroportatif', '☐ Outils tranchants'], mesures: ['• Gants anti-coupure obligatoires.', '• Vérification état des outils avant utilisation.'] },
     r24: { label: 'Coactivité / Superposition tâches',   situations: ['☐ Activités simultanées', '☐ Zones partagées'], mesures: ['• Planning de coactivité établi et affiché.', '• La superposition des tâches est interdite.', '• Les zones de travaux devront être balisées hermétiquement.'] },
-    r25: { label: 'Risque Canicule',                     situations: ['Zone VIGILANCE ROUGE possible'], mesures: ['• Le chef d\'entreprise et le Maître d\'ouvrage doivent adopter des mesures de sauvegarde du personnel conformément décret n°2025-482 du 27 mai 2025.', '• Eau fraîche disponible en permanence.', '• Arrêt des travaux aux heures les plus chaudes si alerte rouge.'] },
+    r25: { label: 'Risque Canicule',                     situations: ['Vigilance canicule Météo-France jaune, orange ou rouge'], mesures: ['• Dès la vigilance jaune, l\'employeur met en œuvre et adapte les mesures de prévention (décret n°2025-482 du 27 mai 2025, art. R.4463-1 et s.).', '• Eau potable fraîche en quantité suffisante.', '• Adaptation des horaires, pauses, suspension des tâches pénibles aux heures les plus chaudes.'] },
     r26: { label: 'AUTRES — Précision de l\'entreprise', situations: [''], mesures: ['• Les zones de travaux devront être balisées de façon à les rendre hermétiques aux autres corps d\'état.', '• La superposition des tâches est interdite.'] },
     r27: { label: 'Intempéries — Conditions météo dégradées', situations: ['☐ Vent fort / rafales', '☐ Pluie / verglas / neige', '☐ Travaux exterieurs en hauteur'], mesures: ['• Arrêt des travaux en hauteur ou de levage si vent > 50-60 km/h ou alerte vigilance orange/rouge.', '• Suivi des bulletins Météo-France avant et pendant l\'intervention.', '• Report ou adaptation des travaux extérieurs en cas de verglas, neige ou fortes pluies.', '• Equipements adaptés au froid (gants, vêtements) en période hivernale.'] },
   };
@@ -4263,7 +4263,7 @@ function injecterRisquesIC(zip, risquesIC, ficData) {
   if (ficData) {
     var canicule = [];
     if (ficData.meteoEau) canicule.push('eau fraiche');
-    if (ficData.meteoArret) canicule.push('arret travaux 12h-15h');
+    if (ficData.meteoArret) canicule.push('horaires adaptes / taches penibles suspendues aux heures chaudes');
     if (ficData.meteoOmbre) canicule.push('zone ombre/abri frais');
     if (ficData.meteoOrage) canicule.push('arret immediat orage/alerte rouge');
     if (canicule.length) diversText.push('Canicule : ' + canicule.join(', ') + (ficData.meteoReferent ? ' (referent : ' + ficData.meteoReferent + ')' : '') + '.');
@@ -4811,20 +4811,14 @@ function cocherCategorie(xmlStr, cat) {
 }
 
 function cocherSousTraitance(xmlStr, stOui) {
-  // Le texte "Oui"/"Non" est reparti sur 3 runs distincts dans le docx (separes par des
-  // <w:proofErr/>), donc une recherche de chaine litterale "☐ Oui  ☑ Non" ne matche jamais
-  // (0 occurrence reelle) -> la fonction etait un no-op silencieux. On repere le paragraphe
-  // via le texte d'ancrage, puis on bascule les 2 glyphes ☐/☑ qu'il contient, comme cocher().
-  if (!stOui) return xmlStr; // template par defaut = "Non" deja coche, rien a faire
+  // Modele v5 : ni Oui ni Non pre-coche ; on coche la reponse du formulaire terrain.
   var idx = xmlStr.indexOf('sous-traitance envisag');
   if (idx === -1) return xmlStr;
   var pStart = Math.max(xmlStr.lastIndexOf('<w:p ', idx), xmlStr.lastIndexOf('<w:p>', idx));
   var pEnd = xmlStr.indexOf('</w:p>', idx) + '</w:p>'.length;
   var para = xmlStr.slice(pStart, pEnd);
-  var firstBox = para.indexOf('☐');
-  if (firstBox !== -1) para = para.slice(0, firstBox) + '☑' + para.slice(firstBox + 1);
-  var secondBox = para.indexOf('☑', firstBox + 1);
-  if (secondBox !== -1) para = para.slice(0, secondBox) + '☐' + para.slice(secondBox + 1);
+  var n = 0;
+  para = para.replace(/[\u2610\u2611]/g, function(){ n++; return (n === 1) === !!stOui ? '\u2611' : '\u2610'; });
   return xmlStr.slice(0, pStart) + para + xmlStr.slice(pEnd);
 }
 
@@ -4873,14 +4867,34 @@ function injecterPPSPS(zip, d) {
   return zip;
 }
 
+// Centre antipoison competent selon le departement du chantier
+// (carte officielle des 8 centres, centres-antipoison.net, verifiee le 30/09/2026).
+var CENTRES_ANTIPOISON = {
+  'Lille 08 00 59 59 59': ['02','59','60','62','80'],
+  'Paris 01 40 05 48 48': ['75','77','78','91','92','93','94','95','971','972','973'],
+  'Nancy 03 83 22 50 50': ['08','10','51','52','54','55','57','67','68','88','21','25','39','58','70','71','89','90'],
+  'Angers 02 41 48 21 21': ['22','29','35','56','14','27','50','61','76','44','49','53','72','85','18','28','36','37','41','45'],
+  'Bordeaux 05 56 96 40 80': ['16','17','19','23','24','33','40','47','64','79','86','87'],
+  'Toulouse 05 61 77 74 47': ['09','11','12','30','31','32','34','46','48','65','66','81','82'],
+  'Lyon 04 72 11 69 11': ['01','03','07','15','26','38','42','43','63','69','73','74'],
+  'Marseille 04 91 75 25 25': ['04','05','06','13','83','84','2A','2B','20','974','976']
+};
+function centreAntipoison(adresse) {
+  var cp = /\b(\d{5})\b/.exec(String(adresse || '').replace(/(\d{2})\s(\d{3})/, '$1$2'));
+  if (!cp) return 'centre antipoison de la r\u00e9gion (voir centres-antipoison.net)';
+  var dep = cp[1].slice(0, 2) === '97' ? cp[1].slice(0, 3) : cp[1].slice(0, 2);
+  for (var k in CENTRES_ANTIPOISON) if (CENTRES_ANTIPOISON[k].indexOf(dep) !== -1) return k;
+  return 'centre antipoison de la r\u00e9gion (voir centres-antipoison.net)';
+}
+
 var DOC_FILES = {
   'DP':          'CSPS17_Suivi_Declaration_Prealable_v3.docx',
   'RJC':         'CSPS17_Registre_Journal_Bordereau_v3_1.docx',
   'PGCR':        'CSPS17_PGC_v1.docx',
   'PGC3R':       'CSPS17_PGC_Simplifie_Cat3_v1.docx',
   'DIF':         'CSPS17_Fiche_Diffusion_PGC_v3.docx',
-  'FIC':         'Fiche_IC_Vierge_CSPS17_v15.docx',
-  'FIC3':        'Fiche_IC_Cat3_CSPS17_v4.docx',
+  'FIC':         'Fiche_IC_Vierge_CSPS17_v16.docx',
+  'FIC3':        'Fiche_IC_Cat3_CSPS17_v5.docx',
   'IC':          'CSPS17_Courrier_CSPS_v1.docx',
   'PPP':         'CSPS17_Grille_Analyse_PPSPS_v4.docx',
   'VIS':         'CR_Visite_Chantier_CSPS17_v2.docx',
@@ -4932,6 +4946,7 @@ function buildTagData(data) {
     oppbtp_adresse:   (org.oppbtp && org.oppbtp.adresse) || '',
     date_today:       today,
     ref_pgc:          (data.chantier && data.chantier.refPgc) || data.num || '',
+    antipoison:       centreAntipoison((data.chantier || {}).adresse),
     no_visite:        (data._visite && data._visite.noVisite) ? data._visite.noVisite : '1',
     heure_visite:     (data._visite && data._visite.heure) ? data._visite.heure : '',
     date_visite:      (data._visite && data._visite.date) ? data._visite.date : today,
@@ -6231,7 +6246,7 @@ function genFormulaireFIC() {
   html2 += checkRow('Gilet HV cl.2 / Gants', 'fic-epi-gilet', true);
   html2 += checkRow('Lunettes / Protection auditive', 'fic-epi-lunettes', false);
   html2 += checkRow('Protection respiratoire (CMR)', 'fic-epi-masque', risques.amiante || false);
-  html2 += checkRow('Harnais antichute (> 2m)', 'fic-epi-harnais', risques.hauteur || false);
+  html2 += checkRow('Harnais antichute (si protection collective impossible)', 'fic-epi-harnais', risques.hauteur || false);
   html2 += sectionEnd();
 
   // Section 10bis - Vigilance meteorologique (accordeon)
@@ -6241,7 +6256,7 @@ function genFormulaireFIC() {
   html2 += '<p style="font-size:12px;color:var(--text-light);margin-bottom:10px;">Cochez les mesures mises en place :</p>';
   html2 += '<p style="font-size:11px;font-weight:600;color:var(--blue-dark);margin:10px 0 6px;">&#9728; Canicule</p>';
   html2 += checkRow('Eau fraiche en permanence sur chantier', 'fic-meteo-eau', false);
-  html2 += checkRow('Arret travaux 12h-15h (canicule)', 'fic-meteo-arret', false);
+  html2 += checkRow('Horaires adaptés / tâches pénibles suspendues aux heures chaudes (canicule)', 'fic-meteo-arret', false);
   html2 += checkRow('Zone ombre / abri frais disponible', 'fic-meteo-ombre', false);
   html2 += checkRow('Arret immediat orage / alerte rouge', 'fic-meteo-orage', false);
   html2 += fieldRow('Referent canicule — Nom', 'fic-meteo-referent', 'text', 'Nom du referent canicule', '');

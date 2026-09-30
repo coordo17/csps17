@@ -247,6 +247,56 @@ function classerEntreeRJC(id, ref) {
 }
 
 function libelleRJC(e) {""")
+# 9i. Fiche d'inspection commune verifiee (loi, CARSAT/OPPBTP) — decisions d'Alain 30/09
+rep("  'FIC':         'Fiche_IC_Vierge_CSPS17_v15.docx',\n  'FIC3':        'Fiche_IC_Cat3_CSPS17_v4.docx',",
+    "  'FIC':         'Fiche_IC_Vierge_CSPS17_v16.docx',\n  'FIC3':        'Fiche_IC_Cat3_CSPS17_v5.docx',")
+rep("    ref_pgc:          (data.chantier && data.chantier.refPgc) || data.num || '',",
+    "    ref_pgc:          (data.chantier && data.chantier.refPgc) || data.num || '',\n    antipoison:       centreAntipoison((data.chantier || {}).adresse),")
+rep("var DOC_FILES = {", r"""// Centre antipoison competent selon le departement du chantier
+// (carte officielle des 8 centres, centres-antipoison.net, verifiee le 30/09/2026).
+var CENTRES_ANTIPOISON = {
+  'Lille 08 00 59 59 59': ['02','59','60','62','80'],
+  'Paris 01 40 05 48 48': ['75','77','78','91','92','93','94','95','971','972','973'],
+  'Nancy 03 83 22 50 50': ['08','10','51','52','54','55','57','67','68','88','21','25','39','58','70','71','89','90'],
+  'Angers 02 41 48 21 21': ['22','29','35','56','14','27','50','61','76','44','49','53','72','85','18','28','36','37','41','45'],
+  'Bordeaux 05 56 96 40 80': ['16','17','19','23','24','33','40','47','64','79','86','87'],
+  'Toulouse 05 61 77 74 47': ['09','11','12','30','31','32','34','46','48','65','66','81','82'],
+  'Lyon 04 72 11 69 11': ['01','03','07','15','26','38','42','43','63','69','73','74'],
+  'Marseille 04 91 75 25 25': ['04','05','06','13','83','84','2A','2B','20','974','976']
+};
+function centreAntipoison(adresse) {
+  var cp = /\b(\d{5})\b/.exec(String(adresse || '').replace(/(\d{2})\s(\d{3})/, '$1$2'));
+  if (!cp) return 'centre antipoison de la r\u00e9gion (voir centres-antipoison.net)';
+  var dep = cp[1].slice(0, 2) === '97' ? cp[1].slice(0, 3) : cp[1].slice(0, 2);
+  for (var k in CENTRES_ANTIPOISON) if (CENTRES_ANTIPOISON[k].indexOf(dep) !== -1) return k;
+  return 'centre antipoison de la r\u00e9gion (voir centres-antipoison.net)';
+}
+
+var DOC_FILES = {""")
+# sous-traitance : plus de case pre-cochee dans le modele, on coche la reponse donnee
+a = s.index("function cocherSousTraitance(xmlStr, stOui) {"); b = s.index("// Cases a cocher de la Grille PPSPS", a)
+s = s[:a] + r"""function cocherSousTraitance(xmlStr, stOui) {
+  // Modele v5 : ni Oui ni Non pre-coche ; on coche la reponse du formulaire terrain.
+  var idx = xmlStr.indexOf('sous-traitance envisag');
+  if (idx === -1) return xmlStr;
+  var pStart = Math.max(xmlStr.lastIndexOf('<w:p ', idx), xmlStr.lastIndexOf('<w:p>', idx));
+  var pEnd = xmlStr.indexOf('</w:p>', idx) + '</w:p>'.length;
+  var para = xmlStr.slice(pStart, pEnd);
+  var n = 0;
+  para = para.replace(/[\u2610\u2611]/g, function(){ n++; return (n === 1) === !!stOui ? '\u2611' : '\u2610'; });
+  return xmlStr.slice(0, pStart) + para + xmlStr.slice(pEnd);
+}
+
+""" + s[b:]
+# risques de la fiche Cat.3 : restes d'un ancien chantier retires, echelles, canicule
+rep("'• L\\'utilisation des échelles et escabeaux comme postes de travail est strictement interdite.', '• Habilitations électriques à jour requises pour tout le personnel (si intervention sur réseaux).', '• Mutualisation de l\\'échafaudage de l\\'ITE validée après contrôle d\\'adéquation.']",
+    "'• Règle du PGC de ce chantier : les échelles et escabeaux ne sont pas utilisés comme postes de travail (le Code du travail ne les admet qu\\'à titre exceptionnel, R.4323-63).']")
+rep("'☑ Intervention en plénum (Électricité/Plomberie)'", "'☐ Intervention en plénum (Électricité/Plomberie)'")
+rep("situations: ['Zone VIGILANCE ROUGE possible'], mesures: ['• Le chef d\\'entreprise et le Maître d\\'ouvrage doivent adopter des mesures de sauvegarde du personnel conformément décret n°2025-482 du 27 mai 2025.', '• Eau fraîche disponible en permanence.', '• Arrêt des travaux aux heures les plus chaudes si alerte rouge.']",
+    "situations: ['Vigilance canicule Météo-France jaune, orange ou rouge'], mesures: ['• Dès la vigilance jaune, l\\'employeur met en œuvre et adapte les mesures de prévention (décret n°2025-482 du 27 mai 2025, art. R.4463-1 et s.).', '• Eau potable fraîche en quantité suffisante.', '• Adaptation des horaires, pauses, suspension des tâches pénibles aux heures les plus chaudes.']")
+rep("if (ficData.meteoArret) canicule.push('arret travaux 12h-15h');", "if (ficData.meteoArret) canicule.push('horaires adaptes / taches penibles suspendues aux heures chaudes');")
+rep("checkRow('Harnais antichute (> 2m)',", "checkRow('Harnais antichute (si protection collective impossible)',")
+rep("checkRow('Arret travaux 12h-15h (canicule)',", "checkRow('Horaires adapt\u00e9s / t\u00e2ches p\u00e9nibles suspendues aux heures chaudes (canicule)',")
 # 10. version
 import datetime
 s = re.sub(r'v2\.46 &middot; build [^<]*', 'v3.0 &middot; ' + datetime.datetime.now(__import__('zoneinfo').ZoneInfo('Europe/Paris')).strftime('%d/%m %H:%M'), s, count=1)
