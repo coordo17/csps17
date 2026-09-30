@@ -175,6 +175,12 @@ async function mettreAJourAppli(){
   } catch (e) {}
   location.reload();
 }""")
+# 9e. synchronisation PC <-> tablette par le Google Drive dedie (bouton Synchroniser)
+rep('<script src="gen-visite.js"></script>', '<script src="gen-visite.js"></script>\n<script src="https://accounts.google.com/gsi/client" async defer></script>\n<script src="sync-drive.js"></script>')
+rep('<button class="btn btn-outline btn-sm" onclick="mettreAJourAppli()"', '<button class="btn btn-sm" id="btn-sync-drive" style="background:#16a34a;color:#fff;border:none;" onclick="synchroniserDrive()" title="Echanger les affaires et fichiers avec l\'autre appareil par le Drive CSPS17">&#8644; Synchroniser</button><span id="sync-drive-etat" style="font-size:12px;color:#555;"></span>\n    <button class="btn btn-outline btn-sm" onclick="mettreAJourAppli()"')
+rep("  affaires = affaires.filter(function(x){ return x.id !== id; });\n  localStorage.setItem('csps17_affaires', JSON.stringify(affaires));",
+    "  affaires = affaires.filter(function(x){ return x.id !== id; });\n  if (window.noterSuppressionAffaire) noterSuppressionAffaire(id);\n  localStorage.setItem('csps17_affaires', JSON.stringify(affaires));")
+rep("var fichiers = ['index.html', 'local-api.js', 'gen-visite.js',", "var fichiers = ['index.html', 'local-api.js', 'gen-visite.js', 'sync-drive.js',")
 # 10. version
 import datetime
 s = re.sub(r'v2\.46 &middot; build [^<]*', 'v3.0 &middot; ' + datetime.datetime.now(__import__('zoneinfo').ZoneInfo('Europe/Paris')).strftime('%d/%m %H:%M'), s, count=1)

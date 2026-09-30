@@ -50,7 +50,7 @@
         if (!d) return json({ error: 'Fichier absent de cet appareil (ancien stockage en ligne ou autre appareil)' }, 404);
         return new Response(dataUrlVersBlob(d), { status: 200 });
       }
-      if (chemin === '/api/rjc-delete-file') { await FichiersLocaux.effacer(corps.path); return json({ ok: true }); }
+      if (chemin === '/api/rjc-delete-file') { await FichiersLocaux.effacer(corps.path); if (window.noterSuppressionFichier) noterSuppressionFichier(corps.path); return json({ ok: true }); }
       if (chemin === '/api/entreprise') {
         return _f('https://recherche-entreprises.api.gouv.fr/search?page=1&per_page=5&q=' + encodeURIComponent(qs.get('q') || ''));
       }

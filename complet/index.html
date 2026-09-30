@@ -17,6 +17,8 @@
 <script src="lib/docxtemplater.js"></script>
 <script src="local-api.js"></script>
 <script src="gen-visite.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="sync-drive.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mammoth@1.7.2/mammoth.browser.min.js"></script>
 <style>
   :root {
@@ -645,12 +647,13 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v3.0 &middot; 28/09 23:22</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v3.0 &middot; 30/09 11:17</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
     <button class="btn btn-outline btn-sm" id="btn-import-pgc" style="display:none" onclick="showPage('import')">&#128229; Importer PGC</button>
     <button class="btn btn-outline btn-sm" onclick="showPage('terrain');setTimeout(populateTerrainSelect,100);" style="background:#e8f5e9;color:#2e7d52;border-color:#2e7d52;">&#128241; Terrain</button>
+    <button class="btn btn-sm" id="btn-sync-drive" style="background:#16a34a;color:#fff;border:none;" onclick="synchroniserDrive()" title="Echanger les affaires et fichiers avec l'autre appareil par le Drive CSPS17">&#8644; Synchroniser</button><span id="sync-drive-etat" style="font-size:12px;color:#555;"></span>
     <button class="btn btn-outline btn-sm" onclick="mettreAJourAppli()" title="Charger la derniere version de l'application">&#8635; Mettre à jour</button>
     <button class="btn btn-outline btn-sm" onclick="ouvrirSauvegardes()" title="Exporter / importer une sauvegarde de toutes vos affaires">&#128190; Sauvegardes</button>
     <span id="sync-indic" onclick="resyncMaintenant()" title="Etat de la sauvegarde serveur" style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 9px;border-radius:12px;cursor:pointer;background:#eee;color:#666;"><span id="sync-dot" style="width:9px;height:9px;border-radius:50%;background:#999;"></span><span id="sync-txt">—</span></span>
@@ -1958,6 +1961,7 @@ function deleteAffaire(e, id) {
     });
   }
   affaires = affaires.filter(function(x){ return x.id !== id; });
+  if (window.noterSuppressionAffaire) noterSuppressionAffaire(id);
   localStorage.setItem('csps17_affaires', JSON.stringify(affaires));
   pousserVersServeur(); // sinon l'affaire supprimee ressuscite a la prochaine synchro (bug corrige 05/07)
   renderAffaireList();
@@ -7945,7 +7949,7 @@ async function mettreAJourAppli(){
         for (var j = 0; j < reqs.length; j++) if (reqs[j].url.indexOf('/complet/') !== -1) await c.delete(reqs[j]);
       }
     }
-    var fichiers = ['index.html', 'local-api.js', 'gen-visite.js', 'lib/pizzip.js', 'lib/docxtemplater.js'];
+    var fichiers = ['index.html', 'local-api.js', 'gen-visite.js', 'sync-drive.js', 'lib/pizzip.js', 'lib/docxtemplater.js'];
     Object.keys(DOC_FILES).forEach(function(k){ fichiers.push('modeles/' + DOC_FILES[k]); });
     fichiers.push('modeles/CR_Visite_Chantier_CSPS17_v3.docx');
     await Promise.all(fichiers.map(function(f){ return fetch(f, { cache: 'reload' }).catch(function(){}); }));
