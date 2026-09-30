@@ -1,5 +1,5 @@
 # Construit complet/index.html a partir de l'ancien CSPS17 (debranche du serveur)
-import re, sys
+import re, sys, os
 src = open(sys.argv[1], encoding='utf-8').read().replace('\r\n', '\n')
 s = src
 def rep(old, new, n=1):
@@ -199,6 +199,15 @@ rep("    var nomEl = div.querySelector('.vis-ent-nom'); if(nomEl) nomEl.value = 
     "    var nomEl = div.querySelector('.vis-ent-nom'); if(nomEl) nomEl.value = ent.nom || '';\n    var lotEl = div.querySelector('.vis-ent-lot'); if(lotEl) lotEl.value = ent.lot || '';")
 rep("      var lot = entDiv.querySelector('.vis-ent-lot');", "      var lot = entDiv.querySelector('.vis-ent-lot');\n      var eff = entDiv.querySelector('.vis-ent-eff');")
 rep("          lot: lot ? lot.value : '',\n          effectif: '',", "          lot: lot ? lot.value : '',\n          effectif: eff ? eff.value : '',")
+# 9g. onglet Documents : Conception / Realisation / CISSCT / DIUO (demande d'Alain 30/09)
+a = s.index("  // Rangee Pieces du dossier (PGC + rapports/diagnostics)")
+b = s.index("// ── INSERTION D'UN DOCUMENT REALISE HORS APPLICATION")
+s = s[:a] + open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'onglet-documents.js'), encoding='utf-8').read() + s[b:]
+rep("  reminder.textContent = 'Categorie ' + currentCat + ' - ' + docsForCat.length + ' documents disponibles sur 17';",
+    "  reminder.textContent = 'Cat\u00e9gorie ' + currentCat + ' \u2014 ' + docsForCat.length + ' documents pour cette cat\u00e9gorie';")
+# plus d'analyse IA au depot d'une piece : le fichier est simplement range au dossier
+a = s.index("    ANALYSES_EN_COURS[type] = true;"); b = s.index("  } catch (err) {\n    showToast('Erreur depot : '", a)
+s = s[:a] + s[b:]
 # 10. version
 import datetime
 s = re.sub(r'v2\.46 &middot; build [^<]*', 'v3.0 &middot; ' + datetime.datetime.now(__import__('zoneinfo').ZoneInfo('Europe/Paris')).strftime('%d/%m %H:%M'), s, count=1)

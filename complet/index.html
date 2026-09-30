@@ -647,7 +647,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v3.0 &middot; 30/09 11:41</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v3.0 &middot; 30/09 11:52</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -2183,22 +2183,6 @@ async function deposerPieceDossier(affaire, file, type) {
     // PGC (simple synthese aide-memoire, sans injection — le PGC fait foi).
     // Pendant toute l'analyse (extraction/OCR compris), le badge de la carte
     // clignote pour montrer que ca travaille et que ca n'a pas plante.
-    ANALYSES_EN_COURS[type] = true;
-    try { renderDocsGrid(); } catch (eR) {}
-    try {
-      if (type === 'DIAG') await analyserRapportDiag(affaire, file);
-      else if (type === 'PGC') await analyserPGCDepose(affaire, file);
-      else if (type === 'PLAN') await analyserPlanning(affaire, file);
-      else if (type === 'CONTRAT') await analyserContratDepose(affaire, file);
-      else if (type === 'ICR') await analyserICDeposee(affaire, file);
-      else if (type === 'CONTRAINTES') await analyserContraintesDeposee(affaire, file);
-      else if (type === 'PLANS') await analyserPlansDepose(affaire, file);
-      else if (type === 'PPSPS') await analyserPPSPSDepose(affaire, file);
-      else if (type === 'CRMOA') await analyserCRReunion(affaire, file);
-    } finally {
-      delete ANALYSES_EN_COURS[type];
-      try { renderDocsGrid(); } catch (eR2) {}
-    }
   } catch (err) {
     showToast('Erreur depot : ' + err.message, 'error');
   }
@@ -3660,88 +3644,81 @@ function renderDocsGrid() {
   var catText = { 1: '#991b1b', 2: '#92400e', 3: '#065f46' };
   reminder.style.cssText = 'background:' + catColors[currentCat] + ';color:' + catText[currentCat] + ';';
   var docsForCat = DOCS.filter(function(d){ return d.cats.includes(currentCat); });
-  reminder.textContent = 'Categorie ' + currentCat + ' - ' + docsForCat.length + ' documents disponibles sur 17';
+  reminder.textContent = 'Catégorie ' + currentCat + ' — ' + docsForCat.length + ' documents pour cette catégorie';
   var affaire = currentAffaireObj();
   var formData = collectFormData();
-  // Rangee Pieces du dossier (PGC + rapports/diagnostics)
-  var piecesGrid = document.getElementById('pieces-grid');
-  if (piecesSection && piecesGrid) {
-    piecesSection.style.display = 'block';
-    piecesGrid.innerHTML = PIECES_DOSSIER.map(function(p){
-      var entries = rjcEntriesForDoc(affaire, p.ref);
-      var nb = entries.length;
-      var dernierF = dernierFichierDoc(affaire, p.ref);
-      var enCours = !!ANALYSES_EN_COURS[p.ref];
-      var badge = (nb > 0 || enCours)
-        ? '<span class="doc-badge' + (enCours ? ' travaille' : '') + '" onclick="showHistoriqueDoc(\'' + p.ref + '\')" title="' + (enCours ? 'Analyse en cours\u2026' : nb + ' piece(s) au dossier \u2014 cliquer pour l\'historique') + '">' + nb + '</span>'
-        : '';
-      var dot = (p.ref === 'PGC')
-        ? '<span class="doc-dot ' + (nb > 0 ? 'ok' : 'warn') + '" title="' + (nb > 0 ? 'PGC present au dossier' : 'Aucun PGC depose pour cette affaire') + '"></span>'
-        : (p.ref === 'CONTRAT')
-        ? '<span class="doc-dot ' + (nb > 0 ? 'ok' : 'warn') + '" title="' + (nb > 0 ? 'Contrat de coordination present au dossier' : 'Aucun contrat de coordination depose (ouvre le registre-journal, R.4532-38)') + '"></span>'
-        : '';
-      var btnTel = dernierF
-        ? '<button class="btn btn-outline btn-sm" onclick="telechargerDernierDoc(\'' + p.ref + '\')" title="Derniere piece : ' + formatDateFR(dernierF.date) + '">&#11015; Telecharger</button>'
-        : '<button class="btn btn-outline btn-sm" disabled title="Aucune piece deposee">&#11015; Telecharger</button>';
-      // Bouton "Analyses" : consultation des analyses IA passees des rapports deposes
-      var btnAnalyses = (p.ref === 'DIAG' && affaire && affaire.rapportsAnalyses && affaire.rapportsAnalyses.length)
-        ? '<button class="btn btn-outline btn-sm" onclick="voirAnalysesRapports()" title="' + affaire.rapportsAnalyses.length + ' analyse(s) IA consultables">&#128300; Analyses</button>'
-        : '';
-      // Contraintes : possibilite de saisir en TEXTE LIBRE (sans fichier)
-      var btnTexte = (p.ref === 'CONTRAINTES')
-        ? '<button class="btn btn-outline btn-sm" onclick="saisirContraintesTexte()" title="Saisir des contraintes en texte libre">&#9998; Texte libre</button>'
-        : '';
-      return '<div class="doc-card">'
-        + badge
-        + '<div class="doc-card-top"><div class="doc-icon">' + p.icon + '</div>'
-        + '<div class="doc-info"><div class="doc-title">' + p.title + dot + '</div>'
-        + '<div class="doc-ref">' + p.note + '</div></div></div>'
-        + '<div class="doc-actions">'
-        + '<button class="btn btn-primary btn-sm" onclick="document.getElementById(\'piece-input-' + p.ref + '\').click()">&#128229; Deposer</button>'
-        + btnTexte
-        + btnTel
-        + btnAnalyses
-        + '</div></div>';
-    }).join('') + renderAnalyseCard(affaire) + renderPGCPrefillCard(affaire) + renderHarmoPPSPSCard(affaire);
+  // Onglet Documents range par etapes de la mission (demande d'Alain 30/09) :
+  // Conception, Realisation, puis en fin de page CISSCT et DIUO.
+  // Les documents hors categorie ne sont plus affiches (moins de bruit).
+  // Les analyses deja faites (diagnostics, PGC pre-rempli) restent consultables.
+  if (piecesSection) piecesSection.style.display = 'none';
+  function cartePiece(p){
+    var entries = rjcEntriesForDoc(affaire, p.ref);
+    var nb = entries.length;
+    var dernierF = dernierFichierDoc(affaire, p.ref);
+    var badge = nb > 0 ? '<span class="doc-badge" onclick="showHistoriqueDoc(\'' + p.ref + '\')" title="' + nb + ' piece(s) au dossier \u2014 cliquer pour l\'historique">' + nb + '</span>' : '';
+    var dot = (p.ref === 'PGC' || p.ref === 'CONTRAT')
+      ? '<span class="doc-dot ' + (nb > 0 ? 'ok' : 'warn') + '" title="' + (nb > 0 ? 'Present au dossier' : 'Pas encore depose') + '"></span>' : '';
+    var btnTel = dernierF
+      ? '<button class="btn btn-outline btn-sm" onclick="telechargerDernierDoc(\'' + p.ref + '\')" title="Derniere piece : ' + formatDateFR(dernierF.date) + '">&#11015; Telecharger</button>'
+      : '<button class="btn btn-outline btn-sm" disabled title="Aucune piece deposee">&#11015; Telecharger</button>';
+    var btnTexte = (p.ref === 'CONTRAINTES') ? '<button class="btn btn-outline btn-sm" onclick="saisirContraintesTexte()" title="Saisir des contraintes en texte libre">&#9998; Texte libre</button>' : '';
+    return '<div class="doc-card" style="background:#f8fafc;">' + badge
+      + '<div class="doc-card-top"><div class="doc-icon">' + p.icon + '</div>'
+      + '<div class="doc-info"><div class="doc-title">' + p.title + dot + '</div>'
+      + '<div class="doc-ref">Piece recue</div></div></div>'
+      + '<div class="doc-actions">'
+      + '<button class="btn btn-primary btn-sm" onclick="document.getElementById(\'piece-input-' + p.ref + '\').click()">&#128229; Deposer</button>'
+      + btnTexte + btnTel + '</div></div>';
   }
-  grid.innerHTML = DOCS.map(function(doc){
-    var active = doc.cats.includes(currentCat);
+  function carteDoc(doc){
     var entries = rjcEntriesForDoc(affaire, doc.ref);
     var nb = entries.length;
     var dernierF = dernierFichierDoc(affaire, doc.ref);
-    var manque = active ? analyserCompletude(doc.ref, formData, affaire) : [];
-    var badgeTitle = (doc.ref === 'RJC')
-      ? nb + ' entree(s) au registre — cliquer pour l\'historique'
-      : nb + ' version(s) generee(s) — cliquer pour l\'historique';
-    var badge = (active && nb > 0)
-      ? '<span class="doc-badge" onclick="showHistoriqueDoc(\'' + doc.ref + '\')" title="' + badgeTitle + '">' + nb + '</span>'
-      : '';
-    var dot = active
-      ? '<span class="doc-dot ' + (manque.length ? 'warn' : 'ok') + '" title="'
-        + (manque.length ? ('Manque : ' + manque.join(', ').replace(/"/g, '&quot;')) : 'Donnees completes pour ce document')
-        + '"></span>'
-      : '';
+    var manque = analyserCompletude(doc.ref, formData, affaire);
+    var badgeTitle = (doc.ref === 'RJC') ? nb + ' entree(s) au registre — cliquer pour l\'historique' : nb + ' version(s) generee(s) — cliquer pour l\'historique';
+    var badge = nb > 0 ? '<span class="doc-badge" onclick="showHistoriqueDoc(\'' + doc.ref + '\')" title="' + badgeTitle + '">' + nb + '</span>' : '';
+    var dot = '<span class="doc-dot ' + (manque.length ? 'warn' : 'ok') + '" title="'
+      + (manque.length ? ('Manque : ' + manque.join(', ').replace(/"/g, '&quot;')) : 'Donnees completes pour ce document') + '"></span>';
     var btnTelecharger;
-    if (active && dernierF) {
-      btnTelecharger = '<button class="btn btn-outline btn-sm" onclick="telechargerDernierDoc(\'' + doc.ref + '\')" title="Derniere version : ' + formatDateFR(dernierF.date) + '">&#11015; Telecharger</button>';
-    } else if (active && doc.ref === 'RJC') {
-      btnTelecharger = '<button class="btn btn-outline btn-sm" disabled title="Le registre se genere toujours a jour — utilisez Generer">&#11015; Telecharger</button>';
-    } else {
-      btnTelecharger = '<button class="btn btn-outline btn-sm" disabled title="Aucune version generee">&#11015; Telecharger</button>';
-    }
-    return '<div class="doc-card ' + (active ? '' : 'disabled') + '">'
-      + badge
+    if (dernierF) btnTelecharger = '<button class="btn btn-outline btn-sm" onclick="telechargerDernierDoc(\'' + doc.ref + '\')" title="Derniere version : ' + formatDateFR(dernierF.date) + '">&#11015; Telecharger</button>';
+    else if (doc.ref === 'RJC') btnTelecharger = '<button class="btn btn-outline btn-sm" disabled title="Le registre se genere toujours a jour — utilisez Generer">&#11015; Telecharger</button>';
+    else btnTelecharger = '<button class="btn btn-outline btn-sm" disabled title="Aucune version generee">&#11015; Telecharger</button>';
+    return '<div class="doc-card">' + badge
       + '<div class="doc-card-top"><div class="doc-icon">' + doc.icon + '</div>'
       + '<div class="doc-info"><div class="doc-title">' + doc.title + dot + '</div>'
       + '<div class="doc-ref">CSPS17/' + doc.ref + '</div></div></div>'
       + '<div class="doc-actions">'
-      + '<button class="btn btn-primary btn-sm" ' + (active ? 'onclick="generateDocAvecCheck(\'' + doc.ref + '\')"' : 'disabled') + '>Generer</button>'
-      + '<button class="btn btn-outline btn-sm" ' + (active ? 'onclick="previewDoc(\'' + doc.ref + '\')"' : 'disabled') + '>Apercu</button>'
+      + '<button class="btn btn-primary btn-sm" onclick="generateDocAvecCheck(\'' + doc.ref + '\')">Generer</button>'
+      + '<button class="btn btn-outline btn-sm" onclick="previewDoc(\'' + doc.ref + '\')">Apercu</button>'
       + btnTelecharger
-      + '<button class="btn btn-outline btn-sm" ' + (active ? 'onclick="insererDocExterne(\'' + doc.ref + '\')"' : 'disabled')
-      + ' title="Inserer un document realise HORS application (Word rempli sur le tel en zone blanche, IC faite avant CSPS17, scan signe...) — rattache a ce document et trace au RJC a sa date reelle">&#128206; Inserer</button>'
+      + '<button class="btn btn-outline btn-sm" onclick="insererDocExterne(\'' + doc.ref + '\')" title="Inserer un document realise hors application (scan signe, Word rempli ailleurs...) — trace au RJC a sa date reelle">&#128206; Inserer</button>'
       + '</div></div>';
-  }).join('');
+  }
+  var SECTIONS = [
+    { titre: 'Conception', couleur: '#1e40af', fond: '#eff6ff', pieces: ['CONTRAT', 'PGC', 'DIAG', 'CONTRAINTES', 'PLANS'], docs: ['DP', 'PGCR', 'PGC3R', 'DIF', 'PV-PC'] },
+    { titre: 'R\u00e9alisation', couleur: '#166534', fond: '#f0fdf4', pieces: ['ICR', 'PLAN', 'PPSPS', 'CRMOA'], docs: ['RJC', 'FIC', 'IC', 'PPP', 'VIS', 'OBS', 'DGI', 'RCO', 'RFM'] },
+    { titre: 'CISSCT', couleur: '#7c2d12', fond: '#fff7ed', pieces: [], docs: ['CISSCT-RI', 'CISSCT-CONV', 'CISSCT-CR'] },
+    { titre: 'DIUO', couleur: '#4c1d95', fond: '#f5f3ff', pieces: [], docs: ['DIUO', 'PV-DIUO'] }
+  ];
+  var phase = (affaire && affaire.missionPhase) || '';
+  var html = '';
+  SECTIONS.forEach(function(sec){
+    var docs = sec.docs.map(function(r){ return DOCS.find(function(d){ return d.ref === r; }); })
+      .filter(function(d){ return d && d.cats.includes(currentCat); });
+    var pieces = sec.pieces.map(function(r){ return PIECES_DOSSIER.find(function(p){ return p.ref === r; }); }).filter(Boolean);
+    if (!docs.length && !pieces.length) return;
+    var horsMission = (phase === 'conception' && sec.titre !== 'Conception') || (phase === 'realisation' && sec.titre === 'Conception');
+    html += '<details ' + (horsMission ? '' : 'open') + ' style="grid-column:1/-1;border:1px solid var(--border);border-left:6px solid ' + sec.couleur + ';border-radius:8px;background:' + sec.fond + ';margin-bottom:6px;">'
+      + '<summary style="cursor:pointer;padding:12px 16px;font-size:16px;font-weight:700;color:' + sec.couleur + ';">' + sec.titre
+      + ' <span style="font-weight:400;font-size:12px;color:var(--text-light);">' + docs.length + ' document(s)' + (pieces.length ? ', ' + pieces.length + ' piece(s) recue(s)' : '') + (horsMission ? ' — hors de votre mission' : '') + '</span></summary>'
+      + '<div class="docs-grid" style="margin:0;padding:0 12px 12px;">'
+      + pieces.map(cartePiece).join('') + docs.map(carteDoc).join('')
+      + (sec.titre === 'Conception' ? renderAnalyseCard(affaire) + renderPGCPrefillCard(affaire) : '')
+      + '</div></details>';
+  });
+  grid.style.display = 'block';
+  grid.innerHTML = html;
 }
 
 // ── INSERTION D'UN DOCUMENT REALISE HORS APPLICATION (demande d'Alain 05/07) ──
