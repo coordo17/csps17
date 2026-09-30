@@ -412,6 +412,7 @@ rep("    var finalZip = doc.getZip();\n    if (typeof sigData", "    var finalZi
 rep("function genFormulaireRCO() {", open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'gen-reunion.part.js'), encoding='utf-8').read() + "function genFormulaireRCO() {")
 # 9p. Intervenants rattaches + fiche IC complete (v17 / Cat.3 v6) — decisions d'Alain 30/09 soir
 ICP = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ic-complete.part.js'), encoding='utf-8').read()
+ICP = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ic-metiers-harmo.part.js'), encoding='utf-8').read() + ICP
 a = s.index('var RISQUES_DEF = {'); k = s.index('{', a); dep = 0
 for j in range(k, len(s)):
     if s[j] == '{': dep += 1
@@ -453,6 +454,8 @@ seg = s[a:b]; old = "  html2 += sectionEnd();\n\n  return html2;\n}"; assert seg
 s = s[:a] + seg.replace(old, "  html2 += sectionEnd();\n  html2 += icFinHtml();\n\n  return html2;\n}") + s[b:]
 rep("    setTimeout(function() { initRisquesWidget(); }, 50);", "    setTimeout(function() { initRisquesWidget(); icInitFormulaire(); }, 50);")
 # section 7 : risques issus du PGC ; ceux du lot sont proposes en 7D ; observations par risque
+a = s.index('var METIERS_RISQUES = ['); b = s.index('];', a) + 2
+s = s[:a] + "var METIERS_RISQUES = []; // ancienne table retiree le 30/09 : les propositions viennent des fiches metier d'Harmo (IC_METIERS_RISQUES)" + s[b:]
 rep("    var deMetier = risquesMetier.indexOf(r.id) !== -1;", "    var deMetier = false; // risques typiques du lot : proposes en 7D (risques propres)")
 rep("id=\"rqlbl-' + r.id + '\">' + r.label + origine + '</td>';",
     "id=\"rqlbl-' + r.id + '\">' + r.label + origine + '<input type=\"text\" id=\"rqobs-' + r.id + '\" placeholder=\"Observations entreprise / exploitant\" style=\"display:' + (pre ? 'block' : 'none') + ';width:100%;margin-top:4px;padding:5px;font-size:12px;border:1px solid var(--border);border-radius:4px;\"></td>';")

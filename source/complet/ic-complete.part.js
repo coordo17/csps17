@@ -251,16 +251,27 @@ function icCollecterGrille() {
 // 7D : risques propres a l'entreprise (R.4532-66 2°)
 var IC_ORIGINES = ['Mode op\u00e9ratoire', 'Mat\u00e9riels / installations', 'Produits', 'D\u00e9placements', 'Organisation du chantier'];
 var icRpCount = 0;
+function icNormTxt(x) { // = _normTxt d'Harmo
+  return String(x || '').toLowerCase().replace(/\u0153/g, 'oe').replace(/\u0152/g, 'oe').replace(/\u00e6/g, 'ae').replace(/\u00c6/g, 'ae')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ');
+}
+function icMetiersDuLot(lot) { // = detecterMetiersMultiples d'Harmo
+  var t = icNormTxt(lot); if (!t) return [];
+  return Object.keys(IC_METIER_MOTS).filter(function (k) {
+    return IC_METIER_MOTS[k].some(function (mot) { return t.indexOf(icNormTxt(mot)) >= 0; });
+  });
+}
+function icTexteHarmo(t) { return String(t || '').replace(/ -- /g, ' \u2013 '); }
 function ic7dHtml() {
   return sectionHeader('7D', 'Risques propres \u00e0 l\u2019entreprise (travaux confi\u00e9s)', '&#128736;')
     + '<p style="font-size:12px;color:var(--text-light);margin-bottom:8px;">R.4532-66 : risques li\u00e9s aux modes op\u00e9ratoires, mat\u00e9riels, produits, d\u00e9placements, organisation. '
-    + 'Les propositions du lot ne comptent que si vous les confirmez. La mesure est celle annonc\u00e9e par l\u2019entreprise ; sans mesure, le Word indique \u00ab \u00e0 pr\u00e9ciser dans le PPSPS \u00bb.</p>'
+    + 'Propositions : fiches-risques du m\u00e9tier (PGC Harmo), \u00e0 confirmer une par une. La mesure est celle annonc\u00e9e par l\u2019entreprise ; sans mesure, le Word indique \u00ab \u00e0 pr\u00e9ciser dans le PPSPS \u00bb.</p>'
     + '<div id="ic7d-liste"></div>'
     + '<button type="button" class="btn btn-outline btn-sm" onclick="ic7dAjouter(\'\', true, false)">+ Ajouter un risque propre</button> '
     + '<button type="button" class="btn btn-outline btn-sm" onclick="ic7dProposer(true)">&#128260; Proposer les risques du lot</button>'
     + sectionEnd();
 }
-function ic7dAjouter(label, coche, proposition) {
+function ic7dAjouter(label, coche, proposition, g, rappel) {
   var liste = document.getElementById('ic7d-liste'); if (!liste) return;
   icRpCount++;
   var d = document.createElement('div');
@@ -268,12 +279,13 @@ function ic7dAjouter(label, coche, proposition) {
   d.style.cssText = 'padding:6px 0;border-bottom:1px solid var(--border);' + (proposition ? 'background:#f8fafc;' : '');
   d.innerHTML = '<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;">'
     + '<input type="checkbox" class="ic7d-ok" title="Confirm\u00e9 avec l\u2019entreprise"' + (coche ? ' checked' : '') + ' style="width:18px;height:18px;">'
-    + '<input type="text" class="ic7d-lab" value="' + icEscAttr(label) + '" placeholder="Risque propre" style="flex:1;padding:6px;border:1px solid var(--border);border-radius:5px;font-size:13px;">'
-    + (proposition ? '<span style="font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;background:var(--bg-accent);color:var(--blue-mid);">LOT \u2014 \u00e0 confirmer</span>' : '')
+    + '<textarea class="ic7d-lab" rows="' + Math.max(2, Math.min(6, Math.ceil(String(label || '').length / 28))) + '" placeholder="Risque propre" style="flex:1;min-width:0;padding:6px;border:1px solid var(--border);border-radius:5px;font-size:13px;font-family:inherit;resize:vertical;">' + icEscAttr(label) + '</textarea>'
+    + (proposition ? '<span style="font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;white-space:nowrap;background:' + (g >= 4 ? '#fee2e2;color:#b91c1c' : 'var(--bg-accent);color:var(--blue-mid)') + ';">' + (g ? 'G' + g + ' \u2014 ' : '') + '\u00e0 confirmer</span>' : '')
     + '<button type="button" class="btn-remove-ent" onclick="this.closest(\'.ic7d-row\').remove()">x</button></div>'
     + '<div style="display:flex;gap:6px;"><select class="ic7d-orig" style="padding:6px;border:1px solid var(--border);border-radius:5px;font-size:12px;"><option value="">Origine\u2026</option>'
     + IC_ORIGINES.map(function (o) { return '<option>' + o + '</option>'; }).join('') + '</select>'
-    + '<input type="text" class="ic7d-mes" placeholder="Mesure annonc\u00e9e par l\u2019entreprise" style="flex:1;padding:6px;border:1px solid var(--border);border-radius:5px;font-size:12px;"></div>';
+    + '<input type="text" class="ic7d-mes" placeholder="Mesure annonc\u00e9e par l\u2019entreprise" style="flex:1;padding:6px;border:1px solid var(--border);border-radius:5px;font-size:12px;"></div>'
+    + (rappel ? '<div style="font-size:11px;color:var(--text-light);margin-top:3px;"><strong>Rappel PGC :</strong> ' + icEscAttr(rappel) + '</div>' : '');
   liste.appendChild(d);
 }
 function ic7dProposer(depuisBouton) {
@@ -283,14 +295,19 @@ function ic7dProposer(depuisBouton) {
   });
   var deja = Array.prototype.slice.call(liste.querySelectorAll('.ic7d-lab')).map(function (i) { return i.value; });
   var lot = getVal('fic-ent-lot');
-  var n = 0;
-  risquesDuLot(lot).forEach(function (rid) {
-    if (rid === 'r24') return; // coactivite : interference (7A), pas un risque propre
-    var lib = (PGC_RISQUES_LIB[rid] || {}).label;
-    if (!lib || deja.indexOf(lib) !== -1) return;
-    ic7dAjouter(lib, false, true); n++;
+  var n = 0, fiches = [];
+  icMetiersDuLot(lot).forEach(function (k) {
+    (IC_METIERS_RISQUES[k].risques || []).forEach(function (r) { fiches.push(r); });
   });
-  if (depuisBouton) showToast(n ? n + ' risque(s) typique(s) du lot propos\u00e9(s) en 7D \u2014 \u00e0 confirmer' : 'Aucun risque type reconnu pour ce lot', n ? 'success' : 'error');
+  fiches.sort(function (x, y) { return (y.g || 0) - (x.g || 0); });
+  fiches.forEach(function (r) {
+    var lib = icTexteHarmo(r.sit) + ' : ' + icTexteHarmo(r.risk);
+    if (deja.indexOf(lib) !== -1) return;
+    deja.push(lib);
+    ic7dAjouter(lib, false, true, r.g, icTexteHarmo(r.mes)); n++;
+  });
+  var noms = icMetiersDuLot(lot).map(function (k) { return icTexteHarmo(IC_METIERS_RISQUES[k].label); });
+  if (depuisBouton) showToast(n ? n + ' fiche(s) propos\u00e9e(s) en 7D (' + noms.join(', ') + ') \u2014 \u00e0 confirmer' : 'Aucun m\u00e9tier reconnu pour ce lot : ajoutez les risques \u00e0 la main', n ? 'success' : 'error');
 }
 function ic7dCollecter() {
   return Array.prototype.slice.call(document.querySelectorAll('#ic7d-liste .ic7d-row')).filter(function (r) {
