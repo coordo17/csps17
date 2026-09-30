@@ -323,7 +323,7 @@ rep("    signatureCsps: (typeof sigData !== 'undefined' && sigData) ? sigData.cs
   // observations de ce CR pour le suivant (synchronise avec la tablette avec l'affaire).
   var aff = affaires.find(function(x){ return x.id === ta.id; }) || ta;
   cr.observationsPrecedentes = (aff.derniereVisite && aff.derniereVisite.observations) || [];
-  aff.derniereVisite = { date: v.date || '', no: no, observations: (ta._observations || []).filter(function(o){ return o && o.description; })
+  aff.derniereVisite = { date: v.date || '', no: no, origine: 'Visite n\u00b0' + no, observations: (ta._observations || []).filter(function(o){ return o && o.description; })
     .map(function(o){ return { description: o.description, responsable: o.responsable || '', delai: o.delai || '' }; }) };
   aff.savedAt = new Date().toISOString();
   try { localStorage.setItem('csps17_affaires', JSON.stringify(affaires)); } catch (eS) {}
@@ -344,7 +344,7 @@ rep("function genFormulaireDGI() {", r"""// Balises du signalement DGI : saisie 
 function tagsDGI(data) {
   function v(id){ var e = document.getElementById(id); return e ? String(e.value || '').trim() : ''; }
   var moa = data.moa || {}, statut = moa.pouvoirArret || '';
-  var aff = affaires.find(function(a){ return a.id === data.id; }) || data;
+  var aff = affaires.find(function(a){ return a.id === ((typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire.id) || data.id); }) || data;
   var n = 1; try { n = rjcEntriesForDoc(aff, 'DGI').length + 1; } catch (e) {}
   var type = v('dgi-ent-type');
   var m1 = v('dgi-mes1'), m2 = v('dgi-mes2');
@@ -399,6 +399,17 @@ function piedCourrier(c) {
     return "Consign\u00e9 au registre-journal de la coordination (R.4532-38) \u2014 visa \u00e0 retourner sous 24 h ; copie au ma\u00eetre d'ouvrage sous 48 h (recommandation CARSAT Centre-Ouest) \u2014 \u00e0 conserver 5 ans apr\u00e8s r\u00e9ception de l'ouvrage (R.4532-41).";
   return 'Consign\u00e9 au registre-journal de la coordination (R.4532-38).';
 }""")
+# 9o. CR de reunion de coordination v3 — decisions d'Alain 30/09
+rep("  'RCO':         'CSPS17_CR_Reunion_Coordination_v2.docx',", "  'RCO':         'CSPS17_CR_Reunion_Coordination_v3.docx',")
+rep("    visiteData = { noVisite: getVal('rco-no'), heure: getVal('rco-heure'), lieu: getVal('rco-lieu') };",
+    "    visiteData = { noVisite: getVal('rco-no'), heure: getVal('rco-heure'), lieu: getVal('rco-lieu') };\n    terrainAffaire._rco = { no: getVal('rco-no'), date: getVal('rco-date'), heure: getVal('rco-heure'), lieu: getVal('rco-lieu'), participants: getVal('rco-participants'), points: getVal('rco-points'), decisions: getVal('rco-decisions'), prochaine: getVal('rco-prochaine'), odj: getVal('rco-odj') };")
+rep("  html2 += fieldRow('Participants (un par ligne)', 'rco-participants', 'textarea', 'Nom - Entreprise - Qualite', '');",
+    "  html2 += fieldRow('Participants (un par ligne)', 'rco-participants', 'textarea', 'Nom - Entreprise - Qualit\u00e9   (ajouter \u00ab (excus\u00e9) \u00bb en fin de ligne si absent excus\u00e9)', '');")
+rep("  html2 += fieldRow('Decisions prises / Actions', 'rco-decisions', 'textarea', 'Actions, responsables, delais...', '');\n  html2 += sectionEnd();\n  return html2;",
+    "  html2 += fieldRow('Nouvelles observations / d\u00e9cisions (une par ligne)', 'rco-decisions', 'textarea', 'description ; responsable ; d\u00e9lai', '');\n  html2 += sectionEnd();\n  html2 += sectionHeader('5', 'Prochaine r\u00e9union', '&#128197;');\n  html2 += fieldRow('Date et lieu de la prochaine r\u00e9union', 'rco-prochaine', 'text', 'Ex : 14/10/2026 \u00e0 9 h, base vie', '');\n  html2 += fieldRow('Points \u00e0 l\u2019ordre du jour', 'rco-odj', 'textarea', '', '');\n  html2 += sectionEnd();\n  return html2;")
+rep("    if (ref === 'DGI') Object.assign(_tags, tagsDGI(data));", "    if (ref === 'DGI') Object.assign(_tags, tagsDGI(data));\n    if (ref === 'RCO') Object.assign(_tags, tagsRCO(data));")
+rep("    var finalZip = doc.getZip();\n    if (typeof sigData", "    var finalZip = doc.getZip();\n    if (ref === 'RCO') finalZip = injecterRCO(finalZip, data);\n    if (typeof sigData")
+rep("function genFormulaireRCO() {", open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'gen-reunion.part.js'), encoding='utf-8').read() + "function genFormulaireRCO() {")
 # 10. version
 import datetime
 s = re.sub(r'v2\.46 &middot; build [^<]*', 'v3.0 &middot; ' + datetime.datetime.now(__import__('zoneinfo').ZoneInfo('Europe/Paris')).strftime('%d/%m %H:%M'), s, count=1)

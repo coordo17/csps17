@@ -253,7 +253,7 @@
     zip.file('[Content_Types].xml', ctx.ct);
     return zip;
   }
-  var api = { genererCRVisite: genererCRVisite, dateFR: dateFR };
+  var api = { genererCRVisite: genererCRVisite, dateFR: dateFR, outils: { tc: tc, para: para, remplacerCorps: remplacerCorps, visas: visas, suiviPrecedent: suiviPrecedent } };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   racine.GenVisite = api;
 })(typeof window !== 'undefined' ? window : globalThis);

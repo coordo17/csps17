@@ -647,7 +647,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v3.0 &middot; 30/09 15:56</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v3.0 &middot; 30/09 16:01</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -4900,7 +4900,7 @@ var DOC_FILES = {
   'VIS':         'CR_Visite_Chantier_CSPS17_v2.docx',
   'OBS':         'CSPS17_Courrier_CSPS_v2.docx',
   'DGI':         'CSPS17_Signalement_DGI_v5.docx',
-  'RCO':         'CSPS17_CR_Reunion_Coordination_v2.docx',
+  'RCO':         'CSPS17_CR_Reunion_Coordination_v3.docx',
   'DIUO':        'CSPS17_DIUO_Trame_v3.docx',
   'PV-DIUO':     'CSPS17_PV_Transmission_DIUO_v3.docx',
   'PV-PC':       'CSPS17_PV_Passation_Consignes_v3.docx',
@@ -5277,8 +5277,10 @@ async function generateDoc(ref, previewMode) {
     });
     var _tags = buildTagData(data);
     if (ref === 'DGI') Object.assign(_tags, tagsDGI(data));
+    if (ref === 'RCO') Object.assign(_tags, tagsRCO(data));
     doc.render(_tags);
     var finalZip = doc.getZip();
+    if (ref === 'RCO') finalZip = injecterRCO(finalZip, data);
     if (typeof sigData !== 'undefined' && (sigData.csps || sigData.ent)) {
       finalZip = injecterSignatures(finalZip, sigData.csps, sigData.ent, sigData.eu);
     }
@@ -6576,6 +6578,58 @@ function visObsEntSelect(id, val) {
   }
 }
 
+// CR de reunion de coordination v3 : balises et tableaux (decisions d'Alain 30/09)
+function lignesRCO(txt) { return String(txt || '').split(/\r?\n/).map(function(l){ return l.trim(); }).filter(Boolean); }
+function tagsRCO(data) {
+  var r = (typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire._rco) || {};
+  var aff = affaires.find(function(a){ return a.id === ((typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire.id) || data.id); }) || data;
+  var n = 1; try { n = rjcEntriesForDoc(aff, 'RCO').length + 1; } catch (e) {}
+  return {
+    rco_ref: 'CSPS17/RCO-' + (data.num || '') + '-' + String(r.no || n).padStart(2, '0'),
+    rco_date: r.date ? r.date.split('-').reverse().join('/') : '',
+    rco_no: String(r.no || ''), rco_heure_txt: r.heure ? 'Heure : ' + r.heure : '', rco_lieu: r.lieu || '',
+    rco_points: r.points || '', rco_prochaine: r.prochaine || '', rco_odj: r.odj || ''
+  };
+}
+function injecterRCO(zip, data) {
+  var r = (typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire._rco); if (!r) return zip;
+  var O = GenVisite.outils, xml = zip.file('word/document.xml').asText();
+  // Participants : on garde l'en-tete et la ligne du coordonnateur
+  var parts = lignesRCO(r.participants);
+  if (parts.length) {
+    var i = xml.indexOf('Excus\u00e9</w:t>');
+    if (i !== -1) {
+      var tS = xml.lastIndexOf('<w:tbl>', i), tE = xml.indexOf('</w:tbl>', i) + 8, tbl = xml.slice(tS, tE);
+      var fin1 = tbl.indexOf('</w:tr>') + 7, fin2 = tbl.indexOf('</w:tr>', fin1) + 7;
+      var lignes = parts.map(function(l){
+        var excuse = /\(excus[\u00e9e]\)\s*$/i.test(l); l = l.replace(/\(excus[\u00e9e]\)\s*$/i, '').trim();
+        var p = l.split(/\s+-\s+/); var nom = p[0] || '', rest = p.slice(1).join(' \u2014 ');
+        return '<w:tr>' + O.tc(3200, O.para(nom, 18)) + O.tc(3200, O.para(rest, 18)) + O.tc(1600, O.para(excuse ? '' : '\u2713', 18, false, true)) + O.tc(1640, O.para(excuse ? '\u2713' : '', 18, false, true)) + '</w:tr>';
+      });
+      xml = xml.slice(0, tS) + tbl.slice(0, fin2) + lignes.join('') + '</w:tbl>' + xml.slice(tE);
+    }
+  }
+  // Suivi des observations en cours (partage avec le CR de visite)
+  var aff = affaires.find(function(a){ return a.id === ((typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire.id) || data.id); }) || data;
+  var prec = (aff.derniereVisite && aff.derniereVisite.observations) || [];
+  if (prec.length) xml = O.remplacerCorps(xml, 'Suite donn\u00e9e', prec.map(function(o, k){
+    return '<w:tr>' + O.tc(500, O.para(String(k + 1), 16, true, true)) + O.tc(1600, O.para(aff.derniereVisite.origine || 'CR pr\u00e9c\u00e9dent', 15)) + O.tc(3400, O.para((o.description || '') + (o.responsable ? ' \u2014 ' + o.responsable : ''), 16)) + O.tc(2340, O.para('', 16)) + O.tc(1800, O.para('\u2610 Lev\u00e9e \u2610 Non lev\u00e9e', 15)) + '</w:tr>';
+  }));
+  // Nouvelles observations : « description ; responsable ; delai »
+  var nouv = lignesRCO(r.decisions).map(function(l){ var p = l.split(';'); return { description: (p[0] || '').trim(), responsable: (p[1] || '').trim(), delai: (p[2] || '').trim() }; });
+  if (nouv.length) xml = O.remplacerCorps(xml, 'Responsable</w:t>', nouv.map(function(o, k){
+    return '<w:tr>' + O.tc(500, O.para(String(k + 1), 16, true, true)) + O.tc(2000, O.para('\u2611 Obs. \u2610 Notif. \u2610 DGI', 15)) + O.tc(3540, O.para(o.description, 16)) + O.tc(1800, O.para(o.delai, 16)) + O.tc(1800, O.para(o.responsable, 16)) + '</w:tr>';
+  }));
+  var vus = {}, noms = []; nouv.forEach(function(o){ var k = o.responsable.toLowerCase(); if (o.responsable && !vus[k]) { vus[k] = 1; noms.push(o.responsable); } });
+  xml = O.visas(xml, noms);
+  // memorise pour le suivi du prochain CR (visite ou reunion)
+  aff.derniereVisite = { date: r.date || '', origine: 'R\u00e9union n\u00b0' + (r.no || ''), observations: nouv.filter(function(o){ return o.description; }) };
+  aff.savedAt = new Date().toISOString();
+  try { localStorage.setItem('csps17_affaires', JSON.stringify(affaires)); } catch (e) {}
+  zip.file('word/document.xml', xml);
+  return zip;
+}
+
 function genFormulaireRCO() {
   var today = new Date().toISOString().split('T')[0];
   var nowH = new Date().getHours().toString().padStart(2,'0') + ':' + new Date().getMinutes().toString().padStart(2,'0');
@@ -6585,13 +6639,17 @@ function genFormulaireRCO() {
   html2 += twoCol(fieldRow('Heure', 'rco-heure', 'time', '', nowH), fieldRow('Lieu', 'rco-lieu', 'text', 'Ex: Base vie', ''));
   html2 += sectionEnd();
   html2 += sectionHeader('2', 'Participants', '&#128101;');
-  html2 += fieldRow('Participants (un par ligne)', 'rco-participants', 'textarea', 'Nom - Entreprise - Qualite', '');
+  html2 += fieldRow('Participants (un par ligne)', 'rco-participants', 'textarea', 'Nom - Entreprise - Qualité   (ajouter « (excusé) » en fin de ligne si absent excusé)', '');
   html2 += sectionEnd();
   html2 += sectionHeader('3', 'Ordre du jour / Points abordes', '&#128221;');
   html2 += fieldRow('Points abordes', 'rco-points', 'textarea', 'Points de l\'ordre du jour...', '');
   html2 += sectionEnd();
   html2 += sectionHeader('4', 'Decisions et actions', '&#9989;');
-  html2 += fieldRow('Decisions prises / Actions', 'rco-decisions', 'textarea', 'Actions, responsables, delais...', '');
+  html2 += fieldRow('Nouvelles observations / décisions (une par ligne)', 'rco-decisions', 'textarea', 'description ; responsable ; délai', '');
+  html2 += sectionEnd();
+  html2 += sectionHeader('5', 'Prochaine réunion', '&#128197;');
+  html2 += fieldRow('Date et lieu de la prochaine réunion', 'rco-prochaine', 'text', 'Ex : 14/10/2026 à 9 h, base vie', '');
+  html2 += fieldRow('Points à l’ordre du jour', 'rco-odj', 'textarea', '', '');
   html2 += sectionEnd();
   return html2;
 }
@@ -6633,7 +6691,7 @@ function pouvoirArretHTML() {
 function tagsDGI(data) {
   function v(id){ var e = document.getElementById(id); return e ? String(e.value || '').trim() : ''; }
   var moa = data.moa || {}, statut = moa.pouvoirArret || '';
-  var aff = affaires.find(function(a){ return a.id === data.id; }) || data;
+  var aff = affaires.find(function(a){ return a.id === ((typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire.id) || data.id); }) || data;
   var n = 1; try { n = rjcEntriesForDoc(aff, 'DGI').length + 1; } catch (e) {}
   var type = v('dgi-ent-type');
   var m1 = v('dgi-mes1'), m2 = v('dgi-mes2');
@@ -7876,6 +7934,7 @@ async function genererDocTerrain() {
     };
   } else if (ref === 'RCO') {
     visiteData = { noVisite: getVal('rco-no'), heure: getVal('rco-heure'), lieu: getVal('rco-lieu') };
+    terrainAffaire._rco = { no: getVal('rco-no'), date: getVal('rco-date'), heure: getVal('rco-heure'), lieu: getVal('rco-lieu'), participants: getVal('rco-participants'), points: getVal('rco-points'), decisions: getVal('rco-decisions'), prochaine: getVal('rco-prochaine'), odj: getVal('rco-odj') };
   } else if (ref === 'IC' || ref === 'OBS') {
     var natureVal = getVal('ic-nature') || 'Transmission simple';
     var refPgcVal = getVal('ic-ref-pgc');
@@ -8070,7 +8129,7 @@ async function crVisiteV3(data, ta){
   // observations de ce CR pour le suivant (synchronise avec la tablette avec l'affaire).
   var aff = affaires.find(function(x){ return x.id === ta.id; }) || ta;
   cr.observationsPrecedentes = (aff.derniereVisite && aff.derniereVisite.observations) || [];
-  aff.derniereVisite = { date: v.date || '', no: no, observations: (ta._observations || []).filter(function(o){ return o && o.description; })
+  aff.derniereVisite = { date: v.date || '', no: no, origine: 'Visite n°' + no, observations: (ta._observations || []).filter(function(o){ return o && o.description; })
     .map(function(o){ return { description: o.description, responsable: o.responsable || '', delai: o.delai || '' }; }) };
   aff.savedAt = new Date().toISOString();
   try { localStorage.setItem('csps17_affaires', JSON.stringify(affaires)); } catch (eS) {}
