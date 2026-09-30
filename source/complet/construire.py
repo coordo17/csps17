@@ -315,6 +315,20 @@ rep("checkRow('Arret travaux hauteur/levage si vent fort (>50-60 km/h)',", "chec
 rep("    finalZip = nettoyerDocx(finalZip, data);\n    if (ref === 'VIS'", "    if (ref === 'VIS') finalZip = nettoyerDocx(finalZip, data);\n    if (ref === 'VIS'")
 rep("    var trStart = xmlStr.lastIndexOf('<w:tr ', pos);\n    var trEnd = xmlStr.indexOf('</w:tr>', pos) + 7;\n    if (trStart === -1 || trEnd < 7) continue;",
     "    var trStart = Math.max(xmlStr.lastIndexOf('<w:tr ', pos), xmlStr.lastIndexOf('<w:tr>', pos));\n    var trEnd = xmlStr.indexOf('</w:tr>', pos) + 7;\n    if (trStart === -1 || trEnd < 7) continue;")
+# 9l. CR de visite v4 verifie (R.4532-38, CARSAT Centre-Ouest) — decisions d'Alain 30/09
+rep("  var r = await fetch('modeles/CR_Visite_Chantier_CSPS17_v3.docx');", "  var r = await fetch('modeles/CR_Visite_Chantier_CSPS17_v4.docx');")
+rep("    signatureCsps: (typeof sigData !== 'undefined' && sigData) ? sigData.csps : null };\n  return GenVisite.genererCRVisite(",
+    """    signatureCsps: (typeof sigData !== 'undefined' && sigData) ? sigData.csps : null };
+  // Suivi : observations du CR de visite precedent de cette affaire, puis memorisation des
+  // observations de ce CR pour le suivant (synchronise avec la tablette avec l'affaire).
+  var aff = affaires.find(function(x){ return x.id === ta.id; }) || ta;
+  cr.observationsPrecedentes = (aff.derniereVisite && aff.derniereVisite.observations) || [];
+  aff.derniereVisite = { date: v.date || '', no: no, observations: (ta._observations || []).filter(function(o){ return o && o.description; })
+    .map(function(o){ return { description: o.description, responsable: o.responsable || '', delai: o.delai || '' }; }) };
+  aff.savedAt = new Date().toISOString();
+  try { localStorage.setItem('csps17_affaires', JSON.stringify(affaires)); } catch (eS) {}
+  return GenVisite.genererCRVisite(""")
+rep("fichiers.push('modeles/CR_Visite_Chantier_CSPS17_v3.docx');", "fichiers.push('modeles/CR_Visite_Chantier_CSPS17_v4.docx');")
 # 10. version
 import datetime
 s = re.sub(r'v2\.46 &middot; build [^<]*', 'v3.0 &middot; ' + datetime.datetime.now(__import__('zoneinfo').ZoneInfo('Europe/Paris')).strftime('%d/%m %H:%M'), s, count=1)

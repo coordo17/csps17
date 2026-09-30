@@ -66,6 +66,29 @@
     var entete = tbl.slice(0, tbl.indexOf('</w:tr>') + 7);
     return xml.slice(0, tStart) + entete + lignes.join('') + '</w:tbl>' + xml.slice(tEnd);
   }
+  // Remplace les lignes (hors en-tete) du tableau repere par son texte d'en-tete
+  function remplacerCorps(xml, ancre, lignes) {
+    var idx = xml.indexOf(ancre); if (idx === -1) return xml;
+    var tStart = xml.lastIndexOf('<w:tbl>', idx), tEnd = xml.indexOf('</w:tbl>', idx) + 8;
+    var tbl = xml.slice(tStart, tEnd);
+    var entete = tbl.slice(0, tbl.indexOf('</w:tr>') + 7);
+    return xml.slice(0, tStart) + entete + lignes.join('') + '</w:tbl>' + xml.slice(tEnd);
+  }
+  // Suivi des observations du CR precedent (bonne pratique ; decision Alain 30/09)
+  function suiviPrecedent(xml, liste) {
+    if (!liste || !liste.length) return xml;
+    return remplacerCorps(xml, 'Observation précédente', liste.map(function (o, i) {
+      var txt = (o.description || '') + (o.responsable ? ' — ' + o.responsable : '') + (o.delai ? ' (délai : ' + o.delai + ')' : '');
+      return '<w:tr>' + tc(500, para(String(i + 1), 16, true, true)) + tc(5940, para(txt, 16)) + tc(1600, para('☐ Oui  ☐ Non', 16, false, true)) + tc(1600, para('', 16)) + '</w:tr>';
+    }));
+  }
+  // Visa des interesses (R.4532-38 2°) : une ligne par responsable designe, sinon 3 lignes vides
+  function visas(xml, noms) {
+    var l = (noms && noms.length ? noms : ['', '', '']);
+    return remplacerCorps(xml, 'Réponse éventuelle', l.map(function (n) {
+      return '<w:tr>' + tc(2600, para(n, 16)) + tc(2200, para('', 16)) + tc(3040, para('', 16)) + tc(1800, para('', 16)) + '</w:tr>';
+    }));
+  }
   function cocherCategorie(xml, cat) {
     cat = parseInt(cat, 10); if (!cat) return xml;
     return xml.split('☐ Cat. 1 ☐ Cat. 2 ☐ Cat. 3').join((cat===1?'☑':'☐')+' Cat. 1 '+(cat===2?'☑':'☐')+' Cat. 2 '+(cat===3?'☑':'☐')+' Cat. 3');
@@ -105,7 +128,25 @@
     if (cy > hauteurMaxEmu) { cy = hauteurMaxEmu; cx = Math.round(cy * w / h); }
     return [cx, cy];
   }
+  // Section photos : retiree s'il n'y a aucune photo (et « 5. » devient « 4. ») ;
+  // sinon elle commence sur une nouvelle page pour ne pas separer le titre des photos.
+  function sectionPhotos(xml, nb) {
+    var h = xml.indexOf('4. PHOTOS ET CONSTATS TERRAIN'); if (h === -1) return xml;
+    var hS = xml.lastIndexOf('<w:tbl>', h), hE = xml.indexOf('</w:tbl>', h) + 8;
+    if (!nb) {
+      var p = xml.indexOf('Photo 1</w:t>', hE); if (p === -1) return xml;
+      var pE = xml.indexOf('</w:tbl>', p) + 8;
+      xml = xml.slice(0, hS) + xml.slice(pE);
+      return xml.replace('5. DIFFUSION ET SIGNATURES', '4. DIFFUSION ET SIGNATURES');
+    }
+    var entete = xml.slice(hS, hE).replace(/<w:p>|<w:p (?=[^>]*>)/, function (m) { return m; });
+    var i = entete.indexOf('<w:pPr>');
+    entete = i !== -1 ? entete.slice(0, i + 7) + '<w:pageBreakBefore/>' + entete.slice(i + 7)
+                      : entete.replace(/(<w:p\b[^>]*>)/, '$1<w:pPr><w:pageBreakBefore/></w:pPr>');
+    return xml.slice(0, hS) + entete + xml.slice(hE);
+  }
   function photos(ctx, xml, liste) {
+    xml = sectionPhotos(xml, liste ? liste.length : 0);
     if (!liste || !liste.length) return xml;
     var ancre = xml.indexOf('Photo 1</w:t>');
     if (ancre !== -1) {
@@ -196,7 +237,12 @@
     }));
     xml = participants(xml, part);
     xml = entreprises(xml, ents);
-    xml = observations(xml, (cr.observations || []).filter(function (o) { return o && o.description; }));
+    var obsValides = (cr.observations || []).filter(function (o) { return o && o.description; });
+    xml = suiviPrecedent(xml, cr.observationsPrecedentes);
+    xml = observations(xml, obsValides);
+    var vus = {}, noms = [];
+    obsValides.forEach(function (o) { var r = String(o.responsable || '').trim(); if (r && !vus[r.toLowerCase()]) { vus[r.toLowerCase()] = 1; noms.push(r); } });
+    xml = visas(xml, noms);
     var toutes = cr.photos ? cr.photos.slice() : [];
     if (!cr.photos) (cr.observations || []).forEach(function (o) { (o.photos || []).forEach(function (p) { toutes.push({ url: p.url, w: p.w, h: p.h, legende: p.legende || String(o.description || '').slice(0, 80) }); }); });
     xml = photos(ctx, xml, toutes);

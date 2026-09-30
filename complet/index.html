@@ -647,7 +647,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v3.0 &middot; 30/09 15:33</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v3.0 &middot; 30/09 15:41</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -7990,7 +7990,7 @@ async function mettreAJourAppli(){
     }
     var fichiers = ['index.html', 'local-api.js', 'gen-visite.js', 'sync-drive.js', 'lib/pizzip.js', 'lib/docxtemplater.js'];
     Object.keys(DOC_FILES).forEach(function(k){ fichiers.push('modeles/' + DOC_FILES[k]); });
-    fichiers.push('modeles/CR_Visite_Chantier_CSPS17_v3.docx');
+    fichiers.push('modeles/CR_Visite_Chantier_CSPS17_v4.docx');
     await Promise.all(fichiers.map(function(f){ return fetch(f, { cache: 'reload' }).catch(function(){}); }));
     if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
       var regs = await navigator.serviceWorker.getRegistrations();
@@ -8005,7 +8005,7 @@ function dimensionsPhoto(url){
   return new Promise(function(ok){ var im = new Image(); im.onload = function(){ ok({ w: im.naturalWidth, h: im.naturalHeight }); }; im.onerror = function(){ ok({ w: 4, h: 3 }); }; im.src = url; });
 }
 async function crVisiteV3(data, ta){
-  var r = await fetch('modeles/CR_Visite_Chantier_CSPS17_v3.docx');
+  var r = await fetch('modeles/CR_Visite_Chantier_CSPS17_v4.docx');
   if (!r.ok) throw new Error('Modele CR de visite v3 introuvable');
   var modele = new Uint8Array(await r.arrayBuffer());
   var v = ta._visite || {}, c = data.chantier || {}, tags = buildTagData(data);
@@ -8017,6 +8017,14 @@ async function crVisiteV3(data, ta){
     meteo: v.meteo, phase: v.phase || '', avancement: v.avancement, prochaine: v.prochaine || '',
     entreprises: ta._entreprisesPresentes || [], observations: ta._observations || [], photos: photos,
     signatureCsps: (typeof sigData !== 'undefined' && sigData) ? sigData.csps : null };
+  // Suivi : observations du CR de visite precedent de cette affaire, puis memorisation des
+  // observations de ce CR pour le suivant (synchronise avec la tablette avec l'affaire).
+  var aff = affaires.find(function(x){ return x.id === ta.id; }) || ta;
+  cr.observationsPrecedentes = (aff.derniereVisite && aff.derniereVisite.observations) || [];
+  aff.derniereVisite = { date: v.date || '', no: no, observations: (ta._observations || []).filter(function(o){ return o && o.description; })
+    .map(function(o){ return { description: o.description, responsable: o.responsable || '', delai: o.delai || '' }; }) };
+  aff.savedAt = new Date().toISOString();
+  try { localStorage.setItem('csps17_affaires', JSON.stringify(affaires)); } catch (eS) {}
   return GenVisite.genererCRVisite(modele, chantier, cr, PizZip, window.docxtemplater || window.Docxtemplater);
 }
 async function genererCRVisite() { await genererDocTerrain(); }
