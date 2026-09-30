@@ -647,7 +647,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v3.0 &middot; 30/09 11:17</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v3.0 &middot; 30/09 11:41</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -748,6 +748,9 @@
               </div>
               <div class="field"><label>N Declaration Prealable</label><input type="text" id="chantier-dp" placeholder="Ex : DP 029 2026 00123"></div>
               <div class="field"><label>N Permis de Construire</label><input type="text" id="chantier-pc" placeholder="Ou N/A"></div>
+            </div>
+            <div class="form-row">
+              <div class="field"><label>Réf. du PGC (référence / indice)</label><input type="text" id="chantier-refpgc" placeholder="Ex : PGC indice A du 12/05/2026"></div>
             </div>
             <div class="form-row">
               <div class="field"><label>Phase de mission CSPS</label>
@@ -1242,7 +1245,7 @@ function showNewAffaire() {
   entrepriseCount = 0;
   document.getElementById('num-affaire').value = genNumAffaire();
   ['mission-phase','chantier-nom','chantier-adresse','chantier-nature','chantier-duree','chantier-montant',
-   'chantier-dp','chantier-pc','chantier-hj',
+   'chantier-dp','chantier-pc','chantier-hj','chantier-refpgc',
    'moa-nom','moa-contact','moa-adresse','moa-tel','moa-mail',
    'moe-nom','moe-contact','moe-adresse','moe-tel','moe-mail',
    'cspsc-nom','cspsc-tel','cspsc-mail','cspsr-nom','cspsr-tel','cspsr-mail',
@@ -1409,6 +1412,7 @@ function collectFormData() {
       marche: document.getElementById('chantier-marche').value,
       dp: document.getElementById('chantier-dp').value,
       pc: document.getElementById('chantier-pc').value,
+      refPgc: document.getElementById('chantier-refpgc').value,
       hj: document.getElementById('chantier-hj').value,
       nbEnt: document.getElementById('chantier-nb-ent').value,
     },
@@ -4950,7 +4954,7 @@ function buildTagData(data) {
     oppbtp_nom:       (org.oppbtp && org.oppbtp.nom) || '',
     oppbtp_adresse:   (org.oppbtp && org.oppbtp.adresse) || '',
     date_today:       today,
-    ref_pgc:          data.num || '',
+    ref_pgc:          (data.chantier && data.chantier.refPgc) || data.num || '',
     no_visite:        (data._visite && data._visite.noVisite) ? data._visite.noVisite : '1',
     heure_visite:     (data._visite && data._visite.heure) ? data._visite.heure : '',
     date_visite:      (data._visite && data._visite.date) ? data._visite.date : today,
@@ -6345,6 +6349,8 @@ function genFormulaireVIS() {
     fieldRow('Meteo', 'vis-meteo', 'text', 'Ex: Ensoleille 22C', '')
   );
   html2 += fieldRow('Avancement global', 'vis-avancement', 'text', 'Ex: 30% - Gros oeuvre en cours', '');
+  html2 += fieldRow('Phase / travaux en cours', 'vis-phase', 'text', 'Ex: Terrassement, fondations', '');
+  html2 += fieldRow('Prochaine intervention prévue', 'vis-prochaine', 'text', 'Ex: 15/10/2026 ou semaine 42', '');
   html2 += sectionEnd();
 
   // Section 2 - Entreprises presentes (multiples)
@@ -6385,6 +6391,8 @@ function visAjouterEntreprise() {
   h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">';
   h += '<div class="field"><label style="font-size:11px;">Nom entreprise</label><input type="text" class="vis-ent-nom" placeholder="Raison sociale" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;"></div>';
   h += '<div class="field"><label style="font-size:11px;">Type</label><select class="vis-ent-type" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;"><option>EE</option><option>ST</option><option>Prestataire</option></select></div>';
+  h += '<div class="field"><label style="font-size:11px;">Lot</label><input type="text" class="vis-ent-lot" placeholder="Ex : Gros oeuvre" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;"></div>';
+  h += '<div class="field"><label style="font-size:11px;">Effectif présent</label><input type="number" min="0" class="vis-ent-eff" placeholder="Nb" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;"></div>';
   h += '<div class="field"><label style="font-size:11px;">Representant</label><input type="text" class="vis-ent-contact" placeholder="Nom + Qualite" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;"></div>';
   h += '<div class="field"><label style="font-size:11px;">Tel</label><input type="tel" class="vis-ent-tel" placeholder="06 xx xx xx xx" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;"></div>';
   h += '</div>';
@@ -6395,6 +6403,7 @@ function visAjouterEntreprise() {
     var ent = (terrainAffaire.entreprises || [])[parseInt(this.value)];
     if (!ent) return;
     var nomEl = div.querySelector('.vis-ent-nom'); if(nomEl) nomEl.value = ent.nom || '';
+    var lotEl = div.querySelector('.vis-ent-lot'); if(lotEl) lotEl.value = ent.lot || '';
     var cEl = div.querySelector('.vis-ent-contact'); if(cEl) cEl.value = ent.contact || '';
     var tEl = div.querySelector('.vis-ent-tel'); if(tEl) tEl.value = ent.tel || '';
   });
@@ -7784,6 +7793,8 @@ async function genererDocTerrain() {
       date: getVal('vis-date'),
       meteo: getVal('vis-meteo'),
       avancement: getVal('vis-avancement'),
+      phase: getVal('vis-phase'),
+      prochaine: getVal('vis-prochaine'),
     };
   } else if (ref === 'RCO') {
     visiteData = { noVisite: getVal('rco-no'), heure: getVal('rco-heure'), lieu: getVal('rco-lieu') };
@@ -7849,6 +7860,7 @@ async function genererDocTerrain() {
   document.getElementById('chantier-adresse').value = c.adresse || '';
   document.getElementById('chantier-nature').value = c.nature || '';
   document.getElementById('chantier-dp').value = c.dp || '';
+  document.getElementById('chantier-refpgc').value = c.refPgc || '';
   document.getElementById('moa-nom').value = moa.nom || '';
   document.getElementById('moa-contact').value = moa.contact || '';
   document.getElementById('moa-adresse').value = moa.adresse || '';
@@ -7904,6 +7916,7 @@ async function genererDocTerrain() {
       var tel = entDiv.querySelector('.vis-ent-tel');
       var type = entDiv.querySelector('.vis-ent-type');
       var lot = entDiv.querySelector('.vis-ent-lot');
+      var eff = entDiv.querySelector('.vis-ent-eff');
       if (nom && nom.value.trim()) {
         entreprisesPresentes.push({
           nom: nom.value,
@@ -7911,7 +7924,7 @@ async function genererDocTerrain() {
           tel: tel ? tel.value : '',
           type: type ? type.value : 'EE',
           lot: lot ? lot.value : '',
-          effectif: '',
+          effectif: eff ? eff.value : '',
         });
       }
     });

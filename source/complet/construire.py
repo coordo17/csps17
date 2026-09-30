@@ -181,6 +181,24 @@ rep('<button class="btn btn-outline btn-sm" onclick="mettreAJourAppli()"', '<but
 rep("  affaires = affaires.filter(function(x){ return x.id !== id; });\n  localStorage.setItem('csps17_affaires', JSON.stringify(affaires));",
     "  affaires = affaires.filter(function(x){ return x.id !== id; });\n  if (window.noterSuppressionAffaire) noterSuppressionAffaire(id);\n  localStorage.setItem('csps17_affaires', JSON.stringify(affaires));")
 rep("var fichiers = ['index.html', 'local-api.js', 'gen-visite.js',", "var fichiers = ['index.html', 'local-api.js', 'gen-visite.js', 'sync-drive.js',")
+# 9f. CR de visite : phase, prochaine intervention, lot et effectif ; vraie reference du PGC
+rep('id="chantier-pc" placeholder="Ou N/A"></div>\n            </div>',
+    'id="chantier-pc" placeholder="Ou N/A"></div>\n            </div>\n            <div class="form-row">\n              <div class="field"><label>R\u00e9f. du PGC (r\u00e9f\u00e9rence / indice)</label><input type="text" id="chantier-refpgc" placeholder="Ex : PGC indice A du 12/05/2026"></div>\n            </div>')
+rep("   'chantier-dp','chantier-pc','chantier-hj',", "   'chantier-dp','chantier-pc','chantier-hj','chantier-refpgc',")
+rep("      pc: document.getElementById('chantier-pc').value,", "      pc: document.getElementById('chantier-pc').value,\n      refPgc: document.getElementById('chantier-refpgc').value,")
+rep("  document.getElementById('chantier-dp').value = c.dp || '';", "  document.getElementById('chantier-dp').value = c.dp || '';\n  document.getElementById('chantier-refpgc').value = c.refPgc || '';")
+rep("    ref_pgc:          data.num || '',", "    ref_pgc:          (data.chantier && data.chantier.refPgc) || data.num || '',")
+rep("  html2 += fieldRow('Avancement global', 'vis-avancement', 'text', 'Ex: 30% - Gros oeuvre en cours', '');",
+    "  html2 += fieldRow('Avancement global', 'vis-avancement', 'text', 'Ex: 30% - Gros oeuvre en cours', '');\n  html2 += fieldRow('Phase / travaux en cours', 'vis-phase', 'text', 'Ex: Terrassement, fondations', '');\n  html2 += fieldRow('Prochaine intervention pr\u00e9vue', 'vis-prochaine', 'text', 'Ex: 15/10/2026 ou semaine 42', '');")
+rep("      avancement: getVal('vis-avancement'),\n    };", "      avancement: getVal('vis-avancement'),\n      phase: getVal('vis-phase'),\n      prochaine: getVal('vis-prochaine'),\n    };")
+rep("""  h += '<div class="field"><label style="font-size:11px;">Representant</label>""",
+    """  h += '<div class="field"><label style="font-size:11px;">Lot</label><input type="text" class="vis-ent-lot" placeholder="Ex : Gros oeuvre" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;"></div>';
+  h += '<div class="field"><label style="font-size:11px;">Effectif pr\u00e9sent</label><input type="number" min="0" class="vis-ent-eff" placeholder="Nb" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;"></div>';
+  h += '<div class="field"><label style="font-size:11px;">Representant</label>""")
+rep("    var nomEl = div.querySelector('.vis-ent-nom'); if(nomEl) nomEl.value = ent.nom || '';",
+    "    var nomEl = div.querySelector('.vis-ent-nom'); if(nomEl) nomEl.value = ent.nom || '';\n    var lotEl = div.querySelector('.vis-ent-lot'); if(lotEl) lotEl.value = ent.lot || '';")
+rep("      var lot = entDiv.querySelector('.vis-ent-lot');", "      var lot = entDiv.querySelector('.vis-ent-lot');\n      var eff = entDiv.querySelector('.vis-ent-eff');")
+rep("          lot: lot ? lot.value : '',\n          effectif: '',", "          lot: lot ? lot.value : '',\n          effectif: eff ? eff.value : '',")
 # 10. version
 import datetime
 s = re.sub(r'v2\.46 &middot; build [^<]*', 'v3.0 &middot; ' + datetime.datetime.now(__import__('zoneinfo').ZoneInfo('Europe/Paris')).strftime('%d/%m %H:%M'), s, count=1)
