@@ -647,7 +647,7 @@
   <div class="logo">
     <button class="btn-menu" onclick="toggleSidebar()">&#9776;</button>
     <div class="logo-badge">CSPS17</div>
-    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v3.0 &middot; 30/09 23:05</span></span>
+    <span class="logo-name">Alain SUZANNE &middot; Coordination SPS <span style="opacity:0.5;font-size:11px;">v3.0 &middot; 01/10 10:53</span></span>
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
@@ -751,6 +751,10 @@
             </div>
             <div class="form-row">
               <div class="field"><label>Réf. du PGC (référence / indice)</label><input type="text" id="chantier-refpgc" placeholder="Ex : PGC indice A du 12/05/2026"></div>
+            </div>
+            <div class="form-row">
+              <div class="field"><label>Date de signature du contrat de coordination (ouverture du RJC — R.4532-12 3°)</label><input type="date" id="chantier-date-ouverture-rjc"></div>
+              <div class="field"><label>Date previsionnelle de reception</label><input type="date" id="chantier-date-prev-reception"></div>
             </div>
             <div class="form-row">
               <div class="field"><label>Phase de mission CSPS</label>
@@ -938,6 +942,11 @@
             </div>
             <div class="form-row">
               <div class="field"><label>Medecin du Travail (service de sante au travail)</label><input type="text" id="org-medecin" placeholder="Ex : BTP Sante Bretagne - 35000 Rennes"></div>
+            </div>
+            <div class="form-row">
+              <div class="field"><label>Controleur technique</label><input type="text" id="org-ct-nom" placeholder="Ex : Bureau Veritas - agence Rennes"></div>
+              <div class="field"><label>Tel</label><input type="tel" id="org-ct-tel" placeholder="02 xx xx xx xx"></div>
+              <div class="field"><label>Mail</label><input type="email" id="org-ct-mail" placeholder="contact@organisme.fr"></div>
             </div>
           </div>
         </div>
@@ -1250,7 +1259,8 @@ function showNewAffaire() {
    'moe-nom','moe-contact','moe-adresse','moe-tel','moe-mail',
    'cspsc-nom','cspsc-tel','cspsc-mail','cspsr-nom','cspsr-tel','cspsr-mail',
    'org-dreets-nom','org-dreets-adresse','org-carsat-nom','org-carsat-adresse',
-   'org-oppbtp-nom','org-oppbtp-adresse','org-medecin'
+   'org-oppbtp-nom','org-oppbtp-adresse','org-medecin','org-ct-nom','org-ct-tel','org-ct-mail',
+   'chantier-date-ouverture-rjc','chantier-date-prev-reception'
   ].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
   document.querySelectorAll('[id^="cat-btn-"]').forEach(function(b){ b.className='cat-btn'; });
   document.getElementById('cat-warning').style.display='none';
@@ -1301,7 +1311,7 @@ function addEntreprise(type) {
   var div = document.createElement('div');
   div.className = 'entreprise-card';
   div.id = id;
-  var h = '<div class="entreprise-card-head" onclick="toggleEntCard(\''+id+'\')">'    + '<span>' + typeLabel + ' ' + entrepriseCount + '</span>'    + '<span class="ent-type-badge ' + typeBadgeClass + '">' + typeLabel + '</span>'    + '<button class="btn-remove-ent" onclick="removeEntreprise(event,\''+id+'\')">x</button>'    + '</div>'    + '<div class="entreprise-card-body" id="body-'+id+'">'    + '<input type="hidden" class="ent-type" value="'+type+'">'    + '<div class="form-row">'    + '<div class="field"><label>Raison sociale *</label><input type="text" class="ent-nom" placeholder="Ex : SAS Maconnerie Bretagne"></div>'    + '<div class="field"><label>Lot / Travaux confies</label><input type="text" class="ent-lot" placeholder="Ex : Gros oeuvre"></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Adresse</label><input type="text" class="ent-adresse" placeholder="Adresse complete"></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Tel portable</label><input type="tel" class="ent-tel" placeholder="06 xx xx xx xx"></div>'    + '<div class="field"><label>Tel fixe</label><input type="tel" class="ent-tel-fixe" placeholder="02 xx xx xx xx"></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Mail</label><input type="email" class="ent-mail" placeholder="contact@entreprise.fr"></div>'    + '<div class="field"><label>SIRET</label><input type="text" class="ent-siret" placeholder="000 000 000 00000"><button type="button" class="btn btn-outline btn-sm" style="margin-top:6px;width:100%;" onclick="verifierEntreprise(this)">&#128269; Verifier au registre officiel</button></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Signataire (nom + qualite)</label><input type="text" class="ent-contact" placeholder="Ex : COATMEUR Sebastien - Chef chantier"></div>'    + '<div class="field"><label>Effectif prevu</label><input type="number" class="ent-effectif" placeholder="Ex : 4" min="1"></div>'    + '</div>'    + '</div>';
+  var h = '<div class="entreprise-card-head" onclick="toggleEntCard(\''+id+'\')">'    + '<span>' + typeLabel + ' ' + entrepriseCount + '</span>'    + '<span class="ent-type-badge ' + typeBadgeClass + '">' + typeLabel + '</span>'    + '<button class="btn-remove-ent" onclick="removeEntreprise(event,\''+id+'\')">x</button>'    + '</div>'    + '<div class="entreprise-card-body" id="body-'+id+'">'    + '<input type="hidden" class="ent-type" value="'+type+'">'    + '<div class="form-row">'    + '<div class="field"><label>Raison sociale *</label><input type="text" class="ent-nom" placeholder="Ex : SAS Maconnerie Bretagne"></div>'    + '<div class="field"><label>Lot / Travaux confies</label><input type="text" class="ent-lot" placeholder="Ex : Gros oeuvre"></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Adresse</label><input type="text" class="ent-adresse" placeholder="Adresse complete"></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Tel portable</label><input type="tel" class="ent-tel" placeholder="06 xx xx xx xx"></div>'    + '<div class="field"><label>Tel fixe</label><input type="tel" class="ent-tel-fixe" placeholder="02 xx xx xx xx"></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Mail</label><input type="email" class="ent-mail" placeholder="contact@entreprise.fr"></div>'    + '<div class="field"><label>SIRET</label><input type="text" class="ent-siret" placeholder="000 000 000 00000"><button type="button" class="btn btn-outline btn-sm" style="margin-top:6px;width:100%;" onclick="verifierEntreprise(this)">&#128269; Verifier au registre officiel</button></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Signataire (nom + qualite)</label><input type="text" class="ent-contact" placeholder="Ex : COATMEUR Sebastien - Chef chantier"></div>'    + '<div class="field"><label>Effectif prevu</label><input type="number" class="ent-effectif" placeholder="Ex : 4" min="1"></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Date approx. d\'intervention (R.4532-38 3\u00b0)</label><input type="date" class="ent-dateInterv"></div>'    + '<div class="field"><label>Duree prevue des travaux</label><input type="text" class="ent-duree" placeholder="Ex : 3 semaines"></div>'    + '</div>'    + '</div>';
   div.innerHTML = h;
   document.getElementById('entreprise-list').appendChild(div);
   if (typeof icCarteEntreprise === 'function') icCarteEntreprise(div, type);
@@ -1398,6 +1408,8 @@ function collectFormData() {
       siret: card.querySelector('.ent-siret') ? card.querySelector('.ent-siret').value : '',
       contact: card.querySelector('.ent-contact') ? card.querySelector('.ent-contact').value : '',
       effectif: card.querySelector('.ent-effectif') ? card.querySelector('.ent-effectif').value : '',
+      dateInterv: card.querySelector('.ent-dateInterv') ? card.querySelector('.ent-dateInterv').value : '',
+      duree: card.querySelector('.ent-duree') ? card.querySelector('.ent-duree').value : '',
       id: card.querySelector('.ent-id') ? card.querySelector('.ent-id').value : '',
       parent: card.querySelector('.ent-parent') ? card.querySelector('.ent-parent').value : '',
     });
@@ -1417,6 +1429,8 @@ function collectFormData() {
       dp: document.getElementById('chantier-dp').value,
       pc: document.getElementById('chantier-pc').value,
       refPgc: document.getElementById('chantier-refpgc').value,
+      dateOuvertureRjc: document.getElementById('chantier-date-ouverture-rjc').value,
+      datePrevReception: document.getElementById('chantier-date-prev-reception').value,
       hj: document.getElementById('chantier-hj').value,
       nbEnt: document.getElementById('chantier-nb-ent').value,
     },
@@ -1453,6 +1467,7 @@ function collectFormData() {
     cspsr: { nom: (document.getElementById('cspsr-nom')||{}).value || '', tel: (document.getElementById('cspsr-tel')||{}).value || '', mail: (document.getElementById('cspsr-mail')||{}).value || '' },
     organismes: {
       dreets: { nom: document.getElementById('org-dreets-nom').value, adresse: document.getElementById('org-dreets-adresse').value },
+      ct: { nom: document.getElementById('org-ct-nom').value, tel: document.getElementById('org-ct-tel').value, mail: document.getElementById('org-ct-mail').value },
       carsat: { type: document.getElementById('org-carsat-type').value, nom: document.getElementById('org-carsat-nom').value, adresse: document.getElementById('org-carsat-adresse').value },
       oppbtp: { nom: document.getElementById('org-oppbtp-nom').value, adresse: document.getElementById('org-oppbtp-adresse').value },
       medecin: document.getElementById('org-medecin').value,
@@ -1553,6 +1568,184 @@ function majSyncIndic(etat){
   var k = conf[etat] || conf.local;
   dot.style.background = k.c; txt.textContent = k.t;
   box.style.background = k.bg; box.style.color = k.c;
+}
+
+// ============================================================================
+// REGISTRE-JOURNAL DE COORDINATION — decisions d'Alain du 30/09 et du 01/10
+// (points 1 a 5) — sources : R.4532-38 a R.4532-41 (bordereau, entreprises
+// intervenantes, consultation, conservation 5 ans), R.4532-12 3° (ouverture
+// a la signature du contrat de coordination), R.4532-39 (PV DIUO annexe).
+// ============================================================================
+
+function rjcEscXml(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function rjcCellTexte(s, bold) {
+  return '<w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>' + (bold ? '<w:b/><w:bCs/>' : '')
+    + '<w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t xml:space="preserve">' + rjcEscXml(s) + '</w:t></w:r></w:p>';
+}
+function rjcTc(w, contenu) {
+  var bordures = '<w:top w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/><w:left w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/>'
+    + '<w:bottom w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/><w:right w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/>';
+  var mar = '<w:top w:w="55" w:type="dxa"/><w:left w:w="110" w:type="dxa"/><w:bottom w:w="55" w:type="dxa"/><w:right w:w="110" w:type="dxa"/>';
+  return '<w:tc><w:tcPr><w:tcW w:w="' + w + '" w:type="dxa"/><w:tcBorders>' + bordures + '</w:tcBorders>'
+    + '<w:shd w:val="clear" w:color="auto" w:fill="FFFFFF"/><w:tcMar>' + mar + '</w:tcMar><w:vAlign w:val="center"/></w:tcPr>' + contenu + '</w:tc>';
+}
+function rjcTrouverTable(xmlStr, ancreUnique) {
+  var idx1 = xmlStr.indexOf(ancreUnique);
+  if (idx1 === -1) return null;
+  var tblStart = xmlStr.lastIndexOf('<w:tbl>', idx1);
+  var tblEnd = xmlStr.indexOf('</w:tbl>', idx1) + 8;
+  return { start: tblStart, end: tblEnd, xml: xmlStr.slice(tblStart, tblEnd) };
+}
+function rjcLignes(tblXml) {
+  var out = []; var re = /<w:tr[ >][\s\S]*?<\/w:tr>/g; var m;
+  while ((m = re.exec(tblXml))) out.push({ start: m.index, end: m.index + m[0].length, xml: m[0] });
+  return out;
+}
+function rjcCellules(trXml) {
+  var out = []; var re = /<w:tc>[\s\S]*?<\/w:tc>/g; var m;
+  while ((m = re.exec(trXml))) out.push({ start: m.index, end: m.index + m[0].length, xml: m[0] });
+  return out;
+}
+function rjcCelluleAvecTexte(tcXml, texte, bold) {
+  // tcXml commence deja par '<w:tc>' : on garde tout jusqu'a la fin de '</w:tcPr>'
+  // (bordures/largeur d'origine) et on ne remplace que le contenu (les <w:p>).
+  var fin = tcXml.indexOf('</w:tcPr>');
+  var tcPr = fin === -1 ? '<w:tc>' : tcXml.slice(0, fin + 9);
+  return tcPr + rjcCellTexte(texte, bold) + '</w:tc>';
+}
+// Remplace, dans la ligne dont la 1ere cellule commence par `label`, les cellules
+// suivantes par `valeurs` (une valeur = null/undefined laisse la cellule intacte).
+function rjcRemplirLigne(tblXml, label, valeurs) {
+  var trs = rjcLignes(tblXml);
+  for (var i = 0; i < trs.length; i++) {
+    if (trs[i].xml.indexOf(label) === -1) continue;
+    var tcs = rjcCellules(trs[i].xml);
+    var out = '', cursor = 0;
+    for (var ci = 0; ci < tcs.length; ci++) {
+      out += trs[i].xml.slice(cursor, tcs[ci].start);
+      var v = valeurs[ci - 1]; // cellule 0 = le libelle lui-meme, inchange
+      out += (ci >= 1 && v !== undefined && v !== null) ? rjcCelluleAvecTexte(tcs[ci].xml, v) : tcs[ci].xml;
+      cursor = tcs[ci].end;
+    }
+    out += trs[i].xml.slice(cursor);
+    return tblXml.slice(0, trs[i].start) + out + tblXml.slice(trs[i].end);
+  }
+  return tblXml;
+}
+
+// ---------- Point 1 : bordereau (R.4532-38), sans limite de lignes ----------
+function injecterRJC(zip, entries) {
+  var docFile = zip.file('word/document.xml');
+  if (!docFile) return zip;
+  var xmlStr = docFile.asText();
+  var t = rjcTrouverTable(xmlStr, 'Destinataires vis\u00e9s');
+  if (!t) { zip.file('word/document.xml', xmlStr); return zip; }
+
+  var trs = rjcLignes(t.xml);
+  var entete = t.xml.slice(0, trs[0].end); // preambule <w:tbl><w:tblPr>...<w:tblGrid> + la ligne d'entete
+  // La derniere ligne du modele est le rappel \u2605 PV-DIUO : on la garde telle quelle
+  // tant qu'aucune entree reelle n'est le PV de transmission du DIUO (R.4532-39).
+  var ligneEtoile = trs[trs.length - 1] && trs[trs.length - 1].xml.indexOf('\u2605') !== -1 ? trs[trs.length - 1].xml : '';
+  var pvDiuoAuRegistre = (entries || []).some(function (e) { return e.docRef === 'PV-DIUO'; });
+
+  var sorted = (entries || []).slice().sort(function (a, b) { return (a.date || '').localeCompare(b.date || ''); });
+  var newTbl = entete;
+  for (var i = 0; i < sorted.length; i++) {
+    var e = sorted[i];
+    newTbl += '<w:tr>'
+      + rjcTc(650, rjcCellTexte(String(i + 1)))
+      + rjcTc(1650, rjcCellTexte(e.ref || e.docRef || '', true))
+      + rjcTc(3100, rjcCellTexte(e.nature || ''))
+      + rjcTc(1150, rjcCellTexte(formatDateFR(e.date)))
+      + rjcTc(2740, rjcCellTexte((e.intervenants || e.objet || '')))
+      + '</w:tr>';
+  }
+  if (!pvDiuoAuRegistre && ligneEtoile) newTbl += ligneEtoile;
+  newTbl += '</w:tbl>';
+
+  xmlStr = xmlStr.slice(0, t.start) + newTbl + xmlStr.slice(t.end);
+  zip.file('word/document.xml', xmlStr);
+  return zip;
+}
+
+// ---------- Point 2 : entreprises intervenantes (R.4532-38 3°) ----------
+var RJC_QUALITE_LABEL = { principale: 'Titulaire / contractant', 'sous-traitant': 'Sous-traitant', prestataire: 'Prestataire' };
+function injecterEntreprisesRJC(zip, entreprises) {
+  var docFile = zip.file('word/document.xml');
+  if (!docFile) return zip;
+  var xmlStr = docFile.asText();
+  var t = rjcTrouverTable(xmlStr, 'Lot / travaux confi\u00e9s');
+  if (!t) { zip.file('word/document.xml', xmlStr); return zip; }
+
+  var trs = rjcLignes(t.xml);
+  var entete = t.xml.slice(0, trs[0].end); // preambule <w:tbl><w:tblPr>...<w:tblGrid> + la ligne d'entete
+  var liste = (entreprises || []).filter(function (e) { return e.nom; });
+  var newTbl = entete;
+  if (!liste.length) {
+    newTbl += '<w:tr>' + rjcTc(2200, rjcCellTexte('\u00c0 compl\u00e9ter d\u00e8s connaissance des entreprises (R.4532-38 3\u00b0)'))
+      + rjcTc(1200, rjcCellTexte('')) + rjcTc(2000, rjcCellTexte('')) + rjcTc(1400, rjcCellTexte(''))
+      + rjcTc(1000, rjcCellTexte('')) + rjcTc(700, rjcCellTexte('')) + rjcTc(1140, rjcCellTexte('')) + '</w:tr>';
+  } else {
+    liste.forEach(function (e) {
+      newTbl += '<w:tr>'
+        + rjcTc(2200, rjcCellTexte(e.nom || '', true))
+        + rjcTc(1200, rjcCellTexte(RJC_QUALITE_LABEL[e.type] || 'Titulaire / contractant'))
+        + rjcTc(2000, rjcCellTexte(e.adresse || '\u00e0 compl\u00e9ter'))
+        + rjcTc(1400, rjcCellTexte(e.lot || ''))
+        + rjcTc(1000, rjcCellTexte(e.dateInterv ? formatDateFR(e.dateInterv) : '\u00e0 compl\u00e9ter'))
+        + rjcTc(700, rjcCellTexte(e.effectif ? String(e.effectif) : '\u00e0 compl\u00e9ter'))
+        + rjcTc(1140, rjcCellTexte(e.duree || '\u00e0 compl\u00e9ter'))
+        + '</w:tr>';
+    });
+  }
+  newTbl += '</w:tbl>';
+  xmlStr = xmlStr.slice(0, t.start) + newTbl + xmlStr.slice(t.end);
+  zip.file('word/document.xml', xmlStr);
+  return zip;
+}
+
+// ---------- Point 4 : tableau des intervenants (section 2 du registre) ----------
+function injecterIntervenantsRJC(zip, data) {
+  var docFile = zip.file('word/document.xml');
+  if (!docFile) return zip;
+  var xmlStr = docFile.asText();
+  var t = rjcTrouverTable(xmlStr, 'Raison sociale / Nom');
+  if (!t) { zip.file('word/document.xml', xmlStr); return zip; }
+
+  var moa = data.moa || {}, moe = data.moe || {}, org = data.organismes || {};
+  var ct = org.ct || {};
+  var tbl = t.xml;
+  tbl = rjcRemplirLigne(tbl, "Ma\u00eetre d'Ouvrage", [moa.nom || '\u00e0 compl\u00e9ter', moa.tel || '', moa.mail || '']);
+  tbl = rjcRemplirLigne(tbl, "Ma\u00eetre d'\u0152uvre", [moe.nom || '\u00e0 compl\u00e9ter', moe.tel || '', moe.mail || '']);
+  tbl = rjcRemplirLigne(tbl, 'Contr\u00f4leur technique', [ct.nom || '\u2014', ct.tel || '', ct.mail || '']);
+  var dreetsNom = [(org.dreets || {}).nom, (org.dreets || {}).adresse].filter(Boolean).join(' \u2014 ');
+  tbl = rjcRemplirLigne(tbl, 'DREETS', [dreetsNom || '\u00e0 compl\u00e9ter', '', '']);
+  var carsatNom = [(org.carsat || {}).nom, (org.carsat || {}).adresse].filter(Boolean).join(' \u2014 ');
+  tbl = rjcRemplirLigne(tbl, 'CARSAT', [carsatNom || '\u00e0 compl\u00e9ter', '', '']);
+  var oppbtpNom = [(org.oppbtp || {}).nom, (org.oppbtp || {}).adresse].filter(Boolean).join(' \u2014 ');
+  tbl = rjcRemplirLigne(tbl, 'OPPBTP', [oppbtpNom || '\u00e0 compl\u00e9ter', '', '']);
+
+  xmlStr = xmlStr.slice(0, t.start) + tbl + xmlStr.slice(t.end);
+  zip.file('word/document.xml', xmlStr);
+  return zip;
+}
+
+// ---------- Point 5 : Word du registre dans le zip d'envoi (au lieu du .txt) ----------
+// Pipeline minimal, independant de l'ecran en cours : fetch du modele, rendu des
+// tags, puis les 3 injections ci-dessus. Retourne un blob .docx pret a joindre.
+async function genererRJCBordereauBlob(affaire) {
+  var response = await fetch('modeles/' + (DOC_FILES['RJC'] || 'CSPS17_Registre_Journal_Bordereau_v3_2.docx'));
+  if (!response.ok) throw new Error('Mod\u00e8le RJC introuvable');
+  var arrayBuffer = await response.arrayBuffer();
+  var zip = new PizZip(arrayBuffer);
+  var DocxTemplater = window.docxtemplater || window.Docxtemplater || docxtemplater;
+  var doc = new DocxTemplater(zip, { paragraphLoop: true, linebreaks: true, delimiters: { start: '{{', end: '}}' } });
+  doc.render(buildTagData(affaire));
+  var finalZip = doc.getZip();
+  finalZip = injecterRJC(finalZip, affaire.rjc || []);
+  finalZip = injecterEntreprisesRJC(finalZip, affaire.entreprises || []);
+  finalZip = injecterIntervenantsRJC(finalZip, affaire);
+  return finalZip.generate({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
 }
 
 function ajouterEntreeRJC(affaire, entry) {
@@ -1735,7 +1928,13 @@ async function envoyerRJCEmail(affaire, destinataire) {
       }
       lignes.push(formatDateFR(e.date) + ' | ' + libelleRJC(e) + (e.objet ? ' | ' + e.objet : '') + (nomF ? ' | fichier : ' + nomF : ' | (sans fichier)'));
     }
-    zip.file('RJC_liste.txt', lignes.join('\r\n'));
+    try {
+      var rjcBlob = await genererRJCBordereauBlob(affaire);
+      var rjcDataUrl = await blobToDataURL(rjcBlob);
+      zip.file('000_Registre-journal_bordereau.docx', rjcDataUrl.split(',')[1] || '', { base64: true });
+    } catch (eRjcDoc) {
+      zip.file('RJC_liste.txt', lignes.join('\r\n')); // secours si le Word n'a pas pu etre genere
+    }
     var blob = zip.generate({ type: 'blob' });
     enregistrerEtExpliquer(blob, 'RJC_' + String(affaire.num || 'affaire').replace(/[^A-Za-z0-9_-]+/g, '_') + '.zip', destinataire || '');
     showToast('Registre pr\u00eat : ' + entries.length + ' entr\u00e9e(s), ' + n + ' fichier(s)', 'success');
@@ -1752,8 +1951,8 @@ function loadAffaire(id) {
   document.getElementById('form-title').textContent = a.chantier && a.chantier.nom ? a.chantier.nom : 'Affaire';
   document.getElementById('form-subtitle').textContent = a.num + (a.cat ? ' - Cat. ' + a.cat : '');
   var c = a.chantier || {};
-  ['nom','adresse','nature','debut','duree','montant','marche','dp','pc','hj'].forEach(function(f){
-    var el=document.getElementById('chantier-'+f); if(el) el.value=c[f]||'';
+  ['nom','adresse','nature','debut','duree','montant','marche','dp','pc','hj','refpgc','date-ouverture-rjc','date-prev-reception'].forEach(function(f){
+    var el=document.getElementById('chantier-'+f); if(el) el.value=c['refpgc'===f?'refPgc':'date-ouverture-rjc'===f?'dateOuvertureRjc':'date-prev-reception'===f?'datePrevReception':f]||'';
   });
   document.getElementById('chantier-nb-ent').value = c.nbEnt || '';
   var elMP = document.getElementById('mission-phase'); if (elMP) elMP.value = a.missionPhase || '';
@@ -1795,13 +1994,16 @@ function loadAffaire(id) {
   document.getElementById('org-oppbtp-nom').value = (org.oppbtp && org.oppbtp.nom) ? org.oppbtp.nom : '';
   document.getElementById('org-oppbtp-adresse').value = (org.oppbtp && org.oppbtp.adresse) ? org.oppbtp.adresse : '';
   document.getElementById('org-medecin').value = org.medecin || '';
+  document.getElementById('org-ct-nom').value = (org.ct && org.ct.nom) ? org.ct.nom : '';
+  document.getElementById('org-ct-tel').value = (org.ct && org.ct.tel) ? org.ct.tel : '';
+  document.getElementById('org-ct-mail').value = (org.ct && org.ct.mail) ? org.ct.mail : '';
   document.getElementById('entreprise-list').innerHTML = '';
   entrepriseCount = 0;
   (a.entreprises || []).forEach(function(ent){
     addEntreprise(ent.type);
     var cards = document.querySelectorAll('#entreprise-list .entreprise-card');
     var last = cards[cards.length-1];
-    ['nom','lot','adresse','tel','mail','siret','contact','effectif'].forEach(function(f){
+    ['nom','lot','adresse','tel','mail','siret','contact','effectif','dateInterv','duree'].forEach(function(f){
       var el=last.querySelector('.ent-'+f); if(el) el.value=ent[f]||'';
     });
     var elTF = last.querySelector('.ent-tel-fixe'); if(elTF) elTF.value = ent.telFixe||'';
@@ -4400,69 +4602,7 @@ function injecterObservations(zip, observations) {
   return zip;
 }
 
-function injecterRJC(zip, entries) {
-  if (!entries || !entries.length) return zip;
-  var docFile = zip.file('word/document.xml');
-  if (!docFile) return zip;
-  var xmlStr = docFile.asText();
 
-  function escXml(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-  var bordures = '<w:top w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/>'
-    + '<w:left w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/>'
-    + '<w:bottom w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/>'
-    + '<w:right w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/>';
-  var mar = '<w:top w:w="55" w:type="dxa"/><w:left w:w="110" w:type="dxa"/>'
-    + '<w:bottom w:w="55" w:type="dxa"/><w:right w:w="110" w:type="dxa"/>';
-
-  function tc(w, content) {
-    return '<w:tc><w:tcPr><w:tcW w:w="' + w + '" w:type="dxa"/>'
-      + '<w:tcBorders>' + bordures + '</w:tcBorders>'
-      + '<w:shd w:val="clear" w:color="auto" w:fill="FFFFFF"/>'
-      + '<w:tcMar>' + mar + '</w:tcMar>'
-      + '<w:vAlign w:val="center"/></w:tcPr>' + content + '</w:tc>';
-  }
-  function cellTexte(s, sz, bold) {
-    return '<w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'
-      + (bold ? '<w:b/><w:bCs/>' : '')
-      + '<w:sz w:val="' + (sz||16) + '"/><w:szCs w:val="' + (sz||16) + '"/></w:rPr>'
-      + '<w:t xml:space="preserve">' + escXml(s) + '</w:t></w:r></w:p>';
-  }
-
-  function buildTrRJC(e) {
-    return '<w:tr>'
-      + tc(1050, cellTexte(formatDateFR(e.date), 16))
-      + tc(1500, cellTexte(e.nature || '', 16, true))
-      + tc(3600, cellTexte(e.objet || '', 16))
-      + tc(2340, cellTexte(e.intervenants || '', 16))
-      + tc(1150, cellTexte(e.ref || '', 14))
-      + '</w:tr>';
-  }
-
-  // Le tableau chronologique s'ancre sur l'en-tete "Réf. document joint" (derniere colonne).
-  var ancre = 'Réf. document joint';
-  var idx1 = xmlStr.indexOf(ancre);
-  if (idx1 === -1) { zip.file('word/document.xml', xmlStr); return zip; }
-
-  var tblStart = xmlStr.lastIndexOf('<w:tbl>', idx1);
-  var tblEnd   = xmlStr.indexOf('</w:tbl>', idx1) + 8;
-  var tblXml = xmlStr.slice(tblStart, tblEnd);
-
-  // La ligne d'en-tete = premier <w:tr> (le template ne contient que celle-ci)
-  var firstTrEnd = tblXml.indexOf('</w:tr>') + 7;
-  var entete = tblXml.slice(0, firstTrEnd);
-
-  var sorted = entries.slice().sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
-  var newTbl = entete;
-  for (var i = 0; i < sorted.length; i++) {
-    newTbl += buildTrRJC(sorted[i]);
-  }
-  newTbl += '</w:tbl>';
-
-  xmlStr = xmlStr.slice(0, tblStart) + newTbl + xmlStr.slice(tblEnd);
-  zip.file('word/document.xml', xmlStr);
-  return zip;
-}
 
 function injecterPhotos(zip, photos, legendes) {
   if (!photos || !photos.length) return zip;
@@ -4892,7 +5032,7 @@ function centreAntipoison(adresse) {
 
 var DOC_FILES = {
   'DP':          'CSPS17_Suivi_Declaration_Prealable_v3.docx',
-  'RJC':         'CSPS17_Registre_Journal_Bordereau_v3_1.docx',
+  'RJC':         'CSPS17_Registre_Journal_Bordereau_v3_2.docx',
   'PGCR':        'CSPS17_PGC_v1.docx',
   'PGC3R':       'CSPS17_PGC_Simplifie_Cat3_v1.docx',
   'DIF':         'CSPS17_Fiche_Diffusion_PGC_v3.docx',
@@ -4949,6 +5089,8 @@ function buildTagData(data) {
     oppbtp_adresse:   (org.oppbtp && org.oppbtp.adresse) || '',
     date_today:       today,
     ref_pgc:          (data.chantier && data.chantier.refPgc) || data.num || '',
+    date_ouverture_rjc:  c.dateOuvertureRjc ? formatDateFR(c.dateOuvertureRjc) : '',
+    date_prev_reception: c.datePrevReception ? formatDateFR(c.datePrevReception) : '',
     antipoison:       centreAntipoison((data.chantier || {}).adresse),
     no_visite:        (data._visite && data._visite.noVisite) ? data._visite.noVisite : '1',
     heure_visite:     (data._visite && data._visite.heure) ? data._visite.heure : '',
@@ -5324,8 +5466,11 @@ async function generateDoc(ref, previewMode) {
       finalZip = injecterObservations(finalZip, terrainAffaire._observations);
     }
     // Injecter la chronologie du registre-journal (RJC)
-    if (ref === 'RJC' && typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire.rjc && terrainAffaire.rjc.length) {
-      finalZip = injecterRJC(finalZip, terrainAffaire.rjc);
+    if (ref === 'RJC') {
+      var affaireRjcSrc = (typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire.id === currentAffaireId) ? terrainAffaire : affaires.find(function(x){ return x.id === currentAffaireId; });
+      finalZip = injecterRJC(finalZip, (affaireRjcSrc && affaireRjcSrc.rjc) || []);
+      finalZip = injecterEntreprisesRJC(finalZip, data.entreprises || []);
+      finalZip = injecterIntervenantsRJC(finalZip, data);
     }
     // Injecter les photos dans le docx (avant nettoyage)
     if (typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire._photos && terrainAffaire._photos.length > 0) {
@@ -9497,6 +9642,8 @@ async function genererDocTerrain() {
   document.getElementById('chantier-nature').value = c.nature || '';
   document.getElementById('chantier-dp').value = c.dp || '';
   document.getElementById('chantier-refpgc').value = c.refPgc || '';
+  document.getElementById('chantier-date-ouverture-rjc').value = c.dateOuvertureRjc || '';
+  document.getElementById('chantier-date-prev-reception').value = c.datePrevReception || '';
   document.getElementById('moa-nom').value = moa.nom || '';
   document.getElementById('moa-contact').value = moa.contact || '';
   document.getElementById('moa-adresse').value = moa.adresse || '';

@@ -470,6 +470,109 @@ rep("        return arr;\n      })(),\n    };\n  } else if (ref === 'VIS') {", "
 rep("  await generateDoc(ref);\n}", "  await generateDoc(ref);\n  if (ref === 'FIC' && typeof icProposerSuivante === 'function') icProposerSuivante();\n}")
 rep("      finalZip = injecterFIC(finalZip, terrainAffaire._ficData);\n", "      finalZip = injecterFIC(finalZip, terrainAffaire._ficData);\n      finalZip = injecterICComplete(finalZip, terrainAffaire._ficData, isCat3);\n")
 rep("if (data.risques && !isCat3) xmlStr2 = cocherRisques(xmlStr2, data.risques);", "if (data.risques && !isCat3 && ref !== 'FIC') xmlStr2 = cocherRisques(xmlStr2, data.risques);")
+# 11p. Registre-journal complet (points 1 a 5) — decisions d'Alain 30/09 soir et 01/10
+RJCP = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'rjc-complet.part.js'), encoding='utf-8').read()
+
+# Retirer l'ancienne injecterRJC (remplacee par celle de rjc-complet.part.js)
+a = s.index('function injecterRJC(zip, entries) {'); k = s.index('{', a); dep = 0
+for j in range(k, len(s)):
+    if s[j] == '{': dep += 1
+    elif s[j] == '}':
+        dep -= 1
+        if dep == 0: break
+s = s[:a] + s[j + 1:]
+s = s.lstrip('\n') if False else s
+rep("function ajouterEntreeRJC(affaire, entry) {", RJCP + "\nfunction ajouterEntreeRJC(affaire, entry) {")
+
+# Modele v3_2 (bordereau dynamique + entreprises intervenantes + identification)
+rep("  'RJC':         'CSPS17_Registre_Journal_Bordereau_v3_1.docx',", "  'RJC':         'CSPS17_Registre_Journal_Bordereau_v3_2.docx',")
+
+# Contr\u00f4leur technique (point 4) — nouveaux champs Chantier
+rep(
+'''              <div class="field"><label>Medecin du Travail (service de sante au travail)</label><input type="text" id="org-medecin" placeholder="Ex : BTP Sante Bretagne - 35000 Rennes"></div>
+            </div>''',
+'''              <div class="field"><label>Medecin du Travail (service de sante au travail)</label><input type="text" id="org-medecin" placeholder="Ex : BTP Sante Bretagne - 35000 Rennes"></div>
+            </div>
+            <div class="form-row">
+              <div class="field"><label>Controleur technique</label><input type="text" id="org-ct-nom" placeholder="Ex : Bureau Veritas - agence Rennes"></div>
+              <div class="field"><label>Tel</label><input type="tel" id="org-ct-tel" placeholder="02 xx xx xx xx"></div>
+              <div class="field"><label>Mail</label><input type="email" id="org-ct-mail" placeholder="contact@organisme.fr"></div>
+            </div>''')
+
+# Dates d'ouverture du RJC et de reception previsionnelle (point 3) — onglet Chantier
+rep(
+'''              <div class="field"><label>Réf. du PGC (référence / indice)</label><input type="text" id="chantier-refpgc" placeholder="Ex : PGC indice A du 12/05/2026"></div>
+            </div>''',
+'''              <div class="field"><label>Réf. du PGC (référence / indice)</label><input type="text" id="chantier-refpgc" placeholder="Ex : PGC indice A du 12/05/2026"></div>
+            </div>
+            <div class="form-row">
+              <div class="field"><label>Date de signature du contrat de coordination (ouverture du RJC — R.4532-12 3°)</label><input type="date" id="chantier-date-ouverture-rjc"></div>
+              <div class="field"><label>Date previsionnelle de reception</label><input type="date" id="chantier-date-prev-reception"></div>
+            </div>''')
+
+# Sauvegarde / chargement / remise a zero de ces nouveaux champs
+rep("      dreets: { nom: document.getElementById('org-dreets-nom').value, adresse: document.getElementById('org-dreets-adresse').value },",
+    "      dreets: { nom: document.getElementById('org-dreets-nom').value, adresse: document.getElementById('org-dreets-adresse').value },\n"
+    "      ct: { nom: document.getElementById('org-ct-nom').value, tel: document.getElementById('org-ct-tel').value, mail: document.getElementById('org-ct-mail').value },")
+rep("      refPgc: document.getElementById('chantier-refpgc').value,",
+    "      refPgc: document.getElementById('chantier-refpgc').value,\n"
+    "      dateOuvertureRjc: document.getElementById('chantier-date-ouverture-rjc').value,\n"
+    "      datePrevReception: document.getElementById('chantier-date-prev-reception').value,")
+rep("  document.getElementById('org-medecin').value = org.medecin || '';",
+    "  document.getElementById('org-medecin').value = org.medecin || '';\n"
+    "  document.getElementById('org-ct-nom').value = (org.ct && org.ct.nom) ? org.ct.nom : '';\n"
+    "  document.getElementById('org-ct-tel').value = (org.ct && org.ct.tel) ? org.ct.tel : '';\n"
+    "  document.getElementById('org-ct-mail').value = (org.ct && org.ct.mail) ? org.ct.mail : '';")
+rep("  document.getElementById('chantier-refpgc').value = c.refPgc || '';",
+    "  document.getElementById('chantier-refpgc').value = c.refPgc || '';\n"
+    "  document.getElementById('chantier-date-ouverture-rjc').value = c.dateOuvertureRjc || '';\n"
+    "  document.getElementById('chantier-date-prev-reception').value = c.datePrevReception || '';")
+rep("   'org-oppbtp-nom','org-oppbtp-adresse','org-medecin'\n  ].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });",
+    "   'org-oppbtp-nom','org-oppbtp-adresse','org-medecin','org-ct-nom','org-ct-tel','org-ct-mail',\n"
+    "   'chantier-date-ouverture-rjc','chantier-date-prev-reception'\n  ].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });")
+
+# Bug preexistant trouve en testant : loadAffaire() ne rechargeait pas Ref. PGC
+# (ni, par le meme defaut, les 2 nouvelles dates) -> corrige dans la boucle generique.
+rep("  ['nom','adresse','nature','debut','duree','montant','marche','dp','pc','hj'].forEach(function(f){\n    var el=document.getElementById('chantier-'+f); if(el) el.value=c[f]||'';\n  });",
+    "  ['nom','adresse','nature','debut','duree','montant','marche','dp','pc','hj','refpgc','date-ouverture-rjc','date-prev-reception'].forEach(function(f){\n    var el=document.getElementById('chantier-'+f); if(el) el.value=c['refpgc'===f?'refPgc':'date-ouverture-rjc'===f?'dateOuvertureRjc':'date-prev-reception'===f?'datePrevReception':f]||'';\n  });")
+
+# Tags buildTagData pour les 2 nouvelles dates (categorie et ref_pgc existent deja)
+rep("    ref_pgc:          (data.chantier && data.chantier.refPgc) || data.num || '',",
+    "    ref_pgc:          (data.chantier && data.chantier.refPgc) || data.num || '',\n"
+    "    date_ouverture_rjc:  c.dateOuvertureRjc ? formatDateFR(c.dateOuvertureRjc) : '',\n"
+    "    date_prev_reception: c.datePrevReception ? formatDateFR(c.datePrevReception) : '',")
+
+# Entreprises : date approximative d'intervention + duree prevue (point 2)
+rep(
+'''    + '<div class="field"><label>Signataire (nom + qualite)</label><input type="text" class="ent-contact" placeholder="Ex : COATMEUR Sebastien - Chef chantier"></div>'    + '<div class="field"><label>Effectif prevu</label><input type="number" class="ent-effectif" placeholder="Ex : 4" min="1"></div>'    + '</div>'    + '</div>';''',
+'''    + '<div class="field"><label>Signataire (nom + qualite)</label><input type="text" class="ent-contact" placeholder="Ex : COATMEUR Sebastien - Chef chantier"></div>'    + '<div class="field"><label>Effectif prevu</label><input type="number" class="ent-effectif" placeholder="Ex : 4" min="1"></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Date approx. d\\'intervention (R.4532-38 3\\u00b0)</label><input type="date" class="ent-dateInterv"></div>'    + '<div class="field"><label>Duree prevue des travaux</label><input type="text" class="ent-duree" placeholder="Ex : 3 semaines"></div>'    + '</div>'    + '</div>';''')
+rep("      effectif: card.querySelector('.ent-effectif') ? card.querySelector('.ent-effectif').value : '',\n      id: card.querySelector('.ent-id') ? card.querySelector('.ent-id').value : '',",
+    "      effectif: card.querySelector('.ent-effectif') ? card.querySelector('.ent-effectif').value : '',\n"
+    "      dateInterv: card.querySelector('.ent-dateInterv') ? card.querySelector('.ent-dateInterv').value : '',\n"
+    "      duree: card.querySelector('.ent-duree') ? card.querySelector('.ent-duree').value : '',\n"
+    "      id: card.querySelector('.ent-id') ? card.querySelector('.ent-id').value : '',")
+rep("    ['nom','lot','adresse','tel','mail','siret','contact','effectif'].forEach(function(f){",
+    "    ['nom','lot','adresse','tel','mail','siret','contact','effectif','dateInterv','duree'].forEach(function(f){")
+
+# Injecter entreprises intervenantes + intervenants dans le pipeline de generation du RJC
+rep("    if (ref === 'RJC' && typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire.rjc && terrainAffaire.rjc.length) {\n      finalZip = injecterRJC(finalZip, terrainAffaire.rjc);\n    }",
+    "    if (ref === 'RJC') {\n"
+    "      var affaireRjcSrc = (typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire.id === currentAffaireId) ? terrainAffaire : affaires.find(function(x){ return x.id === currentAffaireId; });\n"
+    "      finalZip = injecterRJC(finalZip, (affaireRjcSrc && affaireRjcSrc.rjc) || []);\n"
+    "      finalZip = injecterEntreprisesRJC(finalZip, data.entreprises || []);\n"
+    "      finalZip = injecterIntervenantsRJC(finalZip, data);\n"
+    "    }")
+
+# Zip d'envoi (point 5) : le Word du registre remplace RJC_liste.txt
+rep("    zip.file('RJC_liste.txt', lignes.join('\\r\\n'));",
+    "    try {\n"
+    "      var rjcBlob = await genererRJCBordereauBlob(affaire);\n"
+    "      var rjcDataUrl = await blobToDataURL(rjcBlob);\n"
+    "      zip.file('000_Registre-journal_bordereau.docx', rjcDataUrl.split(',')[1] || '', { base64: true });\n"
+    "    } catch (eRjcDoc) {\n"
+    "      zip.file('RJC_liste.txt', lignes.join('\\r\\n')); // secours si le Word n'a pas pu etre genere\n"
+    "    }")
+
 # 10. version
 import datetime
 s = re.sub(r'v2\.46 &middot; build [^<]*', 'v3.0 &middot; ' + datetime.datetime.now(__import__('zoneinfo').ZoneInfo('Europe/Paris')).strftime('%d/%m %H:%M'), s, count=1)
