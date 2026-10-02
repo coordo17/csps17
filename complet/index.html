@@ -1159,8 +1159,8 @@ var extractedData = null;
 
 var DOCS = [
   { ref: 'DP',        title: 'Suivi Declaration Prealable', icon: '&#128203;', cats: [1,2] },
-  { ref: 'PGCR',      title: 'PGC SPS — Redaction', icon: '&#128214;', cats: [1,2], lienExterne: 'https://analyse-ppsps-bxam.onrender.com/' },
-  { ref: 'PGC3R',     title: 'PGC Simplifie — Redaction (Cat.3)', icon: '&#128214;', cats: [3], lienExterne: 'https://analyse-ppsps-bxam.onrender.com/' },
+  { ref: 'PGCR',      title: 'PGC SPS — Redaction', icon: '&#128214;', cats: [1,2], lienExterne: 'https://analyse-ppsps-bxam.onrender.com/', externeSeul: true },
+  { ref: 'PGC3R',     title: 'PGC Simplifie — Redaction (Cat.3)', icon: '&#128214;', cats: [3], lienExterne: 'https://analyse-ppsps-bxam.onrender.com/', externeSeul: true },
   { ref: 'RJC',       title: 'Registre Journal de Coordination', icon: '&#128212;', cats: [1,2,3] },
   { ref: 'DIF',       title: 'Fiche Diffusion PGC', icon: '&#128226;', cats: [1,2] },
   { ref: 'FIC',       title: 'Fiche d’inspection commune', icon: '&#128269;', cats: [1,2,3] },
@@ -2812,64 +2812,6 @@ function agregerHarmoPPSPS(affaire) {
   return { fiches: fiches, count: fiches.length };
 }
 
-function renderPGCPrefillCard(affaire) {
-  var agg = agregerElementsPGC(affaire);
-  var s = agg.sources;
-  var total = s.diag + s.planning + s.contraintes + s.plans;
-  var pieces = [];
-  if (s.diag) pieces.push(s.diag + ' diagnostic(s)');
-  if (s.planning) pieces.push(s.planning + ' planning(s)');
-  if (s.contraintes) pieces.push(s.contraintes + ' contrainte(s)');
-  if (s.plans) pieces.push(s.plans + ' plan(s)');
-  var note = total
-    ? 'Elements pris en compte : ' + pieces.join(', ') + '. Le PGC sera pre-rempli (co-activite, phasage, environnement, reseaux...) — a relire et valider.'
-    : 'Aucun element analyse pour l\'instant. Deposez diagnostics, plannings, contraintes et plans ci-dessus, puis generez : le PGC reprendra leurs analyses.';
-  var badge = total ? '<span class="doc-badge" style="cursor:default;" title="' + total + ' element(s)-source">' + total + '</span>' : '';
-  return '<div class="doc-card" style="border:1.5px solid var(--blue);background:#f7fbff;">'
-    + badge
-    + '<div class="doc-card-top"><div class="doc-icon">&#128221;</div>'
-    + '<div class="doc-info"><div class="doc-title">Realiser le PGC (pre-rempli)</div>'
-    + '<div class="doc-ref">' + note + '</div></div></div>'
-    + '<div class="doc-actions">'
-    + '<button class="btn btn-primary btn-sm" onclick="genererPGCPrerempli()">&#9881; Generer le PGC pre-rempli</button>'
-    + '</div></div>';
-}
-
-function genererPGCPrerempli() {
-  var affaire = currentAffaireObj();
-  if (!affaire) { showToast('Sauvegardez l\'affaire avant de generer le PGC', 'error'); return; }
-  var agg = agregerElementsPGC(affaire);
-  var s = agg.sources;
-  var total = s.diag + s.planning + s.contraintes + s.plans;
-  var cat = affaire.cat || currentCat || 2;
-  var ref = (String(cat) === '3') ? 'PGC3R' : 'PGCR';
-  function esc(x){ return (typeof escHtml === 'function') ? escHtml(String(x==null?'':x)) : String(x==null?'':x); }
-  function bloc(titre, txt){ return txt ? '<div style="margin:6px 0;"><strong>' + titre + '</strong><br><span style="white-space:pre-line;font-size:13px;">' + esc(txt) + '</span></div>' : ''; }
-  var apercu = ''
-    + bloc('Co-activite (planning)', agg.coactivite)
-    + (agg.alertes.length ? '<div style="background:#fde8e8;border-radius:6px;padding:6px 10px;margin:6px 0;font-size:13px;"><strong>&#9888;&#65039; Alertes :</strong><br>• ' + agg.alertes.map(esc).join('<br>• ') + '</div>' : '')
-    + bloc('Phasage', agg.phasage)
-    + bloc('Environnement / site', agg.environnement)
-    + bloc('Reseaux / servitudes', agg.reseaux)
-    + bloc('Interferences (exploitation)', agg.interferences)
-    + bloc('Acces / circulation', agg.acces)
-    + bloc('Installation de chantier / base vie', agg.base_vie)
-    + (agg.travaux_dangereux.length ? bloc('Travaux dangereux', agg.travaux_dangereux.join(', ')) : '');
-  var pieces = [];
-  if (s.diag) pieces.push(s.diag + ' diagnostic(s)');
-  if (s.planning) pieces.push(s.planning + ' planning(s)');
-  if (s.contraintes) pieces.push(s.contraintes + ' contrainte(s)');
-  if (s.plans) pieces.push(s.plans + ' plan(s)');
-  var entete = total
-    ? '<p style="margin-bottom:8px;">Le PGC <strong>' + (ref === 'PGC3R' ? 'simplifie (Cat.3)' : 'complet') + '</strong> va etre genere en injectant les analyses de : <strong>' + esc(pieces.join(', ')) + '</strong>.</p>'
-    : '<p style="margin-bottom:8px;">Aucun element-source analyse : le PGC sortira avec le socle par defaut (a completer). Vous pouvez d\'abord deposer diagnostics, plannings, contraintes et plans.</p>';
-  var corps = entete
-    + (apercu ? '<div style="max-height:300px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:10px;background:#fff;">' + apercu + '</div>' : '')
-    + '<p style="font-size:12px;color:var(--text-light);margin-top:10px;">L\'IA propose ce pre-remplissage — vous relisez et validez le PGC genere. Rien n\'est fige : le document Word reste entierement modifiable.</p>';
-  openDocModal('&#9881; Generer le PGC pre-rempli', corps, 'Generer le PGC', function(){
-    generateDocAvecCheck(ref);
-  });
-}
 
 // Carte "Analyse des diagnostics" (demande d'Alain 05/07) : les Word d'analyse
 // (docRef ANALYSE, generes a chaque depot de diagnostic) listes comme un vrai
@@ -3320,7 +3262,7 @@ function renderDocsGrid() {
       + ' <span style="font-weight:400;font-size:12px;color:var(--text-light);">' + docs.length + ' document(s)' + (pieces.length ? ', ' + pieces.length + ' piece(s) recue(s)' : '') + (horsMission ? ' — hors de votre mission' : '') + '</span></summary>'
       + '<div class="docs-grid" style="margin:0;padding:0 12px 12px;">'
       + pieces.map(cartePiece).join('') + docs.map(carteDoc).join('')
-      + (sec.titre === 'Conception' ? renderAnalyseCard(affaire) + renderPGCPrefillCard(affaire) : '')
+      + (sec.titre === 'Conception' ? renderAnalyseCard(affaire) : '')
       + '</div></details>';
   });
   grid.style.display = 'block';
