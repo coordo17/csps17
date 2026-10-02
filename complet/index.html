@@ -4883,21 +4883,22 @@ function injecterSignatures(zip, sigCsps, sigEnt, sigEU) {
 
 function cocherRisques(xmlStr, risques) {
   if (!risques) return xmlStr;
-  // Amiante/plomb
+  // Ne remplacer que la case a cocher elle-meme (prefixee "☐ "), jamais le mot seul :
+  // un remplacement sur le mot nu accrocherait n'importe quel texte du document qui
+  // mentionne ce risque en passant (ex. un libelle de grille d'analyse), meme sans
+  // aucune case a cet endroit. Bug trouve le 02/10 sur la Grille PPSPS (termes
+  // "Amiante"/"Réseaux" de ses propres libelles transformes a tort en cases cochees).
   if (risques.amiante || risques.plomb) {
-    xmlStr = xmlStr.split('Amiante').join('☑ Amiante');
+    xmlStr = xmlStr.split('☐ Amiante').join('☑ Amiante');
   }
-  // Demolition
   if (risques.demolition) {
-    xmlStr = xmlStr.split('Démolition').join('☑ Démolition');
+    xmlStr = xmlStr.split('☐ Démolition').join('☑ Démolition');
   }
-  // Reseaux
   if (risques.reseaux) {
-    xmlStr = xmlStr.split('Réseaux').join('☑ Réseaux');
+    xmlStr = xmlStr.split('☐ Réseaux').join('☑ Réseaux');
   }
-  // Hauteur
   if (risques.hauteur) {
-    xmlStr = xmlStr.split('hauteur').join('☑ hauteur');
+    xmlStr = xmlStr.split('☐ hauteur').join('☑ hauteur');
   }
   return xmlStr;
 }
@@ -5149,11 +5150,14 @@ function buildTagData(data) {
       }).join(' ; ') + '.';
     })(),
   };
-  // Tags dynamiques des 20 points de la Grille PPSPS (ppsps_item1_statut..ppsps_item20_obs)
+  // Tags dynamiques des 21 points de la Grille PPSPS (ppsps_item1_statut..ppsps_item21_obs).
+  // Toujours remplir les 21, meme sans formulaire Terrain rempli (generation "a vide" depuis
+  // l'onglet Documents) : une valeur manquante doit donner une case vide, jamais le mot
+  // "undefined" qu'affiche sinon docxtemplater pour un tag absent de l'objet de donnees.
   var ppspsItems = (data._ppspsData && data._ppspsData.items) ? data._ppspsData.items : [];
-  for (var pi = 0; pi < ppspsItems.length; pi++) {
-    tags['ppsps_item' + (pi + 1) + '_statut'] = ppspsItems[pi].statut || '';
-    tags['ppsps_item' + (pi + 1) + '_obs'] = ppspsItems[pi].obs || '';
+  for (var pi = 0; pi < PPSPS_ITEM_LABELS.length; pi++) {
+    tags['ppsps_item' + (pi + 1) + '_statut'] = (ppspsItems[pi] && ppspsItems[pi].statut) || '';
+    tags['ppsps_item' + (pi + 1) + '_obs'] = (ppspsItems[pi] && ppspsItems[pi].obs) || '';
   }
   // ── Tags PGC (18e/19e documents : redaction PGC complet / PGC simplifie Cat.3) ──
   Object.assign(tags, buildTagsPGC(data));
@@ -5450,7 +5454,7 @@ async function generateDoc(ref, previewMode) {
         var xmlStr2 = docXmlFile.asText();
         if (data.cat) xmlStr2 = cocherCategorie(xmlStr2, data.cat);
         if (data._ficData) xmlStr2 = cocherSousTraitance(xmlStr2, data._ficData.stOui);
-        if (data.risques && !isCat3 && ref !== 'FIC') xmlStr2 = cocherRisques(xmlStr2, data.risques);
+        if (data.risques && !isCat3 && ref !== 'FIC' && ref !== 'PPP') xmlStr2 = cocherRisques(xmlStr2, data.risques);
         finalZip.file('word/document.xml', xmlStr2);
       }
     }
