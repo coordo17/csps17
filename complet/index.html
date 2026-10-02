@@ -5054,6 +5054,27 @@ var DOC_FILES = {
   'RFM':         'CSPS17_Rapport_Fin_Mission_v2.docx',
 };
 
+// Bilan quantitatif du Rapport de Fin de Mission (02/10) : compte au lieu de
+// retaper, a partir des donnees deja connues de l'affaire (RJC et historique
+// PPSPS). Rien n'est invente : chaque compte vaut 0 s'il n'y a vraiment rien
+// de ce type au RJC, plutot que de deviner.
+function buildTagsRFM() {
+  var ta = (typeof terrainAffaire !== 'undefined') ? terrainAffaire : null;
+  var rjc = (ta && ta.rjc) || [];
+  var compte = function(nature){ return rjc.filter(function(e){ return e.nature === nature; }).length; };
+  return {
+    rfm_nb_visites:        compte('Visite de chantier'),
+    rfm_nb_reunions_coord: compte('CR Réunion de coordination'),
+    rfm_nb_cissct:         compte('Réunion CISSCT'),
+    rfm_nb_ic:             compte('Inspection commune'),
+    rfm_nb_entreprises:    ((ta && ta.entreprises) || []).length,
+    rfm_nb_ppsps_analyses: ((ta && ta.ppspsAnalyses) || []).length,
+    rfm_nb_observations:   compte('Observation'),
+    rfm_nb_notifications:  compte('Notification'),
+    rfm_nb_dgi:            compte('Danger grave et imminent'),
+  };
+}
+
 function buildTagData(data) {
   var c = data.chantier || {};
   var moa = data.moa || {};
@@ -5429,6 +5450,7 @@ async function generateDoc(ref, previewMode) {
     var _tags = buildTagData(data);
     if (ref === 'DGI') Object.assign(_tags, tagsDGI(data));
     if (ref === 'RCO') Object.assign(_tags, tagsRCO(data));
+    if (ref === 'RFM') Object.assign(_tags, buildTagsRFM());
     doc.render(_tags);
     var finalZip = doc.getZip();
     if (ref === 'RCO') finalZip = injecterRCO(finalZip, data);
@@ -5936,6 +5958,94 @@ function applyExtracted() {
 }
 
 // ── IMPORT PPSPS PAR IA (pre-remplissage de la Grille d'analyse) ────────────
+// ── IMPORT DETERMINISTE DU PPSPS (02/10) ────────────────────────────────────
+// Remplace l'ancien import par IA (retire le 28/09, decision d'abandon de tout
+// appel IA dans CSPS17). Ne fait que deux choses, toutes deux verifiables :
+// 1) extraire des champs factuels explicitement etiquetes dans le texte
+//    (raison sociale, lot, dates) ;
+// 2) reperer, pour chacun des 21 points de la grille, un passage contenant un
+//    des mots-cles du point et le poser dans l'observation comme repere a
+//    verifier. Le statut C/I/A/SO n'est JAMAIS rempli automatiquement : c'est
+//    le jugement du CSPS, pas une donnee a extraire (cf. "jamais de valeur
+//    inventee" et le perimetre CSPS rappele en tete de ce document).
+function rechercherChampPPSPS(texte, motifs) {
+  for (var i = 0; i < motifs.length; i++) {
+    var m = texte.match(motifs[i]);
+    if (m && m[1] && m[1].trim()) return m[1].trim().replace(/\s+/g, ' ').slice(0, 90);
+  }
+  return '';
+}
+
+function dateFRversISO(txt) {
+  var m = (txt || '').match(/(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{2,4})/);
+  if (!m) return '';
+  var j = m[1].padStart(2, '0'), mo = m[2].padStart(2, '0'), a = m[3].length === 2 ? '20' + m[3] : m[3];
+  return a + '-' + mo + '-' + j;
+}
+
+function reperePourMotsCles(texte, motsCles) {
+  var texteMin = texte.toLowerCase();
+  for (var i = 0; i < motsCles.length; i++) {
+    var pos = texteMin.indexOf(motsCles[i].toLowerCase());
+    if (pos === -1) continue;
+    var debut = Math.max(0, pos - 60), fin = Math.min(texte.length, pos + motsCles[i].length + 90);
+    var extrait = texte.slice(debut, fin).replace(/\s+/g, ' ').trim();
+    if (debut > 0) extrait = '…' + extrait;
+    if (fin < texte.length) extrait = extrait + '…';
+    return extrait;
+  }
+  return null;
+}
+
+function appliquerImportPPSPSDeterministe(texte) {
+  var nbChamps = 0, nbReperes = 0;
+
+  var nom = rechercherChampPPSPS(texte, [/(?:entreprise|raison sociale|société)\s*[:\-]\s*([^\n]{3,80})/i]);
+  if (nom) { var elN = document.getElementById('ppsps-ent-nom'); if (elN && !elN.value) { elN.value = nom; nbChamps++; } }
+
+  var lot = rechercherChampPPSPS(texte, [/(?:lot|corps d['’]état|corps de métier)\s*[:\-]\s*([^\n]{3,80})/i]);
+  if (lot) { var elL = document.getElementById('ppsps-ent-lot'); if (elL && !elL.value) { elL.value = lot; nbChamps++; } }
+
+  var dateDebutTxt = rechercherChampPPSPS(texte, [/(?:date de début(?:\s+des travaux)?|début des travaux)\s*[:\-]?\s*(\d{1,2}[\/\.\-]\d{1,2}[\/\.\-]\d{2,4})/i]);
+  var dateDebutISO = dateFRversISO(dateDebutTxt);
+  if (dateDebutISO) { var elD = document.getElementById('ppsps-debut-travaux'); if (elD && !elD.value) { elD.value = dateDebutISO; nbChamps++; } }
+
+  var version = rechercherChampPPSPS(texte, [/(?:version|indice)\s*[:\-]?\s*([A-Za-z0-9]{1,6})\b/i]);
+  if (version) { var elV = document.getElementById('ppsps-version'); if (elV && !elV.value) { elV.value = version; nbChamps++; } }
+
+  for (var n = 1; n <= PPSPS_ITEM_MOTSCLES.length; n++) {
+    var elObs = document.getElementById('ppsps-item' + n + '-obs');
+    if (!elObs || elObs.value) continue; // ne jamais ecraser une observation deja saisie
+    var extrait = reperePourMotsCles(texte, PPSPS_ITEM_MOTSCLES[n - 1]);
+    if (extrait) { elObs.value = 'Repéré dans le document (à vérifier) : "' + extrait + '"'; nbReperes++; }
+  }
+
+  return { nbChamps: nbChamps, nbReperes: nbReperes };
+}
+
+function handlePPSPSImportDeterministe(e) {
+  var file = e.target.files[0];
+  if (file) analyserPPSPSImportDeterministe(file);
+}
+
+async function analyserPPSPSImportDeterministe(file) {
+  var statusEl = document.getElementById('ppsps-import-status');
+  if (statusEl) statusEl.textContent = 'Lecture en cours...';
+  try {
+    var texte = await extraireTexteFichier(file);
+    if (!texte || texte.replace(/\s/g, '').length < 30) {
+      throw new Error('Texte illisible (document scanné sans OCR exploitable, ou fichier vide).');
+    }
+    var resultat = appliquerImportPPSPSDeterministe(texte);
+    var msg = resultat.nbChamps + ' champ(s) d\'identification repéré(s), ' + resultat.nbReperes + ' point(s) de la grille avec un passage repéré — vérifiez chaque observation et choisissez vous-même C/I/A/SO.';
+    if (statusEl) statusEl.textContent = msg;
+    showToast('PPSPS lu — ' + resultat.nbChamps + ' champ(s), ' + resultat.nbReperes + ' repère(s). Rien n\'est jugé à votre place.', 'success');
+  } catch (err) {
+    if (statusEl) statusEl.textContent = '';
+    showToast('Erreur lecture PPSPS : ' + err.message, 'error');
+  }
+}
+
 function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
 
 // ── SAUVEGARDES (export / import de toutes les affaires) ────────────────────
@@ -8469,6 +8579,34 @@ var PPSPS_GRID = [
 // l'historique d'harmonisation.
 var PPSPS_ITEM_LABELS = [];
 PPSPS_GRID.forEach(function(bloc){ bloc.items.forEach(function(label){ PPSPS_ITEM_LABELS.push(label); }); });
+
+// Mots-cles de reperage par point (dans le meme ordre que PPSPS_ITEM_LABELS), pour
+// l'import deterministe du PPSPS (02/10) : une simple recherche de texte, qui ne fait
+// que retrouver un passage a verifier dans l'observation — jamais un statut C/I/A/SO,
+// qui reste toujours le jugement du CSPS, jamais devine par un script.
+var PPSPS_ITEM_MOTSCLES = [
+  ["siret", "raison sociale", "adresse du siège"],
+  ["chef de chantier", "conducteur de travaux", "responsable des travaux", "personne chargée de diriger"],
+  ["date de début", "durée d'intervention", "durée prévisible", "planning prévisionnel"],
+  ["effectif", "nombre de salariés", "effectif prévisionnel", "effectif maximal"],
+  ["sous-traitant", "sous-traitance", "prestataire"],
+  ["mode opératoire", "procédure d'exécution", "méthode d'exécution"],
+  ["matériel", "engin", "autorisation de conduite", "caces"],
+  ["plan de circulation", "circulation sur le chantier", "circulation interne"],
+  ["approvisionnement", "livraison"],
+  ["chute de hauteur", "travail en hauteur", "ensevelissement", "fouille"],
+  ["amiante", "plomb", "cmr", "agent biologique"],
+  ["noyade", "puits", "souterrain", "plongée", "hyperbare"],
+  ["dict", "dt-dict", "réseau", "ligne électrique", "démolition", "explosif", "préfabriqué", "levage", "rayonnement ionisant"],
+  ["vestiaire", "sanitaire", "réfectoire", "base vie", "base-vie"],
+  ["risques propres", "analyse des risques"],
+  ["risque importé", "coactivité", "interférence"],
+  ["risque exporté"],
+  ["plan général de coordination", "pgc"],
+  ["garde-corps", "protection collective", "epi", "équipement de protection individuelle"],
+  ["sst", "sauveteur secouriste", "trousse de secours", "poste de secours"],
+  ["consigne d'évacuation", "évacuation", "plan d'évacuation"],
+];
 // Items transverses au chantier (concernent potentiellement toutes les entreprises) :
 // s'ils restent Incomplet/Absent chez une entreprise, c'est un point de vigilance pour
 // l'harmonisation de toutes les analyses suivantes de la meme affaire.
@@ -8527,6 +8665,13 @@ function genFormulaireGrillePPSPS() {
   html2 += ppspsHarmonisationPanel();
 
   html2 += sectionHeader('1', 'Identification', '&#128203;');
+  html2 += '<div class="field" style="margin-bottom:8px;"><label>Importer le PPSPS (repérage automatique par mots-clés — aucune IA, aucun statut deviné : à vous de juger C/I/A/SO)</label>'
+    + '<div style="display:flex;gap:8px;align-items:center;">'
+    + '<button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById(\'ppsps-import-input\').click()">&#128229; Importer un fichier</button>'
+    + '<span id="ppsps-import-status" style="font-size:12px;color:var(--text-light);"></span>'
+    + '</div>'
+    + '<input type="file" id="ppsps-import-input" accept=".pdf,.docx,.txt" style="display:none;" onchange="handlePPSPSImportDeterministe(event)">'
+    + '</div>';
   html2 += '<div class="field" style="margin-bottom:8px;"><label>Selectionner une entreprise</label>'
     + '<select id="ppsps-ent-select" onchange="terrainRemplirEntreprise(this.value)" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;">'
     + '<option value="">-- Choisir --</option>';
@@ -8634,7 +8779,7 @@ var RJC_NATURES = [
   'Ouverture de mission', 'Transmission de documents', 'Inspection commune',
   'Réception PPSPS entreprise', 'Harmonisation / Analyse PPSPS',
   'Visite de chantier', 'Observation', 'Notification', 'Danger grave et imminent',
-  'Déclaration sous-traitant', 'CR Réunion de coordination', 'Passation de consignes',
+  'Déclaration sous-traitant', 'CR Réunion de coordination', 'Réunion CISSCT', 'Passation de consignes',
   'Transmission DIUO', 'Réception / Clôture de mission', 'Autre',
 ];
 
