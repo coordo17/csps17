@@ -909,8 +909,6 @@
               <button class="btn btn-outline btn-sm" onclick="addEntreprise('principale')">+ Entreprise principale</button>
               <button class="btn btn-outline btn-sm" onclick="addEntreprise('sous-traitant')">+ Sous-traitant</button>
               <button class="btn btn-outline btn-sm" onclick="addEntreprise('prestataire')">+ Prestataire de service</button>
-              <button class="btn btn-outline btn-sm" onclick="document.getElementById('ent-mail-file-input').click()">&#128231; Importer (mail)</button>
-              <input type="file" id="ent-mail-file-input" accept=".pdf,.docx,.txt,.eml" style="display:none;" onchange="handleEntMailSelect(event)">
             </div>
           </div>
         </div>
@@ -3387,77 +3385,6 @@ async function analyserPlanning(affaire, file) {
   }
 }
 
-// ── ELEMENTS DU PGC : CONTRAINTES DU SITE ───────────────────────────────────
-// Point 4 (passe A) : une contrainte peut arriver par FICHIER ou par TEXTE LIBRE.
-// L'analyse degage les contraintes structurantes du site (reseaux, voisinage,
-// exploitation, acces, environnement, servitudes) qui alimenteront le PGC.
-async function analyserContraintesDeposee(affaire, file) {
-  try {
-    showToast('Analyse IA des contraintes ' + file.name + '...');
-    var texte = (await extraireTexteFichier(file)).slice(0, 12000);
-    if (texte.trim().length < 30) { showToast('Document illisible (scan/image ?) — depot conserve sans analyse', 'error'); return; }
-    await _analyserContraintesTexte(affaire, texte, file.name);
-  } catch (err) {
-    showToast('Analyse des contraintes impossible : ' + err.message, 'error');
-  }
-}
-
-// Saisie de contraintes en TEXTE LIBRE (sans fichier) : petite modale textarea.
-function saisirContraintesTexte() {
-  var affaire = currentAffaireObj();
-  if (!affaire) { showToast('Sauvegardez l\'affaire avant de saisir des contraintes', 'error'); return; }
-  var html = '<p style="margin-bottom:8px;font-size:13px;color:var(--text-light);">'
-    + 'Decrivez librement les contraintes du site : reseaux, voisinage, exploitation en cours, acces et circulation, '
-    + 'environnement, servitudes, horaires... L\'IA en fera une synthese structuree (element du PGC).</p>'
-    + '<textarea id="contraintes-txt" style="width:100%;min-height:160px;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:14px;" '
-    + 'placeholder="Ex : site en exploitation (negoce ouvert au public), zonage par grilles Heras a la charge du MOA ; anciens reseaux en limite a neutraliser (PV de coupure avant demolition) ; emprise trottoir a demander..."></textarea>';
-  openDocModal('Contraintes du site (texte libre)', html, 'Analyser', function(){
-    var el = document.getElementById('contraintes-txt');
-    var texte = el ? (el.value || '').trim() : '';
-    if (texte.length < 20) { showToast('Texte trop court — saisie ignoree', 'error'); return; }
-    // Trace au RJC comme une piece recue (sans fichier)
-    ajouterEntreeRJC(affaire, {
-      date: new Date().toISOString().split('T')[0],
-      nature: 'Contraintes du site (element PGC)',
-      objet: 'Saisie texte libre',
-      intervenants: '', ref: 'Contraintes (texte)', docRef: 'CONTRAINTES',
-    });
-    persistAffaires();
-    _analyserContraintesTexte(affaire, texte, 'Contraintes (saisie texte)').then(function(){ renderDocsGrid(); });
-  });
-}
-
-async function _analyserContraintesTexte(affaire, texte, sourceLabel) {
-  try {
-    showToast('Analyse IA des contraintes...');
-    var prompt = 'Tu es coordonnateur SPS. Voici des informations sur les CONTRAINTES d\'un chantier BTP (site, environnement, exploitation, reseaux, acces) :\n\n'
-      + texte
-      + '\n\nReponds UNIQUEMENT en JSON valide, sans markdown ni backtick :\n'
-      + '{"type_rapport":"contraintes","synthese":"...","contraintes":[{"categorie":"reseaux|voisinage|exploitation|acces|circulation|environnement|servitude|autre","detail":"...","mesure":"..."}],"points_vigilance_ic":"..."}\n'
-      + 'synthese=4 phrases max resumant les contraintes structurantes du site pour la coordination. '
-      + 'contraintes=liste des contraintes identifiees (categorie, detail concret, mesure de coordination associee). '
-      + 'points_vigilance_ic=1 a 2 phrases a rappeler aux entreprises lors de l\'inspection commune. '
-      + 'N\'invente rien : si une information n\'est pas presente, ne la cree pas. Ecris en francais, concret, oriente terrain.';
-    var response = await fetch('/api/claude', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'qwen/qwen3.6-27b', max_tokens: 1200, messages: [{ role: 'user', content: prompt }] })
-    });
-    var result = await response.json();
-    if (!response.ok) throw new Error('Serveur ' + response.status);
-    var text = (result.content && result.content[0] && result.content[0].text) ? result.content[0].text
-      : (result.choices && result.choices[0] && result.choices[0].message ? result.choices[0].message.content : '{}');
-    var parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
-    parsed = nettoyerAnalyseFr(parsed);
-    parsed.type_rapport = 'contraintes';
-    if (!affaire.rapportsAnalyses) affaire.rapportsAnalyses = [];
-    affaire.rapportsAnalyses.push({ id: 'rap-' + Date.now(), date: new Date().toISOString().split('T')[0], fichier: sourceLabel, analyse: parsed });
-    persistAffaires();
-    await attacherAnalyseAuRJC(affaire, parsed, sourceLabel);
-    afficherAnalyseModal(parsed, affaire.missionPhase || '', sourceLabel, affaire);
-  } catch (err) {
-    showToast('Analyse des contraintes impossible : ' + err.message, 'error');
-  }
-}
 
 // ── ELEMENTS DU PGC : PLANS (masse, PIC, coupes) ────────────────────────────
 async function analyserPlansDepose(affaire, file) {
@@ -3870,7 +3797,7 @@ function renderDocsGrid() {
     var btnTel = dernierF
       ? '<button class="btn btn-outline btn-sm" onclick="telechargerDernierDoc(\'' + p.ref + '\')" title="Derniere piece : ' + formatDateFR(dernierF.date) + '">&#11015; Telecharger</button>'
       : '<button class="btn btn-outline btn-sm" disabled title="Aucune piece deposee">&#11015; Telecharger</button>';
-    var btnTexte = (p.ref === 'CONTRAINTES') ? '<button class="btn btn-outline btn-sm" onclick="saisirContraintesTexte()" title="Saisir des contraintes en texte libre">&#9998; Texte libre</button>' : '';
+    var btnTexte = '';
     return '<div class="doc-card" style="background:#f8fafc;">' + badge
       + '<div class="doc-card-top"><div class="doc-icon">' + p.icon + '</div>'
       + '<div class="doc-info"><div class="doc-title">' + p.title + dot + '</div>'
@@ -5690,132 +5617,6 @@ function handleDrop(e) {
   var file = e.dataTransfer.files[0];
   if (file) processPGCFile(file);
 }
-function handleEntMailSelect(e) {
-  var file = e.target.files[0];
-  if (file) processEntMailFile(file);
-  e.target.value = '';
-}
-
-async function processEntMailFile(file) {
-  showToast('Lecture du mail en cours...');
-  try {
-    var mailText = '';
-    if (file.name.endsWith('.pdf')) {
-      var arrayBuffer = await file.arrayBuffer();
-      var pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      var maxPages = Math.min(pdf.numPages, 10);
-      for (var i = 1; i <= maxPages; i++) {
-        var page = await pdf.getPage(i);
-        var tc = await page.getTextContent();
-        mailText += tc.items.map(function(it){ return it.str; }).join(' ') + '\n';
-      }
-      // Fallback OCR si le PDF est une image scannee (pas de couche texte)
-      if (mailText.trim().length < 30) {
-        showToast('PDF scanne detecte, OCR en-tete/pied de page (5-10s)...');
-        if (typeof Tesseract === 'undefined') {
-          throw new Error('OCR indisponible (Tesseract.js non chargé). Rechargez la page.');
-        }
-        var ocrPages = Math.min(pdf.numPages, 2); // limite pour le temps de calcul
-        var ocrText = '';
-        for (var p = 1; p <= ocrPages; p++) {
-          var ocrPage = await pdf.getPage(p);
-          var viewport = ocrPage.getViewport({ scale: 2.5 });
-          var fullCanvas = document.createElement('canvas');
-          fullCanvas.width = viewport.width;
-          fullCanvas.height = viewport.height;
-          await ocrPage.render({ canvasContext: fullCanvas.getContext('2d'), viewport: viewport }).promise;
-          // Decoupe : en-tete (haut 22%) + pied de page (bas 15%), zones ou se trouvent
-          // raison sociale / adresse / SIRET / tel / mail sur la plupart des courriers/devis pro
-          var zones = [
-            { y: 0, h: Math.round(viewport.height * 0.22) },
-            { y: Math.round(viewport.height * 0.85), h: Math.round(viewport.height * 0.15) }
-          ];
-          for (var z = 0; z < zones.length; z++) {
-            var zoneCanvas = document.createElement('canvas');
-            zoneCanvas.width = viewport.width;
-            zoneCanvas.height = zones[z].h;
-            zoneCanvas.getContext('2d').drawImage(fullCanvas, 0, zones[z].y, viewport.width, zones[z].h, 0, 0, viewport.width, zones[z].h);
-            var ocrResult = await Tesseract.recognize(zoneCanvas, 'fra');
-            ocrText += (ocrResult.data && ocrResult.data.text ? ocrResult.data.text : '') + '\n';
-          }
-        }
-        mailText = ocrText;
-      }
-    } else if (file.name.endsWith('.docx')) {
-      if (typeof mammoth === 'undefined') {
-        throw new Error('Lecture DOCX indisponible (mammoth.js non chargé). Rechargez la page.');
-      }
-      var docxBuffer = await file.arrayBuffer();
-      var mammothResult = await mammoth.extractRawText({ arrayBuffer: docxBuffer });
-      mailText = mammothResult.value || '';
-    } else {
-      // .txt ou .eml : texte brut (MIME simple, suffisant pour mails non-encodes)
-      mailText = await file.text();
-    }
-    mailText = mailText.slice(0, 8000);
-
-    var ratioInvalide = (mailText.match(/\uFFFD/g) || []).length / Math.max(mailText.length, 1);
-    if (ratioInvalide > 0.05 || mailText.trim().length < 20) {
-      throw new Error('Le texte du mail est illisible. Copiez le texte dans un fichier .txt si besoin.');
-    }
-
-    var prompt = 'Voici le contenu d\'un mail envoye par une entreprise intervenant sur un chantier BTP :\n\n' + mailText + '\n\nExtrais UNIQUEMENT les informations utiles pour une fiche entreprise et reponds en JSON valide, sans markdown ni backtick :\n{"nom":null,"lot":null,"adresse":null,"contact":null,"tel":null,"mail":null,"effectif":null,"siret":null,"compagnon":null}\nnom=raison sociale de l\'entreprise expeditrice (pas le destinataire), lot=corps de metier ou lot concerne si mentionne, adresse=adresse de l\'entreprise, contact=nom de la personne signataire du mail, tel=telephone, mail=adresse email de contact, effectif=effectif annonce pour le chantier, siret=numero SIRET si present, compagnon=nom du compagnon/chef d\'equipe qui interviendra sur site si mentionne. Met null pour tout champ non trouve. Ignore le contenu hors-sujet (signatures publicitaires, disclaimers).';
-
-    var response = await fetch('/api/claude', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'qwen/qwen3.6-27b',
-        max_tokens: 800,
-        messages: [{ role: 'user', content: prompt }]
-      })
-    });
-    var result = await response.json();
-    if (!response.ok) {
-      throw new Error('Serveur (' + response.status + ') : ' + (result.error && result.error.message ? result.error.message : JSON.stringify(result)));
-    }
-    var text = '{}';
-    if (result.choices && result.choices[0] && result.choices[0].message && result.choices[0].message.content) {
-      text = result.choices[0].message.content;
-    } else if (result.content && result.content[0] && result.content[0].text) {
-      text = result.content[0].text;
-    } else if (result.error) {
-      throw new Error(result.error.message || JSON.stringify(result.error));
-    }
-    var jsonStr = text.replace(/```json|```/g,'').trim();
-    var ei;
-    try {
-      ei = JSON.parse(jsonStr);
-    } catch (parseErr) {
-      var apercu = jsonStr.replace(/\uFFFD/g, '?').slice(0, 80);
-      throw new Error('Reponse IA illisible (' + parseErr.message + '). Debut recu : "' + apercu + '"');
-    }
-
-    if (!ei.nom) {
-      showToast('Aucune entreprise identifiee dans ce mail', 'error');
-      return;
-    }
-    addEntreprise('principale');
-    var cards = document.querySelectorAll('#entreprise-list .entreprise-card');
-    var lastCard = cards[cards.length - 1];
-    if (lastCard) {
-      if (lastCard.querySelector('.ent-nom')) lastCard.querySelector('.ent-nom').value = ei.nom || '';
-      if (lastCard.querySelector('.ent-lot')) lastCard.querySelector('.ent-lot').value = ei.lot || '';
-      if (lastCard.querySelector('.ent-adresse')) lastCard.querySelector('.ent-adresse').value = ei.adresse || '';
-      if (lastCard.querySelector('.ent-tel')) lastCard.querySelector('.ent-tel').value = ei.tel || '';
-      if (lastCard.querySelector('.ent-contact')) lastCard.querySelector('.ent-contact').value = ei.contact || '';
-      if (lastCard.querySelector('.ent-effectif')) lastCard.querySelector('.ent-effectif').value = ei.effectif || '';
-      if (lastCard.querySelector('.ent-mail') && ei.mail) lastCard.querySelector('.ent-mail').value = ei.mail;
-      if (lastCard.querySelector('.ent-siret') && ei.siret) lastCard.querySelector('.ent-siret').value = ei.siret;
-      if (lastCard.querySelector('.ent-compagnon') && ei.compagnon) lastCard.querySelector('.ent-compagnon').value = ei.compagnon;
-    }
-    saveAffaire();
-    showToast('Entreprise "' + ei.nom + '" importee et affaire sauvegardee', 'success');
-  } catch (err) {
-    showToast('Erreur import mail : ' + err.message, 'error');
-  }
-}
-
 function handleFileSelect(e) {
   var file = e.target.files[0];
   if (file) processPGCFile(file);
@@ -8153,7 +7954,6 @@ function visAjouterObs() {
   h += '<div class="field"><label>Photos</label>';
   h += '<input type="file" id="' + id + '-photos" accept="image/*" multiple capture="environment" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px;">';
   h += '<div id="' + id + '-preview" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>';
-  h += '<button type="button" class="btn btn-outline btn-sm" style="margin-top:8px;width:100%;" onclick="visDecrirePhoto(\'' + id + '\', this)">\uD83E\uDD16 D\u00e9crire d\'apr\u00e8s la photo</button>';
   h += '</div>';
   h += '</div>'; // ferme obs-fields
   h += '<button class="vis-obs-val btn btn-success" style="width:100%;padding:12px;margin-top:10px;font-size:14px;">&#10003; Valider cette observation</button>';
@@ -8204,8 +8004,6 @@ function visAjouterObs() {
   div.querySelector('input[type=file]').addEventListener('change', function() {
     var preview = document.getElementById(id + '-preview');
     preview.innerHTML = '';
-    // AUTO : photo ajoutee -> remplir la Description (si vide) via l'IA vision
-    setTimeout(function () { var _d = document.getElementById(id + '-desc'); var _p = document.getElementById(id + '-photos'); if (_p && _p.files && _p.files.length && _d && !_d.value.trim() && typeof visDecrirePhoto === 'function') visDecrirePhoto(id, null); }, 60);
     Array.from(this.files).forEach(function(file) {
       var reader = new FileReader();
       reader.onload = function(ev) {
@@ -8240,28 +8038,6 @@ function compresserImage(file, max, q) {
     r.onerror = function () { reject(new Error('lecture image')); };
     r.readAsDataURL(file);
   });
-}
-
-async function visDecrirePhoto(id, btn) {
-  var input = document.getElementById(id + '-photos');
-  var desc = document.getElementById(id + '-desc');
-  if (!input || !input.files || !input.files.length) { showToast('Ajoute d\'abord une photo a cette observation.', 'error'); return; }
-  var old = btn ? btn.textContent : ''; if (btn) { btn.textContent = '⏳ Analyse...'; btn.disabled = true; }
-  try {
-    var dataUrl = await compresserImage(input.files[0], 1280, 0.72);
-    var prompt = "REPONDS IMPERATIVEMENT EN FRANCAIS, jamais dans une autre langue. Tu es un coordonnateur SPS en visite de chantier. Decris cette photo comme une OBSERVATION pour le CR de visite : nature du constat/probleme, risque concerne, localisation si visible. 2 a 4 phrases, factuel, vocabulaire SPS, sans politesse. Si la photo ne montre pas un chantier, dis-le en une phrase.";
-    var r = await fetch('/api/claude', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'qwen/qwen3.6-27b', reasoning_effort: 'none', max_tokens: 600, messages: [{ role: 'user', content: [{ type: 'image_url', image_url: { url: dataUrl } }, { type: 'text', text: prompt }] }] })
-    });
-    var j = await r.json();
-    if (!r.ok) throw new Error(j.error || ('Serveur ' + r.status));
-    var txt = ((j.content && j.content[0] && j.content[0].text) || '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-    if (!txt) throw new Error('Reponse vide');
-    desc.value = desc.value && desc.value.trim() ? (desc.value.trim() + '\n' + txt) : txt;
-    showToast('Description remplie par l\'IA.', 'success');
-  } catch (e) { showToast('IA : ' + e.message, 'error'); }
-  finally { if (btn) { btn.textContent = old; btn.disabled = false; } }
 }
 
 function visObsEntSelect(id, val) {
