@@ -199,6 +199,11 @@
     try {
       var b = await synchroniser();
       renderAffaireList(); if (typeof renderDashboard === 'function') { try { renderDashboard(); } catch (e) {} }
+      // L'ecran Terrain garde l'affaire choisie dans une reference qui devient
+      // perimee quand la synchro remplace tout le tableau affaires (voir
+      // terrainRafraichir dans index.html) : sans ca, un sous-traitant ajoute
+      // sur l'autre appareil n'apparaissait jamais dans la liste Terrain.
+      if (typeof terrainRafraichir === 'function') { try { terrainRafraichir(); } catch (e) {} }
       etat('');
       showToast('Synchronisé : ' + b.recues + ' affaire(s) reçue(s) ou mise(s) à jour, ' + b.envoyees + ' envoyée(s) ; fichiers : '
         + b.fichiersEnvoyes + ' envoyé(s), ' + b.fichiersRecus + ' reçu(s)' + (b.nettoyes ? ', ' + b.nettoyes + ' retiré(s) du Drive' : ''), 'success');

@@ -651,7 +651,7 @@
   </div>
   <div class="header-actions">
     <button class="btn btn-outline btn-sm" onclick="showPage('dashboard')" style="background:#e8eef7;color:#1F4E79;border-color:#1F4E79;">&#128202; Tableau de bord</button>
-    <button class="btn btn-outline btn-sm" onclick="showPage('terrain');setTimeout(populateTerrainSelect,100);" style="background:#e8f5e9;color:#2e7d52;border-color:#2e7d52;">&#128241; Terrain</button>
+    <button class="btn btn-outline btn-sm" onclick="showPage('terrain');setTimeout(function(){ populateTerrainSelect(); terrainRafraichir(); },100);" style="background:#e8f5e9;color:#2e7d52;border-color:#2e7d52;">&#128241; Terrain</button>
     <button class="btn btn-sm" id="btn-sync-drive" style="background:#16a34a;color:#fff;border:none;" onclick="synchroniserDrive()" title="Echanger les affaires et fichiers avec l'autre appareil par le Drive CSPS17">&#8644; Synchroniser</button><span id="sync-drive-etat" style="font-size:12px;color:#555;"></span>
     <button class="btn btn-outline btn-sm" onclick="mettreAJourAppli()" title="Charger la derniere version de l'application">&#8635; Mettre à jour</button>
     <button class="btn btn-outline btn-sm" onclick="ouvrirSauvegardes()" title="Exporter / importer une sauvegarde de toutes vos affaires">&#128190; Sauvegardes</button>
@@ -1457,6 +1457,7 @@ function saveAffaire() {
   localStorage.setItem('csps17_affaires', JSON.stringify(affaires));
   pousserVersServeur();
   renderAffaireList();
+  terrainRafraichir();
   showToast('Affaire sauvegardee', 'success');
   // Si un PGC vient d'etre importe par IA, attacher le fichier au dossier
   if (window._pgcImportFile) {
@@ -5007,6 +5008,20 @@ function populateTerrainSelect() {
     opt.textContent = (a.num || '') + ' — ' + ((a.chantier && a.chantier.nom) ? a.chantier.nom : 'Sans nom');
     sel.appendChild(opt);
   });
+}
+
+// L'ecran Terrain garde l'affaire choisie dans terrainAffaire, qui n'est
+// qu'une COPIE (reference) prise au moment du choix dans la liste. Si entre
+// temps l'affaire est resauvegardee (ex: ajout d'un sous-traitant dans
+// Intervenants) ou mise a jour par la synchronisation Drive (qui remplace
+// tout le tableau affaires), cette reference devient perimee : le sous-
+// traitant n'apparait jamais dans la liste "Entreprise concernee" ni dans les
+// IC, meme apres enregistrement. terrainRafraichir() recharge la version a
+// jour de la MEME affaire depuis le tableau affaires courant. A appeler a
+// chaque fois qu'on revient sur l'ecran Terrain, apres un enregistrement, et
+// apres une synchronisation.
+function terrainRafraichir() {
+  if (terrainAffaire && terrainAffaire.id) terrainSelectAffaire(terrainAffaire.id);
 }
 
 function terrainSelectAffaire(id) {
