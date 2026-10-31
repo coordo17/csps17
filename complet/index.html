@@ -3385,13 +3385,15 @@ function injecterFIC(zip, ficData) {
   // ou son libelle/pattern differe) et on ajoute le bon appel pour Cat.3.
   xmlStr = remplirCelluleInterne(xmlStr, "Date d'intervention prévue", formatDateFR(d.dateFin || ''));
 
-  // Tableau 4 - Categorie
+  // Tableau 4 - Categorie - case a cocher APRES le libelle (31/10, demande
+  // d'Alain : "la logique serait Cat.1 validation Cat.2 validation Cat.3
+  // validation, pas la validation avant la categorie, c'est trompeur")
   if (d.categorie) {
-    var catOld = '☐ Cat. 1 ☐ Cat. 2 ☐ Cat. 3';
+    var catOld = 'Cat. 1 ☐  Cat. 2 ☐  Cat. 3 ☐';
     var cat = parseInt(d.categorie);
-    var catNew = (cat===1?'☑':'☐') + ' Cat. 1 '
-               + (cat===2?'☑':'☐') + ' Cat. 2 '
-               + (cat===3?'☑':'☐') + ' Cat. 3';
+    var catNew = 'Cat. 1 ' + (cat===1?'☑':'☐') + '  '
+               + 'Cat. 2 ' + (cat===2?'☑':'☐') + '  '
+               + 'Cat. 3 ' + (cat===3?'☑':'☐');
     xmlStr = xmlStr.split(catOld).join(catNew);
   }
 
@@ -4096,8 +4098,9 @@ function nettoyerDocx(zip, data) {
 
 function cocherCategorie(xmlStr, cat) {
   if (!cat) return xmlStr;
-  var old = '☐ Cat. 1 ☐ Cat. 2 ☐ Cat. 3';
-  var nw = (cat===1?'☑':'☐') + ' Cat. 1 ' + (cat===2?'☑':'☐') + ' Cat. 2 ' + (cat===3?'☑':'☐') + ' Cat. 3';
+  // Case a cocher APRES le libelle (31/10, demande d'Alain), cf. bloc ci-dessus.
+  var old = 'Cat. 1 ☐  Cat. 2 ☐  Cat. 3 ☐';
+  var nw = 'Cat. 1 ' + (cat===1?'☑':'☐') + '  ' + 'Cat. 2 ' + (cat===2?'☑':'☐') + '  ' + 'Cat. 3 ' + (cat===3?'☑':'☐');
   return xmlStr.split(old).join(nw);
 }
 

@@ -20,6 +20,11 @@ def set_cell(tc, s):
 src, out = sys.argv[1], sys.argv[2]
 d=Doc(src+'/Fiche_IC_Vierge_CSPS17_v16.docx')
 d.rep('Raison sociale :', 'Raison sociale : {{moa_nom}}')
+# Case a cocher APRES le libelle (31/10, demande d'Alain : "la logique serait
+# Cat.1 validation Cat.2 validation Cat.3 validation, pas la validation avant
+# la categorie, c'est trompeur") -- coherent avec cocherCategorie()/le bloc
+# inline de complet/index.html, mis a jour dans le meme sens.
+d.rep('☐ Cat. 1 ☐ Cat. 2 ☐ Cat. 3', 'Cat. 1 ☐  Cat. 2 ☐  Cat. 3 ☐')
 d.rep('Représentant :', 'Représentant : {{moa_contact}}')
 d.rep('Tél :', 'Tél : {{moa_tel}}')
 d.rep('n° ____ n° ____', 'n° ____')
