@@ -84,6 +84,73 @@ for idx in (4, 5):
     tcsMeteo = trsMeteo[idx].findall(q('tc'))
     for k in (4, 5, 6):
         set_cell(tcsMeteo[k], '')
+# Separation §13/§14 (31/10, demande d'Alain : "long difficile a lire ...
+# je pense qu'il faut separer 13. OBSERVATIONS DU CSPS et 14. REUNIONS /
+# COORDINATION, pour aerer le 13") : les deux sections partageaient un
+# tableau cote a cote (demi-largeur chacune), rendant §13 (observations,
+# souvent du texte libre) trop etroit et dense. On les separe en deux
+# blocs pleine largeur independants, memes couleurs/contenu.
+NSDECL = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+BORD13 = '<w:tblBorders>' + ''.join('<w:%s w:val="single" w:sz="4" w:space="0" w:color="auto"/>' % s for s in ['top','left','bottom','right','insideH','insideV']) + '</w:tblBorders>'
+CELLMAR13 = '<w:tblCellMar><w:left w:w="10" w:type="dxa"/><w:right w:w="10" w:type="dxa"/></w:tblCellMar>'
+LOOK13 = '<w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="1" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>'
+SPACER13 = '<w:p %s/>' % NSDECL
+
+def _hdr13(titre):
+    return (('<w:tbl %s><w:tblPr><w:tblW w:w="9640" w:type="dxa"/>%s%s%s</w:tblPr>'
+             '<w:tblGrid><w:gridCol w:w="9640"/></w:tblGrid>'
+             '<w:tr><w:tc><w:tcPr><w:tcW w:w="9640" w:type="dxa"/>'
+             '<w:tcBorders><w:top w:val="single" w:sz="8" w:space="0" w:color="1F4E79"/><w:left w:val="single" w:sz="8" w:space="0" w:color="1F4E79"/><w:bottom w:val="single" w:sz="8" w:space="0" w:color="1F4E79"/><w:right w:val="single" w:sz="8" w:space="0" w:color="1F4E79"/></w:tcBorders>'
+             '<w:shd w:val="clear" w:color="auto" w:fill="1F4E79"/>'
+             '<w:tcMar><w:top w:w="70" w:type="dxa"/><w:left w:w="150" w:type="dxa"/><w:bottom w:w="70" w:type="dxa"/><w:right w:w="150" w:type="dxa"/></w:tcMar>'
+             '<w:vAlign w:val="center"/></w:tcPr>'
+             '<w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:eastAsia="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/><w:bCs/><w:color w:val="FFFFFF"/><w:sz w:val="19"/><w:szCs w:val="19"/></w:rPr><w:t>%s</w:t></w:r></w:p>'
+             '</w:tc></w:tr></w:tbl>') % (NSDECL, BORD13, CELLMAR13, LOOK13, titre.replace('&','&amp;')))
+
+def _row13(label, fill, bold, labcol):
+    labp = '<w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:eastAsia="Arial" w:hAnsi="Arial" w:cs="Arial"/>%s<w:color w:val="%s"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t>%s</w:t></w:r></w:p>' % ('<w:b/><w:bCs/>' if bold else '', labcol, label.replace('&','&amp;'))
+    tc1 = '<w:tc><w:tcPr><w:tcW w:w="3000" w:type="dxa"/><w:tcBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/><w:left w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/><w:right w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/></w:tcBorders><w:shd w:val="clear" w:color="auto" w:fill="%s"/><w:tcMar><w:top w:w="55" w:type="dxa"/><w:left w:w="110" w:type="dxa"/><w:bottom w:w="55" w:type="dxa"/><w:right w:w="110" w:type="dxa"/></w:tcMar><w:vAlign w:val="center"/></w:tcPr>%s</w:tc>' % (fill, labp)
+    tc2 = '<w:tc><w:tcPr><w:tcW w:w="6640" w:type="dxa"/><w:tcBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/><w:left w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/><w:right w:val="single" w:sz="4" w:space="0" w:color="AAAAAA"/></w:tcBorders><w:shd w:val="clear" w:color="auto" w:fill="FFFFFF"/><w:tcMar><w:top w:w="55" w:type="dxa"/><w:left w:w="110" w:type="dxa"/><w:bottom w:w="55" w:type="dxa"/><w:right w:w="110" w:type="dxa"/></w:tcMar></w:tcPr><w:p/></w:tc>'
+    return '<w:tr>' + tc1 + tc2 + '</w:tr>'
+
+def _data13(rows):
+    x = '<w:tbl %s><w:tblPr><w:tblW w:w="9640" w:type="dxa"/>%s%s%s</w:tblPr><w:tblGrid><w:gridCol w:w="3000"/><w:gridCol w:w="6640"/></w:tblGrid>' % (NSDECL, BORD13, CELLMAR13, LOOK13)
+    for label, fill, bold, labcol in rows:
+        x += _row13(label, fill, bold, labcol)
+    return x + '</w:tbl>'
+
+body13 = d.root.find(q('body'))
+children13 = list(body13)
+i_hdr = i_spacer = i_data = None
+for i, el in enumerate(children13):
+    if el.tag != q('tbl'): continue
+    tx = txt(el)
+    if tx == '13. OBSERVATIONS DU CSPS14. RÉUNIONS / COORDINATION':
+        i_hdr = i
+    if 'Observation (sans urgence)' in tx and 'Fréquence visites CSPS' in tx:
+        i_data = i
+i_spacer = i_hdr + 1
+assert i_hdr is not None and i_data == i_spacer + 1 and children13[i_spacer].tag == q('p')
+
+frags13 = [
+    _hdr13('13. OBSERVATIONS DU CSPS'), SPACER13,
+    _data13([
+        ('Observation (sans urgence)', 'E2EFDA', False, '000000'),
+        ('Notification (avant reprise)', 'FFF0CC', False, '000000'),
+        ('DANGER GRAVE IMMINENT (arrêt immédiat)', 'FFD5D5', True, 'CC0000'),
+        ('Délai levée / Suite donnée', 'F2F2F2', True, '000000'),
+    ]), SPACER13,
+    _hdr13('14. RÉUNIONS / COORDINATION'), SPACER13,
+    _data13([
+        ('Fréquence visites CSPS', 'F2F2F2', True, '000000'),
+        ('Réunions coordination', 'F2F2F2', True, '000000'),
+        ("Points d'arrêt / inspections", 'F2F2F2', True, '000000'),
+    ]),
+]
+body13.remove(children13[i_data]); body13.remove(children13[i_spacer]); body13.remove(children13[i_hdr])
+for k, frag in enumerate(frags13):
+    body13.insert(i_hdr + k, etree.fromstring(frag))
+
 d.save(out+'/Fiche_IC_CSPS17_v17.docx')
 
 d=Doc(src+'/Fiche_IC_Cat3_CSPS17_v5.docx')
