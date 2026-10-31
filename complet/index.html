@@ -957,6 +957,7 @@
           <button type="button" class="btn btn-outline btn-sm" onclick="ouvrirFaitsInspection()">Inspection commune préalable</button>
           <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsContraintes()">Réseaux / contraintes du site</button>
           <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsPlanning()">Planning / co-activités</button>
+          <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsCR()">CR de réunion</button>
           <button type="button" class="btn btn-primary btn-sm" style="margin-left:8px;" onclick="relireChantier()">&#128269; Relire le chantier</button>
         </div>
         <div id="pieces-section" style="display:none;margin-bottom:20px;">
@@ -2293,7 +2294,7 @@ var PIECES_DOSSIER = [
   { ref: 'CONTRAINTES', title: 'Contraintes du site', icon: '&#9888;', note: 'Fichier OU texte libre — servitudes, reseaux, voisinage, exploitation, acces... — analyse IA (element du PGC)' },
   { ref: 'PLANS', title: 'Plans (masse, PIC, coupes)', icon: '&#128506;', note: 'Deposez les plans (PDF/DOCX) — extraction du texte + analyse IA (element du PGC)' },
   { ref: 'PPSPS', title: 'PPSPS entreprises (harmonisation)', icon: '&#128203;', note: 'Deposez le PPSPS de chaque entreprise — analyse d\'harmonisation au depot : coherence PGC, coactivite, risques importes/exportes (R.4532-48)' },
-  { ref: 'CRMOA', title: 'CR de reunion / mise a jour MOA', icon: '&#128221;', note: 'Deposez le compte rendu de reunion (MOA) — l\'IA extrait les decisions et nouvelles mesures ; l\'harmonisation des PPSPS en tient compte' },
+  { ref: 'CRMOA', title: 'CR de reunion / mise a jour MOA', icon: '&#128221;', note: 'Deposez le compte rendu de reunion (MOA ou coordination) — nouvelles entreprises et decisions a saisir juste apres (saisie manuelle)' },
 ];
 
 // Type de document d'une entree RJC : champ docRef (nouvelles entrees) ou
@@ -2354,12 +2355,18 @@ function relireChantier() {
   if (plan && !faits.coactivites.length) manques.push({ label: 'Planning / co-activit\u00e9s', fichier: plan.fichierNom || plan.objet, fn: ouvrirFaitsPlanning });
   var icr = dernierDoc('ICR');
   if (icr && !faits.inspectionPrealable.source) manques.push({ label: 'Inspection commune pr\u00e9alable', fichier: icr.fichierNom || icr.objet, fn: ouvrirFaitsInspection });
+  var cr = dernierDoc('CRMOA');
+  if (cr) {
+    var crFichier = cr.fichierNom || cr.objet;
+    var crDejaSaisi = (faits.reunions || []).some(function (r) { return r.source && crFichier && r.source.indexOf(crFichier) === 0; });
+    if (!crDejaSaisi) manques.push({ label: 'CR de r\u00e9union', fichier: crFichier, fn: ouvrirFaitsCR });
+  }
 
   window._relireManques = manques;
   var html;
   if (!manques.length) {
-    html = '<p>Rien \u00e0 signaler : les documents d\u00e9pos\u00e9s dont on peut v\u00e9rifier la fiche de faits (amiante, r\u00e9seaux/contraintes, planning, inspection pr\u00e9alable) sont tous renseign\u00e9s.</p>'
-      + '<p style="font-size:12px;color:var(--text-light);margin-top:8px;">Cette relecture ne lit pas le contenu des documents (pas d\u2019IA) : elle compare juste ce qui est d\u00e9pos\u00e9 \u00e0 ce qui a \u00e9t\u00e9 saisi, pour ces 4 types.</p>';
+    html = '<p>Rien \u00e0 signaler : les documents d\u00e9pos\u00e9s dont on peut v\u00e9rifier la fiche de faits (amiante, r\u00e9seaux/contraintes, planning, inspection pr\u00e9alable, CR de r\u00e9union) sont tous renseign\u00e9s.</p>'
+      + '<p style="font-size:12px;color:var(--text-light);margin-top:8px;">Cette relecture ne lit pas le contenu des documents (pas d\u2019IA) : elle compare juste ce qui est d\u00e9pos\u00e9 \u00e0 ce qui a \u00e9t\u00e9 saisi, pour ces 5 types.</p>';
   } else {
     html = '<p style="margin-bottom:10px;font-size:13px;color:var(--text-light);">Documents d\u00e9pos\u00e9s sans fiche de faits saisie :</p>'
       + manques.map(function (m, i) {
@@ -2523,6 +2530,56 @@ function enregistrerFaitsPlanning(affaire, fichierNom) {
   showToast('Planning / co-activites enregistres', 'success');
 }
 
+// ============================================================================
+// Faits CR de reunion (31/10) : meme logique, pour les comptes rendus de
+// reunion de chantier/MOA. Contrairement aux autres fiches (un seul etat
+// courant), chaque CR est un evenement date -- on accumule dans
+// affaire.faits.reunions au lieu d'ecraser. Alimente les observations du
+// CSPS (§11/§12) et, pour les nouvelles entreprises/corps d'etat, le
+// planning (affaire.faits.coactivites), deja lu par le PGC (phasage /
+// co-activite).
+// ============================================================================
+function ouvrirFaitsCR(fichierNom) {
+  var affaire = currentAffaireObj();
+  if (!affaire) { showToast('Ouvrez une affaire avant de saisir ces faits', 'error'); return; }
+  var today = new Date().toISOString().split('T')[0];
+  var html = '<p style="margin-bottom:10px;font-size:13px;color:var(--text-light);">'
+    + (fichierNom ? 'Document depose : <strong>' + icEscAttr(fichierNom) + '</strong>. ' : '')
+    + 'Un CR par saisie (vous pouvez en saisir plusieurs au fil du chantier). Alimente les observations du CSPS et le planning/co-activites du PGC. Laissez vide si non concerne.</p>'
+    + '<div class="field" style="margin-bottom:10px;"><label>Date de la reunion</label>'
+    + '<input type="text" id="faits-cr-date" value="' + icEscAttr(today.split('-').reverse().join('/')) + '" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;" placeholder="JJ/MM/AAAA"></div>'
+    + '<div class="field" style="margin-bottom:10px;"><label>Nouvelles entreprises / corps d\'etat (une par ligne)</label>'
+    + '<textarea id="faits-cr-ent" rows="3" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Lot plomberie — intervient a partir de la semaine 15"></textarea></div>'
+    + '<div class="field" style="margin-bottom:10px;"><label>Decisions / nouvelles mesures prises</label>'
+    + '<textarea id="faits-cr-dec" rows="3" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Protection collective renforcee en zone B, acces chantier modifie..."></textarea></div>';
+  openDocModal('CR de réunion', html, 'Enregistrer', function () {
+    enregistrerFaitsCR(affaire, fichierNom);
+  });
+}
+function enregistrerFaitsCR(affaire, fichierNom) {
+  var f = affaireFaits(affaire);
+  f.reunions = f.reunions || [];
+  var src = (fichierNom ? fichierNom + ' — ' : '') + 'saisi le ' + new Date().toLocaleDateString('fr-FR');
+  var dateReunion = document.getElementById('faits-cr-date').value.trim();
+  var entreprisesTxt = document.getElementById('faits-cr-ent').value.trim();
+  var decisionsTxt = document.getElementById('faits-cr-dec').value.trim();
+  f.reunions.push({
+    date: dateReunion,
+    nouvelles_entreprises: entreprisesTxt,
+    decisions: decisionsTxt,
+    nouvelles_mesures: '',
+    source: src
+  });
+  // Les nouvelles entreprises/corps d'etat rejoignent aussi le planning
+  // (co-activites), deja lu par le PGC (phasage / co-activite).
+  var lignes = entreprisesTxt.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+  f.coactivites = (f.coactivites || []).concat(lignes.map(function (l) {
+    return { entreprises: '', periode: dateReunion, description: l, source: src };
+  }));
+  persistAffaires();
+  showToast('CR de reunion enregistre', 'success');
+}
+
 // Doublon (31/10) : meme type de piece + nom de fichier tres proche deja au
 // dossier. Comparaison sur le nom normalise uniquement, aucune lecture du
 // contenu (pas d'IA).
@@ -2589,6 +2646,7 @@ async function deposerPieceDossier(affaire, file, type) {
     else if (type === 'CONTRAINTES') ouvrirFaitsContraintes(file.name);
     else if (type === 'PLAN') ouvrirFaitsPlanning(file.name);
     else if (type === 'ICR') ouvrirFaitsInspection(file.name);
+    else if (type === 'CRMOA') ouvrirFaitsCR(file.name);
   } catch (err) {
     showToast('Erreur depot : ' + err.message, 'error');
   }
@@ -3005,7 +3063,8 @@ function faitsVierges() {
     reseaux: { dt_recue: false, dict_envoyee: false, dict_recue: false, date: '', observation: '', source: '' },
     inspectionPrealable: { entreprise: '', article: '', delai_ppsps_jours: '', source: '' },
     contraintes: { synthese: '', source: '' },
-    coactivites: []
+    coactivites: [],
+    reunions: []
   };
 }
 function faitsMigrer(affaire) {
@@ -3040,6 +3099,15 @@ function faitsMigrer(affaire) {
     }
     if (a.type_rapport === 'planning' && a.coactivites && a.coactivites.length && !f.coactivites.length) {
       f.coactivites = a.coactivites.map(function (c) { return { entreprises: c.corps_etat || '', periode: c.periode || '', description: c.risque || '', source: 'migration' }; });
+    }
+    if (a.type_rapport === 'cr_reunion') {
+      f.reunions.push({
+        date: a.date_reunion || ra.date || '',
+        nouvelles_entreprises: '',
+        decisions: (a.decisions || []).concat(a.impacts_coordination || []).join(' ; '),
+        nouvelles_mesures: (a.nouvelles_mesures || []).join(' ; '),
+        source: 'migration (' + (ra.fichier || 'ancienne analyse') + ')'
+      });
     }
   });
   affaire.faits = f;
@@ -7178,6 +7246,12 @@ function genFormulaireFIC() {
     obsAuto.push('Plomb detecte' + (faitsTerrain.plomb.localisation ? ' : ' + faitsTerrain.plomb.localisation : '') + '.');
   }
   if (faitsTerrain.contraintes.synthese) obsAuto.push('Contraintes du site : ' + faitsTerrain.contraintes.synthese);
+  if (faitsTerrain.reunions && faitsTerrain.reunions.length) {
+    var derniereReunion = faitsTerrain.reunions[faitsTerrain.reunions.length - 1];
+    if (derniereReunion.decisions || derniereReunion.nouvelles_entreprises) {
+      obsAuto.push('CR de reunion' + (derniereReunion.date ? ' du ' + derniereReunion.date : '') + ' : ' + [derniereReunion.decisions, derniereReunion.nouvelles_entreprises].filter(Boolean).join(' — ') + '.');
+    }
+  }
   html2 += sectionHeader('11', 'Observations du CSPS', '&#128221;');
   html2 += fieldRow('Observations / prescriptions', 'fic-obs-csps', 'textarea', 'Observations, prescriptions...', obsAuto.join('\n'));
   html2 += twoCol(
