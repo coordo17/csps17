@@ -3317,9 +3317,16 @@ function injecterFIC(zip, ficData) {
         pEnd = pTagEnd + 1;
       } else return xml;
     }
+    // Support multi-lignes (31/10) : chaque '\n' de `valeur` devient un
+    // <w:br/> au lieu d'etre aplati en espace par Word (ex : §12
+    // Observations, une ligne par document analyse au lieu d'un seul pave).
+    var lignesCell = String(valeur).split('\n');
+    var runsCell = lignesCell.map(function (l, k) {
+      return (k ? '<w:br/>' : '') + '<w:t xml:space="preserve">' + escXml(l) + '</w:t>';
+    }).join('');
     var newP = '<w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'
       + '<w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>'
-      + '<w:t xml:space="preserve">' + escXml(valeur) + '</w:t></w:r></w:p>';
+      + runsCell + '</w:r></w:p>';
     return xml.slice(0, pStart) + newP + xml.slice(pEnd);
   }
 
@@ -6877,7 +6884,7 @@ function genFormulaireFIC() {
     if (ra.analyse && ra.analyse.points_vigilance_ic) obsAuto.push(ra.analyse.points_vigilance_ic);
   });
   html2 += sectionHeader('11', 'Observations du CSPS', '&#128221;');
-  html2 += fieldRow('Observations / prescriptions', 'fic-obs-csps', 'textarea', 'Observations, prescriptions...', obsAuto.join(' '));
+  html2 += fieldRow('Observations / prescriptions', 'fic-obs-csps', 'textarea', 'Observations, prescriptions...', obsAuto.join('\n'));
   html2 += twoCol(
     fieldRow('Frequence visites CSPS', 'fic-obs-freq', 'text', 'Ex: Mensuelle', ''),
     fieldRow('Reunions coordination', 'fic-obs-reunion', 'text', 'Ex: Bimensuelle', '')
