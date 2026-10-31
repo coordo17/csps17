@@ -806,7 +806,7 @@
           <div class="form-card-header">&#9888; Risques particuliers</div>
           <div class="form-card-body">
             <div class="form-row">
-              <div class="field"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;"><input type="checkbox" id="rp-amiante"> Presence amiante (Sous-section 3 ou 4)</label></div>
+              <div class="field"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;"><input type="checkbox" id="rp-amiante"> Presence amiante (Sous-section 3 ou 4)</label> <button type="button" class="btn btn-outline btn-sm" style="padding:2px 8px;font-size:11px;margin-top:4px;" onclick="ouvrirFaitsAmiante()">Details (RAAT)</button></div>
               <div class="field"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;"><input type="checkbox" id="rp-plomb"> Presence plomb (CREP)</label></div>
               <div class="field"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;"><input type="checkbox" id="rp-demolition"> Travaux de demolition</label></div>
               <div class="field"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;"><input type="checkbox" id="rp-terrassement"> Terrassement / fouilles</label></div>
@@ -2322,6 +2322,53 @@ async function handlePieceUpload(e, type) {
   renderDocsGrid();
 }
 
+// ============================================================================
+// Faits amiante (31/10) : saisie manuelle au depot d'un DIAG, ou a la
+// demande (bouton "Details (RAAT)" a cote de la case Presence amiante).
+// Remplace l'ancienne extraction IA du RAAT -- memes champs, saisis par
+// Alain au lieu d'etre devines. Ecrit dans affaire.faits.amiante, qui
+// alimente deja le PGC et la fiche IC (§12 observations).
+// ============================================================================
+function ouvrirFaitsAmiante(fichierNom) {
+  var affaire = currentAffaireObj();
+  if (!affaire) { showToast('Ouvrez une affaire avant de saisir ces faits', 'error'); return; }
+  var f = affaireFaits(affaire).amiante;
+  var html = '<p style="margin-bottom:10px;font-size:13px;color:var(--text-light);">'
+    + (fichierNom ? 'Document depose : <strong>' + icEscAttr(fichierNom) + '</strong>. ' : '')
+    + 'Ces faits alimentent automatiquement le PGC, la grille de la fiche IC (§7/§8) et les observations du CSPS. Laissez vide si non concerne.</p>'
+    + '<div class="field" style="margin-bottom:10px;"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:14px;">'
+    + '<input type="checkbox" id="faits-am-presence"' + (f.presence ? ' checked' : '') + '> Amiante detectee</label></div>'
+    + '<div class="field" style="margin-bottom:10px;"><label>Localisation</label>'
+    + '<input type="text" id="faits-am-loc" value="' + icEscAttr(f.localisation) + '" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;" placeholder="Ex: sous-section 3, faux-plafonds"></div>'
+    + '<div class="form-row"><div class="field"><label>Date du RAAT</label>'
+    + '<input type="text" id="faits-am-date" value="' + icEscAttr(f.raat_date) + '" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;" placeholder="JJ/MM/AAAA"></div>'
+    + '<div class="field"><label>Bureau / operateur</label>'
+    + '<input type="text" id="faits-am-bureau" value="' + icEscAttr(f.bureau) + '" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;"></div></div>'
+    + '<div class="field" style="margin-top:10px;"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:14px;">'
+    + '<input type="checkbox" id="faits-am-ss4"' + (f.ss4_obligatoire ? ' checked' : '') + '> Entreprise certifiee SS3/SS4 exigee</label></div>';
+  openDocModal('Faits amiante' + (f.source ? ' — source : ' + icEscAttr(f.source) : ''), html, 'Enregistrer', function () {
+    enregistrerFaitsAmiante(affaire, fichierNom);
+  });
+}
+function enregistrerFaitsAmiante(affaire, fichierNom) {
+  var ff = affaireFaits(affaire);
+  ff.amiante = {
+    presence: document.getElementById('faits-am-presence').checked,
+    localisation: document.getElementById('faits-am-loc').value.trim(),
+    raat_date: document.getElementById('faits-am-date').value.trim(),
+    bureau: document.getElementById('faits-am-bureau').value.trim(),
+    ss4_obligatoire: document.getElementById('faits-am-ss4').checked,
+    source: (fichierNom ? fichierNom + ' — ' : '') + 'saisi le ' + new Date().toLocaleDateString('fr-FR')
+  };
+  affaire.risques = affaire.risques || {};
+  affaire.risques.amiante = ff.amiante.presence;
+  if (currentAffaireId === affaire.id) {
+    var cb = document.getElementById('rp-amiante'); if (cb) cb.checked = ff.amiante.presence;
+  }
+  persistAffaires();
+  showToast('Faits amiante enregistres', 'success');
+}
+
 async function deposerPieceDossier(affaire, file, type) {
   try {
     showToast('Depot de ' + file.name + '...');
@@ -2351,10 +2398,9 @@ async function deposerPieceDossier(affaire, file, type) {
       persistAffaires();
     }
     showToast(file.name + ' ajoute au dossier', 'success');
-    // Analyse IA : rapports/diagnostics (avec injection dans l'affaire) ET
-    // PGC (simple synthese aide-memoire, sans injection — le PGC fait foi).
-    // Pendant toute l'analyse (extraction/OCR compris), le badge de la carte
-    // clignote pour montrer que ca travaille et que ca n'a pas plante.
+    // Saisie manuelle des faits (ex-extraction IA, retiree le 16/09) : pour
+    // un diagnostic, on propose tout de suite la petite fiche amiante.
+    if (type === 'DIAG') ouvrirFaitsAmiante(file.name);
   } catch (err) {
     showToast('Erreur depot : ' + err.message, 'error');
   }
