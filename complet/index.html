@@ -6688,6 +6688,15 @@ function icInitFormulaire() {
 // Pre-remplit la grille IC §7 (CMR) et §8 (permis) avec ce qu'on sait deja
 // (affaire.faits) -- vous restez libres de corriger a l'ecran avant de
 // generer : ceci ne fait que proposer une valeur de depart.
+function faitsSourceFichier(source) {
+  // Extrait le nom du fichier depose a partir du champ "source" d'une fiche
+  // de faits (format "<nom fichier> — saisi le JJ/MM/AAAA"). Vide si saisi
+  // sans fichier (bouton direct) ou issu d'une migration sans nom connu.
+  var s = String(source || '');
+  var i = s.indexOf(' — saisi le ');
+  if (i >= 0) return s.slice(0, i);
+  return '';
+}
 function icPreRemplirGrilleDepuisFaits() {
   if (!terrainAffaire) return;
   var f = affaireFaits(terrainAffaire);
@@ -6699,8 +6708,10 @@ function icPreRemplirGrilleDepuisFaits() {
     setCase('icg-amiante', f.amiante.presence);
     setTexte('icg-amiante-t', [f.amiante.localisation, f.amiante.raat_date ? 'RAAT du ' + f.amiante.raat_date : '', f.amiante.bureau, f.amiante.ss4_obligatoire ? 'SS3/SS4 exigee' : ''].filter(Boolean).join(' — '));
     // La section 8 "Rapport SS4 amiante" (recu/pas recu) : si on a des faits
-    // amiante, c'est qu'un document a ete depose -- propose "Fourni".
+    // amiante, c'est qu'un document a ete depose -- propose "Fourni" et
+    // reprend son nom de fichier (au lieu d'une case vide).
     setSelect('icg-ss4-s', 'Fourni');
+    setTexte('icg-ss4-t', faitsSourceFichier(f.amiante.source));
   }
   if (f.plomb.presence) {
     setCase('icg-plomb', true);
@@ -6712,7 +6723,7 @@ function icPreRemplirGrilleDepuisFaits() {
       setCase('icg-' + k + '-2', f.reseaux.dict_envoyee);
       setTexte('icg-' + k + '-t', f.reseaux.observation || '');
     });
-    if (f.reseaux.dict_recue) setSelect('icg-dictc-s', 'Fourni');
+    if (f.reseaux.dict_recue) { setSelect('icg-dictc-s', 'Fourni'); setTexte('icg-dictc-t', faitsSourceFichier(f.reseaux.source)); }
   }
 }
 
