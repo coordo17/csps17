@@ -56,21 +56,22 @@ set_cell(trs[0].findall(q('tc'))[0], "7D — Risques propres à l'entreprise (tr
 for tc,s in zip(trs[1].findall(q('tc')), ['Risque propre (origine)', "Mesure annoncée par l'entreprise", 'À reporter au PPSPS']): set_cell(tc,s)
 t7c.addnext(t7d)
 sp=etree.fromstring(para([run(' ', sz=8)], before=0, after=0)); t7c.addnext(sp)
-# Section 3 (ETABLISSEMENT EN ACTIVITE / EXPLOITANT, R.4532-14) - completee le
-# 31/10 (demande d'Alain : "pour la 1, complete la stp") : la colonne ne
-# portait que des champs d'identification, sans le contenu legal de R.4532-14
-# (1 degre : delimitation du chantier, zones dangereuses, voies de
-# circulation, acces sanitaires/vestiaires/restauration de l'etablissement si
-# chantier non clos/independant ; 2 degre : consignes de securite + organi-
-# sation des premiers secours de l'etablissement, transmises par le chef
-# d'etablissement). On utilise les 3 lignes jusque-la vides de la colonne
-# droite (Travaux confies / Periode-Effectif / Sous-traitants n'ont pas
-# d'equivalent cote etablissement).
+# Section 3 (ETABLISSEMENT EN ACTIVITE / EXPLOITANT, R.4532-14) - completee
+# puis ramenee au minimum legal le 31/10 (Alain, apres avoir recolle le texte
+# de l'article : "ca ne demande pas toutes les coordonnees de l'entreprise en
+# activite" -> "mets le minimum legal"). R.4532-14 n'exige PAS de recueillir
+# l'identite/les coordonnees du chef d'etablissement (deja signe en §15 "Chef
+# de l'etablissement en activite / exploitant") : seules les ACTIONS 1°/2° de
+# l'article sont une exigence. On ne garde donc que "Designation / R. sociale"
+# (identifier de quel etablissement il s'agit) + les 3 actions legales, et on
+# retire "Representant / Ref. secu.", "Tel / Mail", "Activite site / horaires"
+# qui n'etaient que des champs de confort sans base dans l'article.
 tEtab = tbl_with(d, 'Désignation / R. sociale')
 trsEtab = tEtab.findall(q('tr'))
-for idx, lab in [(4, 'Délimitation / signalisation / voies circulation'),
-                  (5, 'Accès sanitaires-vestiaires-restauration établ. (si non clos)'),
-                  (6, 'Consignes sécurité & secours établ. transmis')]:
+for idx, lab in [(1, 'Délimitation / signalisation / voies circulation'),
+                  (2, 'Accès sanitaires-vestiaires-restauration établ. (si non clos)'),
+                  (3, 'Consignes sécurité & secours établ. transmis'),
+                  (4, ''), (5, ''), (6, '')]:
     set_cell(trsEtab[idx].findall(q('tc'))[2], lab)
 
 # 11 : vigilance meteorologique - reduite le 31/10 (demande d'Alain : "pour la
