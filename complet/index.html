@@ -6417,6 +6417,29 @@ function icInitFormulaire() {
     if (sel && idx >= 0) sel.value = String(idx);
     icApresChoixEntreprise(ent);
   }
+  icPreRemplirGrilleDepuisFaits();
+}
+// Pre-remplit la grille IC §7 (CMR) et §8 (permis) avec ce qu'on sait deja
+// (affaire.faits) -- vous restez libres de corriger a l'ecran avant de
+// generer : ceci ne fait que proposer une valeur de depart.
+function icPreRemplirGrilleDepuisFaits() {
+  if (!terrainAffaire) return;
+  var f = affaireFaits(terrainAffaire);
+  function setCase(id, coche) { var el = document.getElementById(id); if (el && !el.checked) el.checked = !!coche; }
+  function setTexte(id, val) { var el = document.getElementById(id); if (el && !el.value && val) el.value = val; }
+  function setSelect(id, val) { var el = document.getElementById(id); if (el && !el.value && val) el.value = val; }
+
+  if (f.amiante.presence || f.amiante.raat_date) {
+    setCase('icg-amiante', f.amiante.presence);
+    setTexte('icg-amiante-t', [f.amiante.localisation, f.amiante.raat_date ? 'RAAT du ' + f.amiante.raat_date : '', f.amiante.bureau, f.amiante.ss4_obligatoire ? 'SS3/SS4 exigee' : ''].filter(Boolean).join(' — '));
+    // La section 8 "Rapport SS4 amiante" (recu/pas recu) : si on a des faits
+    // amiante, c'est qu'un document a ete depose -- propose "Fourni".
+    setSelect('icg-ss4-s', 'Fourni');
+  }
+  if (f.plomb.presence) {
+    setCase('icg-plomb', true);
+    setTexte('icg-plomb-t', f.plomb.localisation || '');
+  }
 }
 
 function icSet(id, v) { var el = document.getElementById(id); if (el) el.value = v || ''; }
