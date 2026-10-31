@@ -114,6 +114,25 @@ for idx, lab in [(1, 'Délimitation / signalisation / voies circulation'),
                   (4, ''), (5, ''), (6, '')]:
     set_cell(trsEtab[idx].findall(q('tc'))[2], lab)
 
+# [Tél / Mail / SIRET - 31/10, demande d'Alain] "on peux les separer en
+# trois cases distinctes ?" (apres le premier passage qui les mettait sur
+# 3 lignes dans UNE SEULE cellule). On scinde la ligne EE en 3 lignes
+# (Tel / Mail / SIRET), chacune sur le modele des lignes 4-6 deja EE-only
+# (cote Etablissement vide) ; la ligne "Tel" garde sa paire Etablissement
+# d'origine ("Acces sanitaires...") intacte.
+tEE_tel = tbl_with(d, 'Tél / Mail / SIRET')
+trsEE_tel = tEE_tel.findall(q('tr'))
+rowTel = next(tr for tr in trsEE_tel if 'Tél / Mail / SIRET' in txt(tr))
+set_cell(rowTel.findall(q('tc'))[0], 'Tél')
+rowMail = copy.deepcopy(rowTel)
+for k, val in [(0, 'Mail'), (1, ''), (2, ''), (3, '')]:
+    set_cell(rowMail.findall(q('tc'))[k], val)
+rowSiret = copy.deepcopy(rowTel)
+for k, val in [(0, 'SIRET'), (1, ''), (2, ''), (3, '')]:
+    set_cell(rowSiret.findall(q('tc'))[k], val)
+rowTel.addnext(rowMail)
+rowMail.addnext(rowSiret)
+
 # 11 : vigilance meteorologique - reduite le 31/10 (demande d'Alain : "pour la
 # 2, reduit la elle est deja dans le PGC, fait y reference") : la grille
 # canicule/intemperies complete faisait doublon avec le PGC SPS qui la

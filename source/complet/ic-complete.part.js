@@ -444,7 +444,11 @@ function icCompleterFicData(d) {
   d.pgcStatut = /transmis/i.test(pgc) ? 'transmis' : /mise (a|\u00e0) jour/i.test(pgc) ? 'maj' : 'remis';
   d.entPeriode = [getVal('fic-ent-periode'), getVal('fic-ent-effectif') ? getVal('fic-ent-effectif') + ' pers.' : ''].filter(Boolean).join(' \u2014 ');
   d.pgcDate = getVal('fic-pgc-date'); d.pgcVersion = getVal('fic-pgc-version');
-  d.entTelMailSiret = [getVal('fic-ent-tel') || ent.tel, ent.mail, ent.siret ? 'SIRET ' + ent.siret : ''].filter(Boolean).join(' | ');
+  // Cases separees Tel / Mail / SIRET (31/10, demande d'Alain : "on peux
+  // les separer en trois cases distinctes ?").
+  d.entTel = getVal('fic-ent-tel') || ent.tel || '';
+  d.entMail = ent.mail || '';
+  d.entSiret = ent.siret || '';
   d.repQualite = getVal('ic-rep-qualite'); d.repDelegation = getCheck('ic-rep-deleg');
   d.entType = ent.type || '';
   var donneur = ent.type === 'sous-traitant' ? icEntParId(ent.parent) : null;
@@ -579,7 +583,9 @@ function injecterICComplete(zip, d, isCat3) {
     icLigne(doc, tEE, 'Période / Effectif max.', [d.entPeriode || '']);
     var rep = [d.entContact, d.repQualite ? d.repQualite.toLowerCase() : '', (d.repQualite === 'Compagnon' && d.repDelegation) ? 'd\u00e9l\u00e9gation confirm\u00e9e' : ''].filter(Boolean).join(' \u2014 ');
     if (rep) icLigne(doc, tEE, 'Représentant / CDT', [rep]);
-    if (d.entTelMailSiret) icLigne(doc, tEE, 'Tél / Mail / SIRET', [d.entTelMailSiret]);
+    if (d.entTel) icLigne(doc, tEE, 'Tél', [d.entTel]);
+    if (d.entMail) icLigne(doc, tEE, 'Mail', [d.entMail]);
+    if (d.entSiret) icLigne(doc, tEE, 'SIRET', [d.entSiret]);
     var st;
     if (d.entType === 'sous-traitant') st = 'Entreprise sous-traitante de ' + (d.donneurOrdre || '(non renseign\u00e9)') + ' \u2014 donneur d\u2019ordre pr\u00e9sent \u00e0 l\u2019IC : ' + (d.donneurPresent ? 'oui' : 'non');
     else st = (d.stOui && d.stEntreprises && d.stEntreprises.length)
