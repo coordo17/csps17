@@ -6408,7 +6408,10 @@ function icCompleterFicData(d) {
   d.pgcStatut = /transmis/i.test(pgc) ? 'transmis' : /mise (a|\u00e0) jour/i.test(pgc) ? 'maj' : 'remis';
   d.entPeriode = [getVal('fic-ent-periode'), getVal('fic-ent-effectif') ? getVal('fic-ent-effectif') + ' pers.' : ''].filter(Boolean).join(' \u2014 ');
   d.pgcDate = getVal('fic-pgc-date'); d.pgcVersion = getVal('fic-pgc-version');
-  d.entTelMailSiret = [getVal('fic-ent-tel') || ent.tel, ent.mail, ent.siret ? 'SIRET ' + ent.siret : ''].filter(Boolean).join(' | ');
+  // Une case par ligne plutot qu'une seule chaine "tel | mail | siret" --
+  // plus lisible / professionnel (remarque d'Alain, 31/10). icCellText (le
+  // dernier passage a ecrire dans cette cellule) rend chaque '\n' en <w:br/>.
+  d.entTelMailSiret = [getVal('fic-ent-tel') || ent.tel, ent.mail, ent.siret ? 'SIRET ' + ent.siret : ''].filter(Boolean).join('\n');
   d.repQualite = getVal('ic-rep-qualite'); d.repDelegation = getCheck('ic-rep-deleg');
   d.entType = ent.type || '';
   var donneur = ent.type === 'sous-traitant' ? icEntParId(ent.parent) : null;
