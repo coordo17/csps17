@@ -28,7 +28,7 @@ d.rep('☐ Cat. 1 ☐ Cat. 2 ☐ Cat. 3', 'Cat. 1 ☐  Cat. 2 ☐  Cat. 3 ☐')
 d.rep('Représentant :', 'Représentant : {{moa_contact}}')
 d.rep('Tél :', 'Tél : {{moa_tel}}')
 d.rep('n° ____ n° ____', 'n° ____')
-d.rep("Les risques propres à l'entreprise figureront dans son PPSPS.", "Les risques propres à l'entreprise sont relevés en 7D et détaillés dans son PPSPS (R.4532-66).")
+d.rep("Les risques propres à l'entreprise figureront dans son PPSPS.", "Les risques propres à l'entreprise sont relevés en 6D et détaillés dans son PPSPS (R.4532-66).")
 # [Retrait PPSPS-recu de l'IC - 31/10, demande d'Alain] "hors si le PPSPS
 # se fait apres l'IC, pourquoi en parler la, c'est faux" -- le PPSPS
 # est elabore APRES l'inspection commune (elle y contribue, cf. INRS/
@@ -40,10 +40,50 @@ d.rep("Les risques propres à l'entreprise figureront dans son PPSPS.", "Les ris
 # "Formalites obligatoires avant demarrage", en engagement a venir
 # ("PPSPS simplifie (integrant les risques de cette IC)"), pas en
 # information recue au prealable -- formulation correcte, inchangee.
-t4 = tbl_with(d, 'PPSPS transmis au CSPS')
-for tr in t4.findall(q('tr')):
-    if 'PPSPS transmis au CSPS' in txt(tr):
-        t4.remove(tr); break
+# [Retrait complet de la section 4 - 31/10, demande d'Alain] "il est normal
+# au moment de l'IC de ne pas avoir ces renseignements, ils les doivent avec
+# leurs PPSPS, c'est suivant leurs devis qu'ils connaitront leurs besoins
+# reels, pourquoi le noter ici ?" puis, apres analyse complete ("doit elle
+# etre dans une IC ? c'est la toute la question") : le mode operatoire est
+# du contenu du PPSPS (R.4532-66), le CACES n'est pas un document recu par
+# le CSPS, et effectif/dates/sous-traitants font deja doublon avec la
+# section 2 (Entreprise Intervenante). La section est retiree en bloc (titre
+# + tableau de donnees), et tout ce qui suit est renumerote d'un rang.
+t4_hdr = tbl_with(d, "4. INFORMATIONS PRÉALABLES REÇUES DE L'EE")
+t4_data = tbl_with(d, 'PPSPS transmis au CSPS')
+body4 = d.root.find(q('body'))
+body4.remove(t4_data); body4.remove(t4_hdr)
+
+# [Section 9 "Permis et autorisations" - 31/10, meme logique qu'au-dessus]
+# Permis feu, habilitation electrique et verification des engins/levage sont
+# des documents propres a l'entreprise intervenante (dependent de ses
+# propres travaux/engins), pas des pre-requis du site en activite : ils
+# n'ont pas plus leur place dans l'IC que le contenu retire de la section 4.
+# On ne garde que les 3 points reellement du ressort du site/chantier :
+# Arrete de voirie, DT/DICT completes, Rapport SS4 amiante.
+t9 = tbl_with(d, 'Arrêté de voirie')
+trs9 = t9.findall(q('tr'))
+set_cell(trs9[3].findall(q('tc'))[4], 'Rapport SS4 amiante')
+for idx in (4, 5, 6):
+    set_cell(trs9[idx].findall(q('tc'))[4], '')
+
+# Renumerotation (consequence directe du retrait de la section 4) : tout ce
+# qui suivait "5." devient "4.", "6." devient "5.", etc. Les sections
+# 7A/7B/7C/7D (analyse des risques) et 12/14bis/15 sont renumerotees plus
+# bas, une fois les blocs qui les recherchent par leur texte d'origine
+# termines (cf. commentaires correspondants).
+d.rep('5. ORGANISATION DU SITE', '4. ORGANISATION DU SITE')
+d.rep('5A — Installation générale', '4A — Installation générale')
+d.rep('5B — Électricité / Eau', '4B — Électricité / Eau')
+d.rep('5C — Plan de circulation', '4C — Plan de circulation')
+d.rep('5D — Fermeture du périmètre', '4D — Fermeture du périmètre')
+d.rep('6. RÉSEAUX ET ENVIRONNEMENT', '5. RÉSEAUX ET ENVIRONNEMENT')
+d.rep('6A — Réseaux enterrés  (DT / DICT)', '5A — Réseaux enterrés  (DT / DICT)')
+d.rep('6B — Réseaux aériens', '5B — Réseaux aériens')
+d.rep('6C — Environnement proche', '5C — Environnement proche')
+d.rep('8. RISQUES SPÉCIFIQUES (CMR)', '7. RISQUES SPÉCIFIQUES (CMR)')
+d.rep('9. PERMIS ET AUTORISATIONS', '8. PERMIS ET AUTORISATIONS')
+d.rep('10. EPI MINIMUM OBLIGATOIRES', '9. EPI MINIMUM OBLIGATOIRES')
 # 7A / 7B / 7C : une seule ligne de donnees vide (l'appli la duplique)
 for anc in ['7A — Co-activité', '7B — Risques importés', '7C — Risques exportés']:
     t=tbl_with(d, anc); trs=t.findall(q('tr'))
@@ -52,7 +92,7 @@ for anc in ['7A — Co-activité', '7B — Risques importés', '7C — Risques e
 # 7D : copie de 7C
 t7c=tbl_with(d,'7C — Risques exportés'); t7d=copy.deepcopy(t7c)
 trs=t7d.findall(q('tr'))
-set_cell(trs[0].findall(q('tc'))[0], "7D — Risques propres à l'entreprise (travaux confiés) — R.4532-66")
+set_cell(trs[0].findall(q('tc'))[0], "6D — Risques propres à l'entreprise (travaux confiés) — R.4532-66")
 for tc,s in zip(trs[1].findall(q('tc')), ['Risque propre (origine)', "Mesure annoncée par l'entreprise", 'À reporter au PPSPS']): set_cell(tc,s)
 t7c.addnext(t7d)
 sp=etree.fromstring(para([run(' ', sz=8)], before=0, after=0)); t7c.addnext(sp)
@@ -80,7 +120,7 @@ for idx, lab in [(1, 'Délimitation / signalisation / voies circulation'),
 # detaille deja. On ne garde que l'essentiel propre a cette IC (confirmation
 # d'application + referents nommes) ; le reste est renvoye au PGC via le
 # titre de la section.
-d.rep('11. VIGILANCE MÉTÉOROLOGIQUE', '11. VIGILANCE MÉTÉOROLOGIQUE (détail : PGC SPS)')
+d.rep('11. VIGILANCE MÉTÉOROLOGIQUE', '10. VIGILANCE MÉTÉOROLOGIQUE (détail : PGC SPS)')
 tMeteo = tbl_with(d, 'Eau fraîche en permanence')
 trsMeteo = tMeteo.findall(q('tr'))
 set_cell(trsMeteo[1].findall(q('tc'))[4], 'Mesures canicule/intempéries appliquées (PGC SPS) :')
@@ -139,14 +179,14 @@ i_spacer = i_hdr + 1
 assert i_hdr is not None and i_data == i_spacer + 1 and children13[i_spacer].tag == q('p')
 
 frags13 = [
-    _hdr13('13. OBSERVATIONS DU CSPS'), SPACER13,
+    _hdr13('12. OBSERVATIONS DU CSPS'), SPACER13,
     _data13([
         ('Observation (sans urgence)', 'E2EFDA', False, '000000'),
         ('Notification (avant reprise)', 'FFF0CC', False, '000000'),
         ('DANGER GRAVE IMMINENT (arrêt immédiat)', 'FFD5D5', True, 'CC0000'),
         ('Délai levée / Suite donnée', 'F2F2F2', True, '000000'),
     ]), SPACER13,
-    _hdr13('14. RÉUNIONS / COORDINATION'), SPACER13,
+    _hdr13('13. RÉUNIONS / COORDINATION'), SPACER13,
     _data13([
         ('Fréquence visites CSPS', 'F2F2F2', True, '000000'),
         ('Réunions coordination', 'F2F2F2', True, '000000'),
@@ -156,6 +196,16 @@ frags13 = [
 body13.remove(children13[i_data]); body13.remove(children13[i_spacer]); body13.remove(children13[i_hdr])
 for k, frag in enumerate(frags13):
     body13.insert(i_hdr + k, etree.fromstring(frag))
+
+# Renumerotation finale (apres les blocs ci-dessus qui recherchaient encore
+# le texte d'origine "7." / "7A" / "7B" / "7C" pour trouver leurs tableaux).
+d.rep('7. ANALYSE DES RISQUES — INTERFÉRENCES', '6. ANALYSE DES RISQUES — INTERFÉRENCES')
+d.rep('7A — Co-activité', '6A — Co-activité')
+d.rep('7B — Risques importés', '6B — Risques importés')
+d.rep('7C — Risques exportés', '6C — Risques exportés')
+d.rep('12. ORGANISATION DES SECOURS', '11. ORGANISATION DES SECOURS')
+d.rep('14 bis. PERSONNES PRÉSENTES', '13 bis. PERSONNES PRÉSENTES')
+d.rep('15. VISA ET SIGNATURES', '14. VISA ET SIGNATURES')
 
 d.save(out+'/Fiche_IC_CSPS17_v17.docx')
 

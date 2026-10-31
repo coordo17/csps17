@@ -158,39 +158,41 @@ function icPrestatairesHtml() {
     + '</div></div>';
 }
 
-// Grille des sections 4, 5, 6, 8, 9, 10 : une ligne par ligne du modele Word.
+// Grille des sections 4, 5, 7, 8, 9 : une ligne par ligne du modele Word.
+// Section "4. Informations prealables recues de l'EE" retiree le 31/10
+// (demande d'Alain, cf. commentaires modeles_ic.py) ; tout ce qui suivait
+// est renumerote d'un rang.
 var IC_GRILLE = [
-  { sec: '4', titre: 'Informations pr\u00e9alables re\u00e7ues de l\u2019entreprise', ancre: 'Document / Information', items: [
-    ['mo', 'Mode op\u00e9ratoire d\u00e9taill\u00e9 des travaux confi\u00e9s', 'recu'], ['caces', 'Autorisation de conduite des engins / CACES', 'recu'],
-    ['eff', 'Effectif, dates et dur\u00e9e pr\u00e9visible d\u2019intervention', 'recu'], ['st', 'Coordonn\u00e9es des sous-traitants \u00e9ventuels', 'recu']] },
-  { sec: '5A', titre: 'Installation g\u00e9n\u00e9rale', ancre: '5A \u2014 Installation', items: [
+  { sec: '4A', titre: 'Installation g\u00e9n\u00e9rale', ancre: '4A \u2014 Installation', items: [
     ['cloture', 'Emprise / cl\u00f4ture', 'oc'], ['basevie', 'Base vie / sanitaires', 'oc'], ['stock', 'Stockage mat\u00e9riaux', 'oc'],
     ['bennes', 'Bennes / tri d\u00e9chets', 'oc'], ['station', 'Stationnement engins', 'oc']] },
-  { sec: '5B', titre: '\u00c9lectricit\u00e9 / Eau', ancre: '5A \u2014 Installation', items: [
+  { sec: '4B', titre: '\u00c9lectricit\u00e9 / Eau', ancre: '4A \u2014 Installation', items: [
     ['coffret', 'Coffret \u00e9lec. normalis\u00e9 30mA', 'oc'], ['groupe', 'Groupe \u00e9lectrog\u00e8ne', 'oc'], ['eclair', '\u00c9clairage chantier', 'oc'],
     ['eau', 'Raccordement eau potable', 'oc'], ['lav5b', 'Eau personnel / lavage roues', 'oc']] },
-  { sec: '5C', titre: 'Plan de circulation', ancre: '5C \u2014 Plan de circulation', items: [
+  { sec: '4C', titre: 'Plan de circulation', ancre: '4C \u2014 Plan de circulation', items: [
     ['plancirc', 'Plan de circ. \u00e9tabli / affich\u00e9', 'oc'], ['sep', 'S\u00e9paration engins / pi\u00e9tons', 'oc'], ['vitesse', 'Vitesse limit\u00e9e', 'vit'],
     ['signaleur', 'Signaleur lors des man\u0153uvres', 'oc'], ['lavroues', 'Lavage roues avant sortie', 'oc']] },
-  { sec: '5D', titre: 'Fermeture du p\u00e9rim\u00e8tre', ancre: '5C \u2014 Plan de circulation', items: [
+  { sec: '4D', titre: 'Fermeture du p\u00e9rim\u00e8tre', ancre: '4C \u2014 Plan de circulation', items: [
     ['clot2', 'Cl\u00f4ture rigide BTP H=2m', 'rc'], ['balis', 'Balisage tranch\u00e9e (K2 + lests)', 'rc'], ['portail', 'Portail cadenas / acc\u00e8s s\u00e9cu.', 'rc'],
     ['sigvoie', 'Signalisation voie publique', 'rc'], ['signoct', 'Signalisation nocturne', 'rc']] },
-  { sec: '6A', titre: 'R\u00e9seaux enterr\u00e9s (DT / DICT)', ancre: '6A \u2014 R\u00e9seaux enterr\u00e9s', items: [
+  { sec: '5A', titre: 'R\u00e9seaux enterr\u00e9s (DT / DICT)', ancre: '5A \u2014 R\u00e9seaux enterr\u00e9s', items: [
     ['aep', 'Eau (AEP) / Assainissement', 'dd'], ['gaz', 'Gaz', 'dd'], ['elecr', '\u00c9lectricit\u00e9 BT / HTA-HTB', 'dd'],
     ['telec', 'T\u00e9l\u00e9com / Fibre / \u00c9clairage public', 'dd'], ['sup', 'Investigations compl\u00e9mentaires (SUP) requises', 'sup']] },
-  { sec: '6B', titre: 'R\u00e9seaux a\u00e9riens', ancre: '6B \u2014 R\u00e9seaux a\u00e9riens', items: [
+  { sec: '5B', titre: 'R\u00e9seaux a\u00e9riens', ancre: '5B \u2014 R\u00e9seaux a\u00e9riens', items: [
     ['hta', 'Lignes HTA/HTB a\u00e9riennes', 'co'], ['bt', 'Lignes BT a\u00e9riennes', 'co'], ['fib', 'Fibres / t\u00e9l\u00e9com a\u00e9riens', 'co'],
     ['dist', 'Distances de s\u00e9curit\u00e9 / consignes exploitant', 'co']] },
-  { sec: '6C', titre: 'Environnement proche', ancre: '6B \u2014 R\u00e9seaux a\u00e9riens', items: [
+  { sec: '5C', titre: 'Environnement proche', ancre: '5B \u2014 R\u00e9seaux a\u00e9riens', items: [
     ['voie', 'Voie publique / riverains', 'co'], ['erp', 'ERP / activit\u00e9 commerciale', 'co'], ['coursdeau', 'Cours d\u2019eau / zone inondable', 'co'],
     ['autre6', 'Autre :', 'coA']] },
-  { sec: '8', titre: 'Risques sp\u00e9cifiques (CMR)', ancre: 'Silice / HAP', items: [
+  { sec: '7', titre: 'Risques sp\u00e9cifiques (CMR)', ancre: 'Silice / HAP', items: [
     ['amiante', 'Amiante', 'cmr'], ['plomb', 'Plomb', 'cmr'], ['silice', 'Silice / HAP / sols pollu\u00e9s', 'cmr'],
     ['bio', 'Risque biologique (site / \u00e9gouts)', 'cmr'], ['atex', 'ATEX (gaz / vapeurs)', 'cmr'], ['autre8', 'Autre :', 'cmrA']] },
-  { sec: '9', titre: 'Permis et autorisations', ancre: 'Silice / HAP', items: [
-    ['voirie', 'Arr\u00eat\u00e9 de voirie', 'perm'], ['dictc', 'DT/DICT compl\u00e8tes', 'perm'], ['feu', 'Permis feu', 'perm'],
-    ['habil', 'Habilitation \u00e9lectrique', 'perm'], ['verif', 'V\u00e9rif. engins / levage', 'perm'], ['ss4', 'Rapport SS4 amiante', 'perm']] },
-  { sec: '10', titre: 'EPI minimum obligatoires', ancre: 'Casque / Chaussures', items: [
+  { sec: '8', titre: 'Permis et autorisations', ancre: 'Silice / HAP', items: [
+    // Permis feu / Habilitation electrique / Verif. engins retires le 31/10
+    // (demande d'Alain, meme logique que pour la section 4 : ce sont des
+    // documents propres a l'EE, pas des pre-requis du site).
+    ['voirie', 'Arr\u00eat\u00e9 de voirie', 'perm'], ['dictc', 'DT/DICT compl\u00e8tes', 'perm'], ['ss4', 'Rapport SS4 amiante', 'perm']] },
+  { sec: '9', titre: 'EPI minimum obligatoires', ancre: 'Casque / Chaussures', items: [
     ['casque', 'Casque / Chaussures S3', 'co'], ['gilet', 'Gilet HV cl.2 / Gants', 'co'], ['lunettes', 'Lunettes / Prot. auditive', 'co'],
     ['respi', 'Prot. respiratoire (CMR)', 'co'], ['harnais', 'Harnais antichute (si protection collective impossible)', 'co']] },
 ];
@@ -200,9 +202,9 @@ var IC_METEO = [
   ['R\u00e9f\u00e9rent canicule', 'meteoReferent', 'nom'],
   ['R\u00e9f\u00e9rent intemp\u00e9ries', 'meteoReferentHiver', 'nom']];
 
-var IC_TITRES_SEC = { '4': ['4', 'Informations pr\u00e9alables re\u00e7ues de l\u2019entreprise', '&#128196;'], '5': ['5', 'Organisation du site', '&#127959;'],
-  '6': ['6', 'R\u00e9seaux et environnement', '&#9889;'], '8': ['8', 'Risques sp\u00e9cifiques (CMR)', '&#128296;'],
-  '9': ['9', 'Permis et autorisations', '&#128220;'], '10': ['10', 'EPI minimum obligatoires', '&#9939;'] };
+var IC_TITRES_SEC = { '4': ['4', 'Organisation du site', '&#127959;'],
+  '5': ['5', 'R\u00e9seaux et environnement', '&#9889;'], '7': ['7', 'Risques sp\u00e9cifiques (CMR)', '&#128296;'],
+  '8': ['8', 'Permis et autorisations', '&#128220;'], '9': ['9', 'EPI minimum obligatoires', '&#9939;'] };
 
 function icInput(id, ph, w) {
   return '<input type="text" id="' + id + '" placeholder="' + ph + '" style="flex:' + (w || 1) + ';min-width:0;padding:6px;border:1px solid var(--border);border-radius:5px;font-family:inherit;font-size:12px;">';
@@ -261,7 +263,7 @@ function icMetiersDuLot(lot) { // = detecterMetiersMultiples d'Harmo
 }
 function icTexteHarmo(t) { return String(t || '').replace(/ -- /g, ' \u2013 '); }
 function ic7dHtml() {
-  return sectionHeader('7D', 'Risques propres \u00e0 l\u2019entreprise (travaux confi\u00e9s)', '&#128736;')
+  return sectionHeader('6D', 'Risques propres \u00e0 l\u2019entreprise (travaux confi\u00e9s)', '&#128736;')
     + '<p style="font-size:12px;color:var(--text-light);margin-bottom:8px;">R.4532-66 : risques li\u00e9s aux modes op\u00e9ratoires, mat\u00e9riels, produits, d\u00e9placements, organisation. '
     + 'Propositions : fiches-risques du m\u00e9tier (PGC Harmo), \u00e0 confirmer une par une. La mesure est celle annonc\u00e9e par l\u2019entreprise ; sans mesure, le Word indique \u00ab \u00e0 pr\u00e9ciser dans le PPSPS \u00bb.</p>'
     + '<div id="ic7d-liste"></div>'
@@ -319,11 +321,11 @@ function ic7dCollecter() {
 var icPresCount = 0;
 var IC_FORMALITES = ['PPSPS simplifi\u00e9', 'Habilitations \u00e9lectriques', 'Autorisations de conduite', 'Attestations de formation au travail en hauteur', 'Fiches de Donn\u00e9es de S\u00e9curit\u00e9'];
 function icFinHtml() {
-  var h = sectionHeader('14 bis', 'Personnes pr\u00e9sentes (\u00e9margement)', '&#9997;');
+  var h = sectionHeader('13 bis', 'Personnes pr\u00e9sentes (\u00e9margement)', '&#9997;');
   h += '<div id="ic-pres-liste"></div>';
   h += '<button type="button" class="btn btn-outline btn-sm" onclick="icPresAjouter(\'\', \'\', \'autre\')">+ Ajouter une personne</button>';
   h += sectionEnd();
-  h += sectionHeader('15', 'PPSPS et diffusion', '&#128228;');
+  h += sectionHeader('14', 'PPSPS et diffusion', '&#128228;');
   h += fieldRow('Autres points \u00e0 reporter dans le PPSPS (les risques 7D y sont repris automatiquement)', 'ic-points-ppsps', 'textarea', '', '');
   if (terrainAffaire && terrainAffaire.cat === 3) {
     h += '<p style="font-size:12px;font-weight:600;margin:8px 0 4px;">Formalit\u00e9s exig\u00e9es avant d\u00e9marrage</p>';
@@ -649,9 +651,9 @@ function injecterICComplete(zip, d, isCat3) {
       if (r.id === 'r24' || (!r.imp && !r.ex)) l7.a.push(ligne);
     });
     var vide = ['Aucun risque relev\u00e9 lors de l\u2019IC', '', ''];
-    icRemplirLignes(doc, icTable(doc, '7A — Co-activité'), 2, l7.a.length ? l7.a : [vide]);
-    icRemplirLignes(doc, icTable(doc, '7B — Risques importés'), 2, l7.b.length ? l7.b : [vide]);
-    icRemplirLignes(doc, icTable(doc, '7C — Risques exportés'), 2, l7.c.length ? l7.c : [vide]);
+    icRemplirLignes(doc, icTable(doc, '6A — Co-activité'), 2, l7.a.length ? l7.a : [vide]);
+    icRemplirLignes(doc, icTable(doc, '6B — Risques importés'), 2, l7.b.length ? l7.b : [vide]);
+    icRemplirLignes(doc, icTable(doc, '6C — Risques exportés'), 2, l7.c.length ? l7.c : [vide]);
   } else {
     // Cat. 3 : formalites exigees
     var tF = icTable(doc, 'Document exigé');
