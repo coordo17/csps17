@@ -2482,7 +2482,9 @@ function ouvrirFaitsContraintes(fichierNom) {
     + '<div class="form-row"><div class="field"><label>Date</label><input type="text" id="faits-rz-date" value="' + icEscAttr(r.date) + '" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;" placeholder="JJ/MM/AAAA"></div>'
     + '<div class="field"><label>Observations (reseaux concernes)</label><input type="text" id="faits-rz-obs" value="' + icEscAttr(r.observation) + '" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;" placeholder="Ex: eau, gaz, elec BT"></div></div>'
     + '<div style="font-weight:700;color:var(--blue-dark);margin:14px 0 6px;">Contraintes du site</div>'
-    + '<textarea id="faits-ctr-synthese" rows="3" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Servitudes, voisinage, acces, exploitation, reseaux aeriens...">' + icEscAttr(c.synthese) + '</textarea>';
+    + '<textarea id="faits-ctr-synthese" rows="3" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Servitudes, voisinage, acces, exploitation, reseaux aeriens...">' + icEscAttr(c.synthese) + '</textarea>'
+    + '<div class="field" style="margin-top:10px;"><label>Arrete de voirie (reference ou nom du document, si obtenu)</label>'
+    + '<input type="text" id="faits-ctr-voirie" value="' + icEscAttr(c.arrete_voirie) + '" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;" placeholder="Ex: Arrete n°2026-114 du 12/09/2026"></div>';
   openDocModal('Réseaux / contraintes du site', html, 'Enregistrer', function () {
     enregistrerFaitsContraintes(affaire, fichierNom);
   });
@@ -2498,7 +2500,7 @@ function enregistrerFaitsContraintes(affaire, fichierNom) {
     observation: document.getElementById('faits-rz-obs').value.trim(),
     source: src
   };
-  f.contraintes = { synthese: document.getElementById('faits-ctr-synthese').value.trim(), source: src };
+  f.contraintes = { synthese: document.getElementById('faits-ctr-synthese').value.trim(), arrete_voirie: document.getElementById('faits-ctr-voirie').value.trim(), source: src };
   persistAffaires();
   showToast('Reseaux / contraintes enregistres', 'success');
 }
@@ -3062,7 +3064,7 @@ function faitsVierges() {
     plomb: { presence: false, localisation: '', date_rapport: '', bureau: '', source: '' },
     reseaux: { dt_recue: false, dict_envoyee: false, dict_recue: false, date: '', observation: '', source: '' },
     inspectionPrealable: { entreprise: '', article: '', delai_ppsps_jours: '', source: '' },
-    contraintes: { synthese: '', source: '' },
+    contraintes: { synthese: '', arrete_voirie: '', source: '' },
     coactivites: [],
     reunions: []
   };
@@ -3095,7 +3097,7 @@ function faitsMigrer(affaire) {
       f.plomb.presence = true; f.plomb.localisation = a.plomb.localisation || ''; f.plomb.source = 'migration';
     }
     if (a.type_rapport === 'contraintes' && a.synthese && !f.contraintes.synthese) {
-      f.contraintes = { synthese: a.synthese, source: 'migration' };
+      f.contraintes = { synthese: a.synthese, arrete_voirie: '', source: 'migration' };
     }
     if (a.type_rapport === 'planning' && a.coactivites && a.coactivites.length && !f.coactivites.length) {
       f.coactivites = a.coactivites.map(function (c) { return { entreprises: c.corps_etat || '', periode: c.periode || '', description: c.risque || '', source: 'migration' }; });
@@ -6724,6 +6726,13 @@ function icPreRemplirGrilleDepuisFaits() {
       setTexte('icg-' + k + '-t', f.reseaux.observation || '');
     });
     if (f.reseaux.dict_recue) { setSelect('icg-dictc-s', 'Fourni'); setTexte('icg-dictc-t', faitsSourceFichier(f.reseaux.source)); }
+  }
+  // Section 8 "Permis et autorisations" : les 3 lignes representent de vrais
+  // documents a consulter par l'entreprise -- si on connait la reference/le
+  // fichier, on la met a la place d'une case vide (31/10, demande d'Alain).
+  if (f.contraintes.arrete_voirie) {
+    setSelect('icg-voirie-s', 'Fourni');
+    setTexte('icg-voirie-t', f.contraintes.arrete_voirie);
   }
 }
 
