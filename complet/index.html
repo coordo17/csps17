@@ -950,8 +950,15 @@
       <div class="tab-content" id="tab-documents">
         <div class="section-title">Documents disponibles selon categorie</div>
         <div id="cat-reminder" style="margin-bottom:16px;padding:10px 14px;border-radius:6px;font-size:13px;"></div>
+        <!-- 31/10 : ces 3 boutons etaient avant dans #pieces-section, qui est
+             masque en permanence par renderDocsGrid() (display:none force a
+             chaque appel) -- deplaces ici pour etre reellement visibles. -->
+        <div style="margin-bottom:14px;">
+          <button type="button" class="btn btn-outline btn-sm" onclick="ouvrirFaitsContraintes()">Réseaux / contraintes du site</button>
+          <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsPlanning()">Planning / co-activités</button>
+          <button type="button" class="btn btn-primary btn-sm" style="margin-left:8px;" onclick="relireChantier()">&#128269; Relire le chantier</button>
+        </div>
         <div id="pieces-section" style="display:none;margin-bottom:20px;">
-          <div style="font-size:14px;font-weight:700;color:var(--blue-dark);margin-bottom:8px;">&#128194; Pieces du dossier <span style="font-weight:400;color:var(--text-light);font-size:12px;">(documents recus &mdash; chaque depot est trace au RJC)</span> <button type="button" class="btn btn-outline btn-sm" style="margin-left:8px;padding:2px 8px;font-size:11px;vertical-align:middle;" onclick="ouvrirFaitsContraintes()">Réseaux / contraintes du site</button> <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;padding:2px 8px;font-size:11px;vertical-align:middle;" onclick="ouvrirFaitsPlanning()">Planning / co-activités</button> <button type="button" class="btn btn-primary btn-sm" style="margin-left:8px;padding:2px 8px;font-size:11px;vertical-align:middle;" onclick="relireChantier()">&#128269; Relire le chantier</button></div>
           <div class="docs-grid" id="pieces-grid" style="margin-top:0;"></div>
           <input type="file" id="piece-input-CONTRAT" accept=".pdf,.docx" style="display:none;" onchange="handlePieceUpload(event,'CONTRAT')">
           <input type="file" id="piece-input-PGC" accept=".pdf,.docx" style="display:none;" onchange="handlePieceUpload(event,'PGC')">
