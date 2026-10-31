@@ -951,7 +951,7 @@
         <div class="section-title">Documents disponibles selon categorie</div>
         <div id="cat-reminder" style="margin-bottom:16px;padding:10px 14px;border-radius:6px;font-size:13px;"></div>
         <div id="pieces-section" style="display:none;margin-bottom:20px;">
-          <div style="font-size:14px;font-weight:700;color:var(--blue-dark);margin-bottom:8px;">&#128194; Pieces du dossier <span style="font-weight:400;color:var(--text-light);font-size:12px;">(documents recus &mdash; chaque depot est trace au RJC)</span> <button type="button" class="btn btn-outline btn-sm" style="margin-left:8px;padding:2px 8px;font-size:11px;vertical-align:middle;" onclick="ouvrirFaitsContraintes()">Réseaux / contraintes du site</button></div>
+          <div style="font-size:14px;font-weight:700;color:var(--blue-dark);margin-bottom:8px;">&#128194; Pieces du dossier <span style="font-weight:400;color:var(--text-light);font-size:12px;">(documents recus &mdash; chaque depot est trace au RJC)</span> <button type="button" class="btn btn-outline btn-sm" style="margin-left:8px;padding:2px 8px;font-size:11px;vertical-align:middle;" onclick="ouvrirFaitsContraintes()">Réseaux / contraintes du site</button> <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;padding:2px 8px;font-size:11px;vertical-align:middle;" onclick="ouvrirFaitsPlanning()">Planning / co-activités</button></div>
           <div class="docs-grid" id="pieces-grid" style="margin-top:0;"></div>
           <input type="file" id="piece-input-CONTRAT" accept=".pdf,.docx" style="display:none;" onchange="handlePieceUpload(event,'CONTRAT')">
           <input type="file" id="piece-input-PGC" accept=".pdf,.docx" style="display:none;" onchange="handlePieceUpload(event,'PGC')">
@@ -2411,6 +2411,33 @@ function enregistrerFaitsContraintes(affaire, fichierNom) {
   showToast('Reseaux / contraintes enregistres', 'success');
 }
 
+// ============================================================================
+// Faits co-activites (31/10) : meme logique, pour le planning. Une ligne =
+// une co-activite (meme format "aere" que les observations §12). Ecrit dans
+// affaire.faits.coactivites.
+// ============================================================================
+function ouvrirFaitsPlanning(fichierNom) {
+  var affaire = currentAffaireObj();
+  if (!affaire) { showToast('Ouvrez une affaire avant de saisir ces faits', 'error'); return; }
+  var f = affaireFaits(affaire);
+  var texte = (f.coactivites || []).map(function (c) { return c.description; }).filter(Boolean).join('\n');
+  var html = '<p style="margin-bottom:10px;font-size:13px;color:var(--text-light);">'
+    + (fichierNom ? 'Document depose : <strong>' + icEscAttr(fichierNom) + '</strong>. ' : '')
+    + 'Une co-activite par ligne (entreprises, periode, nature). Alimente le PGC (phasage / co-activite). Laissez vide si non concerne.</p>'
+    + '<textarea id="faits-plan-coact" rows="6" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Lot gros-oeuvre / Lot charpente — semaines 12-14 — travaux simultanes en zone B">' + icEscAttr(texte) + '</textarea>';
+  openDocModal('Planning / co-activités', html, 'Enregistrer', function () {
+    enregistrerFaitsPlanning(affaire, fichierNom);
+  });
+}
+function enregistrerFaitsPlanning(affaire, fichierNom) {
+  var f = affaireFaits(affaire);
+  var src = (fichierNom ? fichierNom + ' — ' : '') + 'saisi le ' + new Date().toLocaleDateString('fr-FR');
+  var lignes = document.getElementById('faits-plan-coact').value.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+  f.coactivites = lignes.map(function (l) { return { entreprises: '', periode: '', description: l, source: src }; });
+  persistAffaires();
+  showToast('Planning / co-activites enregistres', 'success');
+}
+
 async function deposerPieceDossier(affaire, file, type) {
   try {
     showToast('Depot de ' + file.name + '...');
@@ -2444,6 +2471,7 @@ async function deposerPieceDossier(affaire, file, type) {
     // un diagnostic, on propose tout de suite la petite fiche amiante.
     if (type === 'DIAG') ouvrirFaitsAmiante(file.name);
     else if (type === 'CONTRAINTES') ouvrirFaitsContraintes(file.name);
+    else if (type === 'PLAN') ouvrirFaitsPlanning(file.name);
   } catch (err) {
     showToast('Erreur depot : ' + err.message, 'error');
   }
@@ -4648,7 +4676,9 @@ function buildTagsPGC(data) {
     pgc_reseaux: agg.reseaux ? agg.reseaux : (faits.reseaux.dt_recue || faits.reseaux.dict_envoyee || faits.reseaux.dict_recue)
       ? ['DT ' + (faits.reseaux.dt_recue ? 'recue' : 'non recue'), 'DICT ' + (faits.reseaux.dict_envoyee ? 'envoyee' : 'non envoyee') + (faits.reseaux.dict_recue ? ', recepisses recus' : ''), faits.reseaux.observation].filter(Boolean).join(' — ')
       : AC + ' (presence de reseaux, PV de coupure, servitudes...)',
-    pgc_phasage: agg.phasage ? (agg.phasage + (agg.alertes.length ? '\n\nPoints critiques du planning : ' + agg.alertes.join(' ; ') : '')) : (ou(c.duree, AC) === AC ? AC : 'Duree previsible ' + c.duree + '. Phasage detaille : ' + AC),
+    pgc_phasage: agg.phasage ? (agg.phasage + (agg.alertes.length ? '\n\nPoints critiques du planning : ' + agg.alertes.join(' ; ') : ''))
+      : faits.coactivites.length ? 'Co-activites relevees au planning :\n' + faits.coactivites.map(function(co){return '• ' + co.description;}).join('\n')
+      : (ou(c.duree, AC) === AC ? AC : 'Duree previsible ' + c.duree + '. Phasage detaille : ' + AC),
     pgc_base_vie: agg.base_vie ? agg.base_vie : ou(c3.hygiene, 'Vestiaire — refectoire — sanitaires mis en place par le lot principal des le demarrage, y compris raccordements. ' + AC),
     pgc_acces: agg.acces ? agg.acces : ou(c3.acces, AC),
     pgc_securisation: ou(c3.securisation, 'Cloture type HERAS h=2,00 m avec colliers anti-vandalisme, portail verrouille. ' + AC),
@@ -4657,7 +4687,9 @@ function buildTagsPGC(data) {
     pgc_dechets: ou(c3.dechets, ''),
     pgc_hygiene: ou(c3.hygiene, AC),
     pgc_effectif: ou(c.nbEnt ? c.nbEnt + ' entreprises — effectif de pointe a preciser' : '', AC),
-    pgc_coactivite: agg.coactivite ? (agg.coactivite + (agg.alertes.length ? '\n\nALERTES A NE PAS RATER :\n• ' + agg.alertes.join('\n• ') : '')) : AC + ' (suivant planning MOE phase DCE)',
+    pgc_coactivite: agg.coactivite ? (agg.coactivite + (agg.alertes.length ? '\n\nALERTES A NE PAS RATER :\n• ' + agg.alertes.join('\n• ') : ''))
+      : faits.coactivites.length ? faits.coactivites.map(function(co){return '• ' + co.description;}).join('\n')
+      : AC + ' (suivant planning MOE phase DCE)',
     pgc_environnement: agg.environnement ? agg.environnement : (faits.contraintes.synthese || AC + ' (site en exploitation, voisinage, affluence, reseaux aeriens...)'),
     pgc_travaux_dangereux: (travauxDang.concat(agg.travaux_dangereux)).filter(function(v,i,s){return v && s.indexOf(v)===i;}).join(', ') || AC,
     a_amiante: amiante,
