@@ -951,7 +951,7 @@
         <div class="section-title">Documents disponibles selon categorie</div>
         <div id="cat-reminder" style="margin-bottom:16px;padding:10px 14px;border-radius:6px;font-size:13px;"></div>
         <div id="pieces-section" style="display:none;margin-bottom:20px;">
-          <div style="font-size:14px;font-weight:700;color:var(--blue-dark);margin-bottom:8px;">&#128194; Pieces du dossier <span style="font-weight:400;color:var(--text-light);font-size:12px;">(documents recus &mdash; chaque depot est trace au RJC)</span></div>
+          <div style="font-size:14px;font-weight:700;color:var(--blue-dark);margin-bottom:8px;">&#128194; Pieces du dossier <span style="font-weight:400;color:var(--text-light);font-size:12px;">(documents recus &mdash; chaque depot est trace au RJC)</span> <button type="button" class="btn btn-outline btn-sm" style="margin-left:8px;padding:2px 8px;font-size:11px;vertical-align:middle;" onclick="ouvrirFaitsContraintes()">Réseaux / contraintes du site</button></div>
           <div class="docs-grid" id="pieces-grid" style="margin-top:0;"></div>
           <input type="file" id="piece-input-CONTRAT" accept=".pdf,.docx" style="display:none;" onchange="handlePieceUpload(event,'CONTRAT')">
           <input type="file" id="piece-input-PGC" accept=".pdf,.docx" style="display:none;" onchange="handlePieceUpload(event,'PGC')">
@@ -2369,6 +2369,48 @@ function enregistrerFaitsAmiante(affaire, fichierNom) {
   showToast('Faits amiante enregistres', 'success');
 }
 
+// ============================================================================
+// Faits reseaux / contraintes du site (31/10) : meme logique que l'amiante --
+// saisie manuelle au depot d'un document CONTRAINTES, ou a la demande via le
+// bouton "Reseaux / contraintes du site". Ecrit dans affaire.faits.reseaux
+// et affaire.faits.contraintes.
+// ============================================================================
+function ouvrirFaitsContraintes(fichierNom) {
+  var affaire = currentAffaireObj();
+  if (!affaire) { showToast('Ouvrez une affaire avant de saisir ces faits', 'error'); return; }
+  var f = affaireFaits(affaire);
+  var r = f.reseaux, c = f.contraintes;
+  var html = '<p style="margin-bottom:10px;font-size:13px;color:var(--text-light);">'
+    + (fichierNom ? 'Document depose : <strong>' + icEscAttr(fichierNom) + '</strong>. ' : '')
+    + 'Alimente le PGC et la grille de la fiche IC (§5/§8). Laissez vide si non concerne.</p>'
+    + '<div style="font-weight:700;color:var(--blue-dark);margin-bottom:6px;">Reseaux (DT/DICT)</div>'
+    + '<div class="field" style="margin-bottom:8px;"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:14px;"><input type="checkbox" id="faits-rz-dt"' + (r.dt_recue ? ' checked' : '') + '> DT recue (declaration de travaux)</label></div>'
+    + '<div class="field" style="margin-bottom:8px;"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:14px;"><input type="checkbox" id="faits-rz-dicte"' + (r.dict_envoyee ? ' checked' : '') + '> DICT envoyee</label></div>'
+    + '<div class="field" style="margin-bottom:8px;"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:14px;"><input type="checkbox" id="faits-rz-dictr"' + (r.dict_recue ? ' checked' : '') + '> Recepisses DICT recus (tous reseaux)</label></div>'
+    + '<div class="form-row"><div class="field"><label>Date</label><input type="text" id="faits-rz-date" value="' + icEscAttr(r.date) + '" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;" placeholder="JJ/MM/AAAA"></div>'
+    + '<div class="field"><label>Observations (reseaux concernes)</label><input type="text" id="faits-rz-obs" value="' + icEscAttr(r.observation) + '" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;" placeholder="Ex: eau, gaz, elec BT"></div></div>'
+    + '<div style="font-weight:700;color:var(--blue-dark);margin:14px 0 6px;">Contraintes du site</div>'
+    + '<textarea id="faits-ctr-synthese" rows="3" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Servitudes, voisinage, acces, exploitation, reseaux aeriens...">' + icEscAttr(c.synthese) + '</textarea>';
+  openDocModal('Réseaux / contraintes du site', html, 'Enregistrer', function () {
+    enregistrerFaitsContraintes(affaire, fichierNom);
+  });
+}
+function enregistrerFaitsContraintes(affaire, fichierNom) {
+  var f = affaireFaits(affaire);
+  var src = (fichierNom ? fichierNom + ' — ' : '') + 'saisi le ' + new Date().toLocaleDateString('fr-FR');
+  f.reseaux = {
+    dt_recue: document.getElementById('faits-rz-dt').checked,
+    dict_envoyee: document.getElementById('faits-rz-dicte').checked,
+    dict_recue: document.getElementById('faits-rz-dictr').checked,
+    date: document.getElementById('faits-rz-date').value.trim(),
+    observation: document.getElementById('faits-rz-obs').value.trim(),
+    source: src
+  };
+  f.contraintes = { synthese: document.getElementById('faits-ctr-synthese').value.trim(), source: src };
+  persistAffaires();
+  showToast('Reseaux / contraintes enregistres', 'success');
+}
+
 async function deposerPieceDossier(affaire, file, type) {
   try {
     showToast('Depot de ' + file.name + '...');
@@ -2401,6 +2443,7 @@ async function deposerPieceDossier(affaire, file, type) {
     // Saisie manuelle des faits (ex-extraction IA, retiree le 16/09) : pour
     // un diagnostic, on propose tout de suite la petite fiche amiante.
     if (type === 'DIAG') ouvrirFaitsAmiante(file.name);
+    else if (type === 'CONTRAINTES') ouvrirFaitsContraintes(file.name);
   } catch (err) {
     showToast('Erreur depot : ' + err.message, 'error');
   }
@@ -4602,7 +4645,9 @@ function buildTagsPGC(data) {
     pgc_type_marche: ou(c.marche, AC),
     pgc_demarches: AC + ' (voirie, emprise, autorisations particulieres...)',
     pgc_interferences: agg.interferences ? agg.interferences : ((amiante || rp.demolition) ? AC + ' — chantier avec demolition : verifier les activites voisines / site en exploitation.' : 'Sans objet au jour de la redaction. ' + AC),
-    pgc_reseaux: agg.reseaux ? agg.reseaux : AC + ' (presence de reseaux, PV de coupure, servitudes...)',
+    pgc_reseaux: agg.reseaux ? agg.reseaux : (faits.reseaux.dt_recue || faits.reseaux.dict_envoyee || faits.reseaux.dict_recue)
+      ? ['DT ' + (faits.reseaux.dt_recue ? 'recue' : 'non recue'), 'DICT ' + (faits.reseaux.dict_envoyee ? 'envoyee' : 'non envoyee') + (faits.reseaux.dict_recue ? ', recepisses recus' : ''), faits.reseaux.observation].filter(Boolean).join(' — ')
+      : AC + ' (presence de reseaux, PV de coupure, servitudes...)',
     pgc_phasage: agg.phasage ? (agg.phasage + (agg.alertes.length ? '\n\nPoints critiques du planning : ' + agg.alertes.join(' ; ') : '')) : (ou(c.duree, AC) === AC ? AC : 'Duree previsible ' + c.duree + '. Phasage detaille : ' + AC),
     pgc_base_vie: agg.base_vie ? agg.base_vie : ou(c3.hygiene, 'Vestiaire — refectoire — sanitaires mis en place par le lot principal des le demarrage, y compris raccordements. ' + AC),
     pgc_acces: agg.acces ? agg.acces : ou(c3.acces, AC),
@@ -4613,7 +4658,7 @@ function buildTagsPGC(data) {
     pgc_hygiene: ou(c3.hygiene, AC),
     pgc_effectif: ou(c.nbEnt ? c.nbEnt + ' entreprises — effectif de pointe a preciser' : '', AC),
     pgc_coactivite: agg.coactivite ? (agg.coactivite + (agg.alertes.length ? '\n\nALERTES A NE PAS RATER :\n• ' + agg.alertes.join('\n• ') : '')) : AC + ' (suivant planning MOE phase DCE)',
-    pgc_environnement: agg.environnement ? agg.environnement : AC + ' (site en exploitation, voisinage, affluence, reseaux aeriens...)',
+    pgc_environnement: agg.environnement ? agg.environnement : (faits.contraintes.synthese || AC + ' (site en exploitation, voisinage, affluence, reseaux aeriens...)'),
     pgc_travaux_dangereux: (travauxDang.concat(agg.travaux_dangereux)).filter(function(v,i,s){return v && s.indexOf(v)===i;}).join(', ') || AC,
     a_amiante: amiante,
     amiante_detail: amDetails.join('\n'),
@@ -6439,6 +6484,14 @@ function icPreRemplirGrilleDepuisFaits() {
   if (f.plomb.presence) {
     setCase('icg-plomb', true);
     setTexte('icg-plomb-t', f.plomb.localisation || '');
+  }
+  if (f.reseaux.dt_recue || f.reseaux.dict_envoyee || f.reseaux.dict_recue) {
+    ['aep', 'gaz', 'elecr', 'telec'].forEach(function (k) {
+      setCase('icg-' + k, f.reseaux.dt_recue);
+      setCase('icg-' + k + '-2', f.reseaux.dict_envoyee);
+      setTexte('icg-' + k + '-t', f.reseaux.observation || '');
+    });
+    if (f.reseaux.dict_recue) setSelect('icg-dictc-s', 'Fourni');
   }
 }
 
