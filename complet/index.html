@@ -954,7 +954,8 @@
              masque en permanence par renderDocsGrid() (display:none force a
              chaque appel) -- deplaces ici pour etre reellement visibles. -->
         <div style="margin-bottom:14px;">
-          <button type="button" class="btn btn-outline btn-sm" onclick="ouvrirFaitsContraintes()">Réseaux / contraintes du site</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="ouvrirFaitsInspection()">Inspection commune préalable</button>
+          <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsContraintes()">Réseaux / contraintes du site</button>
           <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsPlanning()">Planning / co-activités</button>
           <button type="button" class="btn btn-primary btn-sm" style="margin-left:8px;" onclick="relireChantier()">&#128269; Relire le chantier</button>
         </div>
@@ -2351,12 +2352,14 @@ function relireChantier() {
   if (contr && !faits.reseaux.source && !faits.contraintes.source) manques.push({ label: 'R\u00e9seaux / contraintes du site', fichier: contr.fichierNom || contr.objet, fn: ouvrirFaitsContraintes });
   var plan = dernierDoc('PLAN');
   if (plan && !faits.coactivites.length) manques.push({ label: 'Planning / co-activit\u00e9s', fichier: plan.fichierNom || plan.objet, fn: ouvrirFaitsPlanning });
+  var icr = dernierDoc('ICR');
+  if (icr && !faits.inspectionPrealable.source) manques.push({ label: 'Inspection commune pr\u00e9alable', fichier: icr.fichierNom || icr.objet, fn: ouvrirFaitsInspection });
 
   window._relireManques = manques;
   var html;
   if (!manques.length) {
-    html = '<p>Rien \u00e0 signaler : les documents d\u00e9pos\u00e9s dont on peut v\u00e9rifier la fiche de faits (amiante, r\u00e9seaux/contraintes, planning) sont tous renseign\u00e9s.</p>'
-      + '<p style="font-size:12px;color:var(--text-light);margin-top:8px;">Cette relecture ne lit pas le contenu des documents (pas d\u2019IA) : elle compare juste ce qui est d\u00e9pos\u00e9 \u00e0 ce qui a \u00e9t\u00e9 saisi, pour ces 3 types.</p>';
+    html = '<p>Rien \u00e0 signaler : les documents d\u00e9pos\u00e9s dont on peut v\u00e9rifier la fiche de faits (amiante, r\u00e9seaux/contraintes, planning, inspection pr\u00e9alable) sont tous renseign\u00e9s.</p>'
+      + '<p style="font-size:12px;color:var(--text-light);margin-top:8px;">Cette relecture ne lit pas le contenu des documents (pas d\u2019IA) : elle compare juste ce qui est d\u00e9pos\u00e9 \u00e0 ce qui a \u00e9t\u00e9 saisi, pour ces 4 types.</p>';
   } else {
     html = '<p style="margin-bottom:10px;font-size:13px;color:var(--text-light);">Documents d\u00e9pos\u00e9s sans fiche de faits saisie :</p>'
       + manques.map(function (m, i) {
@@ -2367,6 +2370,41 @@ function relireChantier() {
       }).join('');
   }
   openDocModal('Relecture du chantier', html, null, null);
+}
+
+// ============================================================================
+// Faits inspection commune prealable (31/10) : saisie manuelle au depot
+// d'une ICR (IC signee), ou a la demande via le bouton "Inspection commune
+// prealable". Ecrit dans affaire.faits.inspectionPrealable, qui alimente
+// deja les observations du CSPS (§11) sur la fiche IC.
+// ============================================================================
+function ouvrirFaitsInspection(fichierNom) {
+  var affaire = currentAffaireObj();
+  if (!affaire) { showToast('Ouvrez une affaire avant de saisir ces faits', 'error'); return; }
+  var f = affaireFaits(affaire).inspectionPrealable;
+  var html = '<p style="margin-bottom:10px;font-size:13px;color:var(--text-light);">'
+    + (fichierNom ? 'Document depose : <strong>' + icEscAttr(fichierNom) + '</strong>. ' : '')
+    + 'Alimente les observations du CSPS (§11) sur la fiche IC. Laissez vide si non concerne.</p>'
+    + '<div class="field" style="margin-bottom:10px;"><label>Entreprise concernee</label>'
+    + '<input type="text" id="faits-insp-ent" value="' + icEscAttr(f.entreprise) + '" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;" placeholder="Ex: SARL Dupont Gros-Oeuvre"></div>'
+    + '<div class="form-row"><div class="field"><label>Article / motif (ex: R.4532-13)</label>'
+    + '<input type="text" id="faits-insp-art" value="' + icEscAttr(f.article) + '" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;"></div>'
+    + '<div class="field"><label>Delai de remise du PPSPS (jours)</label>'
+    + '<input type="text" id="faits-insp-delai" value="' + icEscAttr(f.delai_ppsps_jours) + '" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;" placeholder="Ex: 8"></div></div>';
+  openDocModal('Inspection commune préalable' + (f.source ? ' — source : ' + icEscAttr(f.source) : ''), html, 'Enregistrer', function () {
+    enregistrerFaitsInspection(affaire, fichierNom);
+  });
+}
+function enregistrerFaitsInspection(affaire, fichierNom) {
+  var f = affaireFaits(affaire);
+  f.inspectionPrealable = {
+    entreprise: document.getElementById('faits-insp-ent').value.trim(),
+    article: document.getElementById('faits-insp-art').value.trim(),
+    delai_ppsps_jours: document.getElementById('faits-insp-delai').value.trim(),
+    source: (fichierNom ? fichierNom + ' — ' : '') + 'saisi le ' + new Date().toLocaleDateString('fr-FR')
+  };
+  persistAffaires();
+  showToast('Faits inspection commune enregistres', 'success');
 }
 
 // ============================================================================
@@ -2550,6 +2588,7 @@ async function deposerPieceDossier(affaire, file, type) {
     if (type === 'DIAG') ouvrirFaitsAmiante(file.name);
     else if (type === 'CONTRAINTES') ouvrirFaitsContraintes(file.name);
     else if (type === 'PLAN') ouvrirFaitsPlanning(file.name);
+    else if (type === 'ICR') ouvrirFaitsInspection(file.name);
   } catch (err) {
     showToast('Erreur depot : ' + err.message, 'error');
   }
