@@ -24,6 +24,21 @@ d.rep('Représentant :', 'Représentant : {{moa_contact}}')
 d.rep('Tél :', 'Tél : {{moa_tel}}')
 d.rep('n° ____ n° ____', 'n° ____')
 d.rep("Les risques propres à l'entreprise figureront dans son PPSPS.", "Les risques propres à l'entreprise sont relevés en 7D et détaillés dans son PPSPS (R.4532-66).")
+# [Retrait PPSPS-recu de l'IC - 31/10, demande d'Alain] "hors si le PPSPS
+# se fait apres l'IC, pourquoi en parler la, c'est faux" -- le PPSPS
+# est elabore APRES l'inspection commune (elle y contribue, cf. INRS/
+# CRAMIF), pas avant : cette ligne dans "4. Informations prealables
+# recues de l'EE" faisait croire le contraire. Retiree purement et
+# simplement (option 1 d'Alain) ; le suivi reel du PPSPS se fait dans
+# la grille d'analyse des PPSPS (document separe, v5 validee le 02/10).
+# La version Cat.3 n'est pas concernee : elle place deja ce point sous
+# "Formalites obligatoires avant demarrage", en engagement a venir
+# ("PPSPS simplifie (integrant les risques de cette IC)"), pas en
+# information recue au prealable -- formulation correcte, inchangee.
+t4 = tbl_with(d, 'PPSPS transmis au CSPS')
+for tr in t4.findall(q('tr')):
+    if 'PPSPS transmis au CSPS' in txt(tr):
+        t4.remove(tr); break
 # 7A / 7B / 7C : une seule ligne de donnees vide (l'appli la duplique)
 for anc in ['7A — Co-activité', '7B — Risques importés', '7C — Risques exportés']:
     t=tbl_with(d, anc); trs=t.findall(q('tr'))
@@ -36,12 +51,39 @@ set_cell(trs[0].findall(q('tc'))[0], "7D — Risques propres à l'entreprise (tr
 for tc,s in zip(trs[1].findall(q('tc')), ['Risque propre (origine)', "Mesure annoncée par l'entreprise", 'À reporter au PPSPS']): set_cell(tc,s)
 t7c.addnext(t7d)
 sp=etree.fromstring(para([run(' ', sz=8)], before=0, after=0)); t7c.addnext(sp)
-# 11 : conditions hivernales / intemperies
-t=tbl_with(d,'Mesure météo'); last=t.findall(q('tr'))[-1]
-for lab in ['Arrêt hauteur / levage si vent > limite constructeur','Report travaux extérieurs si verglas / neige','Suivi vigilance Météo-France avant intervention','Équipements froid (gants, vêtements)','Référent intempéries — Nom :']:
-    nr=copy.deepcopy(last)
-    for i,tc in enumerate(nr.findall(q('tc'))): set_cell(tc, lab if i==4 else '')
-    t.append(nr); last=nr
+# Section 3 (ETABLISSEMENT EN ACTIVITE / EXPLOITANT, R.4532-14) - completee le
+# 31/10 (demande d'Alain : "pour la 1, complete la stp") : la colonne ne
+# portait que des champs d'identification, sans le contenu legal de R.4532-14
+# (1 degre : delimitation du chantier, zones dangereuses, voies de
+# circulation, acces sanitaires/vestiaires/restauration de l'etablissement si
+# chantier non clos/independant ; 2 degre : consignes de securite + organi-
+# sation des premiers secours de l'etablissement, transmises par le chef
+# d'etablissement). On utilise les 3 lignes jusque-la vides de la colonne
+# droite (Travaux confies / Periode-Effectif / Sous-traitants n'ont pas
+# d'equivalent cote etablissement).
+tEtab = tbl_with(d, 'Désignation / R. sociale')
+trsEtab = tEtab.findall(q('tr'))
+for idx, lab in [(4, 'Délimitation / signalisation / voies circulation'),
+                  (5, 'Accès sanitaires-vestiaires-restauration établ. (si non clos)'),
+                  (6, 'Consignes sécurité & secours établ. transmis')]:
+    set_cell(trsEtab[idx].findall(q('tc'))[2], lab)
+
+# 11 : vigilance meteorologique - reduite le 31/10 (demande d'Alain : "pour la
+# 2, reduit la elle est deja dans le PGC, fait y reference") : la grille
+# canicule/intemperies complete faisait doublon avec le PGC SPS qui la
+# detaille deja. On ne garde que l'essentiel propre a cette IC (confirmation
+# d'application + referents nommes) ; le reste est renvoye au PGC via le
+# titre de la section.
+d.rep('11. VIGILANCE MÉTÉOROLOGIQUE', '11. VIGILANCE MÉTÉOROLOGIQUE (détail : PGC SPS)')
+tMeteo = tbl_with(d, 'Eau fraîche en permanence')
+trsMeteo = tMeteo.findall(q('tr'))
+set_cell(trsMeteo[1].findall(q('tc'))[4], 'Mesures canicule/intempéries appliquées (PGC SPS) :')
+set_cell(trsMeteo[2].findall(q('tc'))[4], 'Référent canicule — Nom :')
+set_cell(trsMeteo[3].findall(q('tc'))[4], 'Référent intempéries — Nom :')
+for idx in (4, 5):
+    tcsMeteo = trsMeteo[idx].findall(q('tc'))
+    for k in (4, 5, 6):
+        set_cell(tcsMeteo[k], '')
 d.save(out+'/Fiche_IC_CSPS17_v17.docx')
 
 d=Doc(src+'/Fiche_IC_Cat3_CSPS17_v5.docx')

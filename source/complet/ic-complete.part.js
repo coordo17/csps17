@@ -162,8 +162,7 @@ function icPrestatairesHtml() {
 var IC_GRILLE = [
   { sec: '4', titre: 'Informations pr\u00e9alables re\u00e7ues de l\u2019entreprise', ancre: 'Document / Information', items: [
     ['mo', 'Mode op\u00e9ratoire d\u00e9taill\u00e9 des travaux confi\u00e9s', 'recu'], ['caces', 'Autorisation de conduite des engins / CACES', 'recu'],
-    ['eff', 'Effectif, dates et dur\u00e9e pr\u00e9visible d\u2019intervention', 'recu'], ['st', 'Coordonn\u00e9es des sous-traitants \u00e9ventuels', 'recu'],
-    ['ppsps', 'PPSPS transmis au CSPS (si requis)', 'recu']] },
+    ['eff', 'Effectif, dates et dur\u00e9e pr\u00e9visible d\u2019intervention', 'recu'], ['st', 'Coordonn\u00e9es des sous-traitants \u00e9ventuels', 'recu']] },
   { sec: '5A', titre: 'Installation g\u00e9n\u00e9rale', ancre: '5A \u2014 Installation', items: [
     ['cloture', 'Emprise / cl\u00f4ture', 'oc'], ['basevie', 'Base vie / sanitaires', 'oc'], ['stock', 'Stockage mat\u00e9riaux', 'oc'],
     ['bennes', 'Bennes / tri d\u00e9chets', 'oc'], ['station', 'Stationnement engins', 'oc']] },
@@ -197,10 +196,9 @@ var IC_GRILLE = [
 ];
 // Section 11 du modele (vigilance meteo) : alimentee par le bloc meteo existant
 var IC_METEO = [
-  ['Eau fra\u00eeche en permanence', 'meteoEau'], ['Horaires adapt\u00e9s', 'meteoArret'], ['Zone ombre', 'meteoOmbre'],
-  ['R\u00e9f\u00e9rent canicule', 'meteoReferent', 'nom'], ['Arr\u00eat imm\u00e9diat orage', 'meteoOrage'],
-  ['Arr\u00eat hauteur / levage', 'meteoVent'], ['Report travaux ext\u00e9rieurs', 'meteoVerglas'], ['Suivi vigilance', 'meteoVigilance'],
-  ['\u00c9quipements froid', 'meteoFroid'], ['R\u00e9f\u00e9rent intemp\u00e9ries', 'meteoReferentHiver', 'nom']];
+  ['Mesures canicule/intemp\u00e9ries appliqu\u00e9es', 'meteoPgc'],
+  ['R\u00e9f\u00e9rent canicule', 'meteoReferent', 'nom'],
+  ['R\u00e9f\u00e9rent intemp\u00e9ries', 'meteoReferentHiver', 'nom']];
 
 var IC_TITRES_SEC = { '4': ['4', 'Informations pr\u00e9alables re\u00e7ues de l\u2019entreprise', '&#128196;'], '5': ['5', 'Organisation du site', '&#127959;'],
   '6': ['6', 'R\u00e9seaux et environnement', '&#9889;'], '8': ['8', 'Risques sp\u00e9cifiques (CMR)', '&#128296;'],

@@ -3617,18 +3617,14 @@ function injecterRisquesIC(zip, risquesIC, ficData) {
   var diversText = [];
   if (ficData && ficData.obsRisques) diversText.push(ficData.obsRisques);
   if (ficData) {
-    var canicule = [];
-    if (ficData.meteoEau) canicule.push('eau fraiche');
-    if (ficData.meteoArret) canicule.push('horaires adaptes / taches penibles suspendues aux heures chaudes');
-    if (ficData.meteoOmbre) canicule.push('zone ombre/abri frais');
-    if (ficData.meteoOrage) canicule.push('arret immediat orage/alerte rouge');
-    if (canicule.length) diversText.push('Canicule : ' + canicule.join(', ') + (ficData.meteoReferent ? ' (referent : ' + ficData.meteoReferent + ')' : '') + '.');
-    var hiver = [];
-    if (ficData.meteoVent) hiver.push('arret hauteur/levage si vent fort');
-    if (ficData.meteoVerglas) hiver.push('report si verglas/neige');
-    if (ficData.meteoVigilance) hiver.push('suivi vigilance Meteo-France');
-    if (ficData.meteoFroid) hiver.push('equipements froid');
-    if (hiver.length) diversText.push('Intemperies : ' + hiver.join(', ') + (ficData.meteoReferentHiver ? ' (referent : ' + ficData.meteoReferentHiver + ')' : '') + '.');
+    // Reduit le 31/10 (cf. section 10bis) : le detail canicule/intemperies est
+    // dans le PGC SPS, on ne garde ici que la confirmation + les referents.
+    if (ficData.meteoPgc || ficData.meteoReferent || ficData.meteoReferentHiver) {
+      var meteoTxt = 'Meteo : mesures canicule/intemperies du PGC SPS ' + (ficData.meteoPgc ? 'appliquees' : 'a verifier');
+      if (ficData.meteoReferent) meteoTxt += ' (referent canicule : ' + ficData.meteoReferent + ')';
+      if (ficData.meteoReferentHiver) meteoTxt += ' (referent intemperies : ' + ficData.meteoReferentHiver + ')';
+      diversText.push(meteoTxt + '.');
+    }
   }
   if (diversText.length) {
     // La ligne "Precisions diverses" est une cellule unique pleine largeur (gridSpan=3),
@@ -6129,8 +6125,7 @@ function icPrestatairesHtml() {
 var IC_GRILLE = [
   { sec: '4', titre: 'Informations pr\u00e9alables re\u00e7ues de l\u2019entreprise', ancre: 'Document / Information', items: [
     ['mo', 'Mode op\u00e9ratoire d\u00e9taill\u00e9 des travaux confi\u00e9s', 'recu'], ['caces', 'Autorisation de conduite des engins / CACES', 'recu'],
-    ['eff', 'Effectif, dates et dur\u00e9e pr\u00e9visible d\u2019intervention', 'recu'], ['st', 'Coordonn\u00e9es des sous-traitants \u00e9ventuels', 'recu'],
-    ['ppsps', 'PPSPS transmis au CSPS (si requis)', 'recu']] },
+    ['eff', 'Effectif, dates et dur\u00e9e pr\u00e9visible d\u2019intervention', 'recu'], ['st', 'Coordonn\u00e9es des sous-traitants \u00e9ventuels', 'recu']] },
   { sec: '5A', titre: 'Installation g\u00e9n\u00e9rale', ancre: '5A \u2014 Installation', items: [
     ['cloture', 'Emprise / cl\u00f4ture', 'oc'], ['basevie', 'Base vie / sanitaires', 'oc'], ['stock', 'Stockage mat\u00e9riaux', 'oc'],
     ['bennes', 'Bennes / tri d\u00e9chets', 'oc'], ['station', 'Stationnement engins', 'oc']] },
@@ -6164,10 +6159,9 @@ var IC_GRILLE = [
 ];
 // Section 11 du modele (vigilance meteo) : alimentee par le bloc meteo existant
 var IC_METEO = [
-  ['Eau fra\u00eeche en permanence', 'meteoEau'], ['Horaires adapt\u00e9s', 'meteoArret'], ['Zone ombre', 'meteoOmbre'],
-  ['R\u00e9f\u00e9rent canicule', 'meteoReferent', 'nom'], ['Arr\u00eat imm\u00e9diat orage', 'meteoOrage'],
-  ['Arr\u00eat hauteur / levage', 'meteoVent'], ['Report travaux ext\u00e9rieurs', 'meteoVerglas'], ['Suivi vigilance', 'meteoVigilance'],
-  ['\u00c9quipements froid', 'meteoFroid'], ['R\u00e9f\u00e9rent intemp\u00e9ries', 'meteoReferentHiver', 'nom']];
+  ['Mesures canicule/intemp\u00e9ries appliqu\u00e9es', 'meteoPgc'],
+  ['R\u00e9f\u00e9rent canicule', 'meteoReferent', 'nom'],
+  ['R\u00e9f\u00e9rent intemp\u00e9ries', 'meteoReferentHiver', 'nom']];
 
 var IC_TITRES_SEC = { '4': ['4', 'Informations pr\u00e9alables re\u00e7ues de l\u2019entreprise', '&#128196;'], '5': ['5', 'Organisation du site', '&#127959;'],
   '6': ['6', 'R\u00e9seaux et environnement', '&#9889;'], '8': ['8', 'Risques sp\u00e9cifiques (CMR)', '&#128296;'],
@@ -6808,22 +6802,16 @@ function genFormulaireFIC() {
   html2 += ic7dHtml();
   if (terrainAffaire.cat !== 3) { html2 += icGrilleSection('8'); html2 += icGrilleSection('9'); html2 += icGrilleSection('10'); }
 
-  // Section 10bis - Vigilance meteorologique (accordeon)
+  // Section 10bis - Vigilance meteorologique (accordeon) - reduite le 31/10
+  // (demande d'Alain : "reduit la elle est deja dans le PGC, fait y reference")
+  // : le detail complet canicule/intemperies est deja dans le PGC SPS, on ne
+  // garde ici que la confirmation d'application + les referents nommes.
   html2 += '<div class="terrain-section">';
   html2 += '<div class="terrain-section-header" onclick="toggleMeteo()" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;">&#9928; Vigilance meteorologique <span id="meteo-arrow">&#9660;</span></div>';
   html2 += '<div id="meteo-section" style="display:block;padding:16px;">';
-  html2 += '<p style="font-size:12px;color:var(--text-light);margin-bottom:10px;">Cochez les mesures mises en place :</p>';
-  html2 += '<p style="font-size:11px;font-weight:600;color:var(--blue-dark);margin:10px 0 6px;">&#9728; Canicule</p>';
-  html2 += checkRow('Eau fraiche en permanence sur chantier', 'fic-meteo-eau', false);
-  html2 += checkRow('Horaires adaptés / tâches pénibles suspendues aux heures chaudes (canicule)', 'fic-meteo-arret', false);
-  html2 += checkRow('Zone ombre / abri frais disponible', 'fic-meteo-ombre', false);
-  html2 += checkRow('Arret immediat orage / alerte rouge', 'fic-meteo-orage', false);
+  html2 += '<p style="font-size:12px;color:var(--text-light);margin-bottom:10px;">Mesures canicule / intemperies detaillees dans le PGC SPS.</p>';
+  html2 += checkRow('Mesures canicule/intemperies du PGC SPS appliquées sur ce chantier', 'fic-meteo-pgc', false);
   html2 += fieldRow('Referent canicule — Nom', 'fic-meteo-referent', 'text', 'Nom du referent canicule', '');
-  html2 += '<p style="font-size:11px;font-weight:600;color:var(--blue-dark);margin:14px 0 6px;">&#10052; Conditions hivernales / Intemperies</p>';
-  html2 += checkRow('Arrêt travaux hauteur/levage si vent au-delà de la limite constructeur', 'fic-meteo-vent', false);
-  html2 += checkRow('Report travaux exterieurs si verglas / neige', 'fic-meteo-verglas', false);
-  html2 += checkRow('Suivi vigilance Meteo-France avant intervention', 'fic-meteo-vigilance', false);
-  html2 += checkRow('Equipements froid (gants, vetements adaptes)', 'fic-meteo-froid', false);
   html2 += fieldRow('Referent intemperies — Nom', 'fic-meteo-referent-hiver', 'text', 'Nom du referent intemperies', '');
   html2 += '</div></div>';
 
@@ -8450,15 +8438,8 @@ async function genererDocTerrain() {
       risquesIC:     window._risquesICData || [],
       obsRisques:    getVal('fic-rq-obs'),
       // Vigilance meteorologique
-      meteoEau:        getCheck('fic-meteo-eau'),
-      meteoArret:      getCheck('fic-meteo-arret'),
-      meteoOmbre:      getCheck('fic-meteo-ombre'),
-      meteoOrage:      getCheck('fic-meteo-orage'),
+      meteoPgc:        getCheck('fic-meteo-pgc'),
       meteoReferent:   getVal('fic-meteo-referent'),
-      meteoVent:       getCheck('fic-meteo-vent'),
-      meteoVerglas:    getCheck('fic-meteo-verglas'),
-      meteoVigilance:  getCheck('fic-meteo-vigilance'),
-      meteoFroid:      getCheck('fic-meteo-froid'),
       meteoReferentHiver: getVal('fic-meteo-referent-hiver'),
       // Sous-traitance
       stOui: document.getElementById('fic-st-oui') ? document.getElementById('fic-st-oui').checked : false,
