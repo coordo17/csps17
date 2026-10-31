@@ -951,7 +951,7 @@
         <div class="section-title">Documents disponibles selon categorie</div>
         <div id="cat-reminder" style="margin-bottom:16px;padding:10px 14px;border-radius:6px;font-size:13px;"></div>
         <div id="pieces-section" style="display:none;margin-bottom:20px;">
-          <div style="font-size:14px;font-weight:700;color:var(--blue-dark);margin-bottom:8px;">&#128194; Pieces du dossier <span style="font-weight:400;color:var(--text-light);font-size:12px;">(documents recus &mdash; chaque depot est trace au RJC)</span> <button type="button" class="btn btn-outline btn-sm" style="margin-left:8px;padding:2px 8px;font-size:11px;vertical-align:middle;" onclick="ouvrirFaitsContraintes()">Réseaux / contraintes du site</button> <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;padding:2px 8px;font-size:11px;vertical-align:middle;" onclick="ouvrirFaitsPlanning()">Planning / co-activités</button></div>
+          <div style="font-size:14px;font-weight:700;color:var(--blue-dark);margin-bottom:8px;">&#128194; Pieces du dossier <span style="font-weight:400;color:var(--text-light);font-size:12px;">(documents recus &mdash; chaque depot est trace au RJC)</span> <button type="button" class="btn btn-outline btn-sm" style="margin-left:8px;padding:2px 8px;font-size:11px;vertical-align:middle;" onclick="ouvrirFaitsContraintes()">Réseaux / contraintes du site</button> <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;padding:2px 8px;font-size:11px;vertical-align:middle;" onclick="ouvrirFaitsPlanning()">Planning / co-activités</button> <button type="button" class="btn btn-primary btn-sm" style="margin-left:8px;padding:2px 8px;font-size:11px;vertical-align:middle;" onclick="relireChantier()">&#128269; Relire le chantier</button></div>
           <div class="docs-grid" id="pieces-grid" style="margin-top:0;"></div>
           <input type="file" id="piece-input-CONTRAT" accept=".pdf,.docx" style="display:none;" onchange="handlePieceUpload(event,'CONTRAT')">
           <input type="file" id="piece-input-PGC" accept=".pdf,.docx" style="display:none;" onchange="handlePieceUpload(event,'PGC')">
@@ -2323,6 +2323,46 @@ async function handlePieceUpload(e, type) {
 }
 
 // ============================================================================
+// Relecture du chantier (31/10) : audit deterministe, PAS une lecture IA du
+// contenu des documents (impossible sans IA). Compare simplement le registre
+// (quels types de document ont ete deposes) a la fiche de faits (qu'est-ce
+// qui a deja ete saisi), et propose de remplir ce qui manque, document par
+// document, via les fiches deja construites (amiante, reseaux/contraintes,
+// planning). Rien n'est insere automatiquement : Alain tape les faits, le
+// bouton se contente de reperer ce qui a ete oublie et d'ouvrir la bonne fiche.
+// ============================================================================
+function relireChantier() {
+  var affaire = currentAffaireObj();
+  if (!affaire) { showToast('Ouvrez une affaire avant de la relire', 'error'); return; }
+  var faits = affaireFaits(affaire);
+  var rjc = affaire.rjc || [];
+  function dernierDoc(type) { var l = rjc.filter(function (e) { return e.docRef === type; }); return l.length ? l[l.length - 1] : null; }
+  var manques = [];
+  var diag = dernierDoc('DIAG');
+  if (diag && !faits.amiante.source) manques.push({ label: 'Amiante (diagnostic depose)', fichier: diag.fichierNom || diag.objet, fn: ouvrirFaitsAmiante });
+  var contr = dernierDoc('CONTRAINTES');
+  if (contr && !faits.reseaux.source && !faits.contraintes.source) manques.push({ label: 'R\u00e9seaux / contraintes du site', fichier: contr.fichierNom || contr.objet, fn: ouvrirFaitsContraintes });
+  var plan = dernierDoc('PLAN');
+  if (plan && !faits.coactivites.length) manques.push({ label: 'Planning / co-activit\u00e9s', fichier: plan.fichierNom || plan.objet, fn: ouvrirFaitsPlanning });
+
+  window._relireManques = manques;
+  var html;
+  if (!manques.length) {
+    html = '<p>Rien \u00e0 signaler : les documents d\u00e9pos\u00e9s dont on peut v\u00e9rifier la fiche de faits (amiante, r\u00e9seaux/contraintes, planning) sont tous renseign\u00e9s.</p>'
+      + '<p style="font-size:12px;color:var(--text-light);margin-top:8px;">Cette relecture ne lit pas le contenu des documents (pas d\u2019IA) : elle compare juste ce qui est d\u00e9pos\u00e9 \u00e0 ce qui a \u00e9t\u00e9 saisi, pour ces 3 types.</p>';
+  } else {
+    html = '<p style="margin-bottom:10px;font-size:13px;color:var(--text-light);">Documents d\u00e9pos\u00e9s sans fiche de faits saisie :</p>'
+      + manques.map(function (m, i) {
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);gap:10px;">'
+          + '<div><strong>' + icEscAttr(m.label) + '</strong><br><span style="font-size:12px;color:var(--text-light);">' + icEscAttr(m.fichier) + '</span></div>'
+          + '<button type="button" class="btn btn-primary btn-sm" onclick="closeModal();window._relireManques[' + i + '].fn(window._relireManques[' + i + '].fichier)">Remplir</button>'
+          + '</div>';
+      }).join('');
+  }
+  openDocModal('Relecture du chantier', html, null, null);
+}
+
+// ============================================================================
 // Faits amiante (31/10) : saisie manuelle au depot d'un DIAG, ou a la
 // demande (bouton "Details (RAAT)" a cote de la case Presence amiante).
 // Remplace l'ancienne extraction IA du RAAT -- memes champs, saisis par
@@ -2438,8 +2478,39 @@ function enregistrerFaitsPlanning(affaire, fichierNom) {
   showToast('Planning / co-activites enregistres', 'success');
 }
 
+// Doublon (31/10) : meme type de piece + nom de fichier tres proche deja au
+// dossier. Comparaison sur le nom normalise uniquement, aucune lecture du
+// contenu (pas d'IA).
+function normNomFichier(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+}
+function trouverDoublonRJC(affaire, type, fichierNom) {
+  var n = normNomFichier(fichierNom);
+  if (!n || !affaire || !affaire.rjc) return null;
+  var candidats = affaire.rjc.filter(function (e) { return e.docRef === type; });
+  for (var i = 0; i < candidats.length; i++) {
+    if (normNomFichier(candidats[i].fichierNom || candidats[i].objet) === n) return candidats[i];
+  }
+  return null;
+}
+function confirmerDepotMalgreDoublon(doublon) {
+  return new Promise(function (resolve) {
+    var html = '<p>Un document du même type et du même nom semble déjà avoir été déposé :</p>'
+      + '<p style="margin:8px 0;padding:8px 10px;background:var(--bg-accent);border-radius:6px;font-size:13px;"><strong>' + icEscAttr(doublon.fichierNom || doublon.objet) + '</strong><br>déposé le ' + (doublon.date || '?') + '</p>'
+      + '<p>Déposer quand même (nouvelle version) ?</p>';
+    openDocModal('Document déjà déposé ?', html, 'Déposer quand même', function () { resolve(true); });
+    var cancelBtn = document.getElementById('modal-cancel-btn');
+    if (cancelBtn) cancelBtn.onclick = function () { closeModal(); resolve(false); };
+  });
+}
+
 async function deposerPieceDossier(affaire, file, type) {
   try {
+    var doublon = trouverDoublonRJC(affaire, type, file.name);
+    if (doublon) {
+      var continuer = await confirmerDepotMalgreDoublon(doublon);
+      if (!continuer) { showToast(file.name + ' : dépôt annulé (déjà au dossier)', 'error'); return; }
+    }
     showToast('Depot de ' + file.name + '...');
     var dataUrl = await blobToDataURL(file);
     var natureDepot = type === 'PGC' ? 'Reception PGC'
@@ -3000,6 +3071,10 @@ function openDocModal(title, bodyHtml, confirmLabel, onConfirm) {
   document.getElementById('modal-body').innerHTML = bodyHtml;
   var btn = document.getElementById('modal-confirm-btn');
   var cancelBtn = document.getElementById('modal-cancel-btn');
+  // Remet toujours le bouton Annuler/Fermer sur son comportement par defaut :
+  // sans ca, un onclick pose par un appelant precedent (ex. la confirmation
+  // de doublon au depot) resterait colle sur toutes les modales suivantes.
+  if (cancelBtn) cancelBtn.onclick = function () { closeModal(); };
   if (confirmLabel && onConfirm) {
     btn.style.display = '';
     btn.textContent = confirmLabel;
