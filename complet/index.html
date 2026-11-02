@@ -6692,11 +6692,17 @@ function icInitFormulaire() {
 // generer : ceci ne fait que proposer une valeur de depart.
 function faitsSourceFichier(source) {
   // Extrait le nom du fichier depose a partir du champ "source" d'une fiche
-  // de faits (format "<nom fichier> — saisi le JJ/MM/AAAA"). Vide si saisi
-  // sans fichier (bouton direct) ou issu d'une migration sans nom connu.
+  // de faits. Deux formats possibles :
+  //  - saisie recente : "<nom fichier> — saisi le JJ/MM/AAAA"
+  //  - fiche recuperee par migration (ex-IA, avant le 31/10) :
+  //    "migration (<nom fichier>)" ou "migration (ancienne analyse)" si le
+  //    nom n'etait pas connu a l'epoque.
+  // Vide si saisi sans fichier (bouton direct) ou nom inconnu.
   var s = String(source || '');
   var i = s.indexOf(' — saisi le ');
   if (i >= 0) return s.slice(0, i);
+  var m = s.match(/^migration \((.+)\)$/);
+  if (m && m[1] !== 'ancienne analyse') return m[1];
   return '';
 }
 function icPreRemplirGrilleDepuisFaits() {
