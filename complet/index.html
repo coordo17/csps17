@@ -958,6 +958,8 @@
           <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsContraintes()">Réseaux / contraintes du site</button>
           <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsPlanning()">Planning / co-activités</button>
           <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsCR()">CR de réunion</button>
+          <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="document.getElementById('import-vrac-input').click()">&#128193; Importer un dossier</button>
+          <input type="file" id="import-vrac-input" multiple style="display:none;" onchange="importerDossierVrac(event)">
           <button type="button" class="btn btn-primary btn-sm" style="margin-left:8px;" onclick="relireChantier()">&#128269; Relire le chantier</button>
         </div>
         <div id="pieces-section" style="display:none;margin-bottom:20px;">
@@ -2332,6 +2334,87 @@ async function handlePieceUpload(e, type) {
 }
 
 // ============================================================================
+// Import en lot (02/11) : Alain selectionne tout un dossier Windows (plusieurs
+// fichiers a la fois), CSPS17 devine le type de chaque piece a partir de son
+// nom de fichier et la depose dans la bonne categorie -- meme logique de
+// depot que piece par piece (RJC + duplicate detection), juste sans ouvrir
+// une fiche de faits par fichier (trop d'interruptions en lot : on les
+// repere ensuite d'un coup via "Relire le chantier"). Reconnaissance par
+// mots-cles dans le nom de fichier, pas de lecture du contenu (pas d'IA) --
+// les fichiers non reconnus sont listes pour depot manuel.
+// ============================================================================
+var TYPE_MOTS_CLES_VRAC = [
+  ['CONTRAT', ['contrat', 'convention']],
+  ['ICR', ['inspection', 'ic_individuelle', 'ic signee', 'ic_signee']],
+  ['DIAG', ['amiante', 'plomb', 'crep', 'raat', 'diagnostic', 'diag_']],
+  ['PLAN', ['planning']],
+  ['PLANS', ['plan de masse', 'plan-masse', 'plan masse', 'pic-0', 'pic_0']],
+  ['CONTRAINTES', ['arrete de voirie', 'arrete voirie', 'contrainte']],
+  ['PPSPS', ['ppsps']],
+  ['CRMOA', ['compte rendu', 'cr reunion', 'cr_reunion', 'reunion de chantier', 'cr n°', 'cr n ']],
+  ['PGC', ['pgc']]
+];
+function normFichierClassement(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+function deviserTypePiece(nomFichier) {
+  var n = normFichierClassement(nomFichier);
+  if (n.indexOf('csps17_') === 0) return null; // genere par CSPS17 lui-meme, pas une piece recue
+  for (var i = 0; i < TYPE_MOTS_CLES_VRAC.length; i++) {
+    var ref = TYPE_MOTS_CLES_VRAC[i][0], mots = TYPE_MOTS_CLES_VRAC[i][1];
+    for (var j = 0; j < mots.length; j++) { if (n.indexOf(mots[j]) >= 0) return ref; }
+  }
+  return null;
+}
+async function importerDossierVrac(event) {
+  var affaire = currentAffaireObj();
+  var files = Array.prototype.slice.call(event.target.files || []);
+  event.target.value = '';
+  if (!affaire) { showToast('Ouvrez une affaire avant d\'importer un dossier', 'error'); return; }
+  if (!files.length) return;
+
+  var parType = {}, ignores = [], nonReconnus = [];
+  files.forEach(function (f) {
+    if (normFichierClassement(f.name).indexOf('csps17_') === 0) { ignores.push(f.name); return; }
+    var t = deviserTypePiece(f.name);
+    if (!t) { nonReconnus.push(f.name); return; }
+    (parType[t] = parType[t] || []).push(f);
+  });
+
+  var aTraiter = 0; for (var k in parType) aTraiter += parType[k].length;
+  showToast('Import de ' + aTraiter + ' document(s)...', '');
+
+  var bilan = {}, doublons = 0, erreurs = 0;
+  for (var type in parType) {
+    bilan[type] = 0;
+    for (var i = 0; i < parType[type].length; i++) {
+      var statut = await deposerPieceDossier(affaire, parType[type][i], type, true);
+      if (statut === 'ok') bilan[type]++;
+      else if (statut === 'doublon') doublons++;
+      else if (statut === 'erreur') erreurs++;
+    }
+  }
+
+  var html = '<p style="margin-bottom:8px;">Import termine : <strong>' + (aTraiter - doublons - erreurs) + '</strong> document(s) ajoute(s) au registre.</p>';
+  var lignesBilan = Object.keys(bilan).filter(function (t) { return bilan[t] > 0; }).map(function (t) {
+    var def = PIECES_DOSSIER.filter(function (p) { return p.ref === t; })[0];
+    return '<li>' + icEscAttr(def ? def.title : t) + ' — ' + bilan[t] + '</li>';
+  }).join('');
+  if (lignesBilan) html += '<ul style="margin:0 0 10px 18px;font-size:13px;">' + lignesBilan + '</ul>';
+  if (doublons) html += '<p style="font-size:12px;color:var(--text-light);">' + doublons + ' fichier(s) deja au dossier (ignores, pas de doublon cree).</p>';
+  if (ignores.length) html += '<p style="font-size:12px;color:var(--text-light);">' + ignores.length + ' fichier(s) ignore(s) (generes par CSPS17 lui-meme, pas des pieces recues).</p>';
+  if (nonReconnus.length) {
+    html += '<p style="margin-top:10px;"><strong>' + nonReconnus.length + ' fichier(s) non reconnus</strong>, a deposer a la main dans la bonne categorie :</p>'
+      + '<ul style="margin:4px 0 0 18px;font-size:12px;">' + nonReconnus.map(function (n) { return '<li>' + icEscAttr(n) + '</li>'; }).join('') + '</ul>';
+  }
+  if (aTraiter - doublons - erreurs > 0) {
+    html += '<p style="margin-top:12px;font-size:12px;color:var(--text-light);">Pensez à cliquer sur « Relire le chantier » pour compléter les fiches de faits (amiante, réseaux, planning...) des documents déposés.</p>';
+  }
+  openDocModal('Import en lot', html, null, null);
+  renderDocsGrid();
+}
+
+// ============================================================================
 // Relecture du chantier (31/10) : audit deterministe, PAS une lecture IA du
 // contenu des documents (impossible sans IA). Compare simplement le registre
 // (quels types de document ont ete deposes) a la fiche de faits (qu'est-ce
@@ -2608,12 +2691,13 @@ function confirmerDepotMalgreDoublon(doublon) {
   });
 }
 
-async function deposerPieceDossier(affaire, file, type) {
+async function deposerPieceDossier(affaire, file, type, bulk) {
   try {
     var doublon = trouverDoublonRJC(affaire, type, file.name);
     if (doublon) {
+      if (bulk) return 'doublon';
       var continuer = await confirmerDepotMalgreDoublon(doublon);
-      if (!continuer) { showToast(file.name + ' : dépôt annulé (déjà au dossier)', 'error'); return; }
+      if (!continuer) { showToast(file.name + ' : dépôt annulé (déjà au dossier)', 'error'); return 'annule'; }
     }
     showToast('Depot de ' + file.name + '...');
     var dataUrl = await blobToDataURL(file);
@@ -2644,13 +2728,20 @@ async function deposerPieceDossier(affaire, file, type) {
     showToast(file.name + ' ajoute au dossier', 'success');
     // Saisie manuelle des faits (ex-extraction IA, retiree le 16/09) : pour
     // un diagnostic, on propose tout de suite la petite fiche amiante.
-    if (type === 'DIAG') ouvrirFaitsAmiante(file.name);
-    else if (type === 'CONTRAINTES') ouvrirFaitsContraintes(file.name);
-    else if (type === 'PLAN') ouvrirFaitsPlanning(file.name);
-    else if (type === 'ICR') ouvrirFaitsInspection(file.name);
-    else if (type === 'CRMOA') ouvrirFaitsCR(file.name);
+    // En import en lot (bulk), on ne propose pas une fiche par fichier --
+    // trop d'interruptions -- on laisse "Relire le chantier" les reperer
+    // ensuite d'un coup.
+    if (!bulk) {
+      if (type === 'DIAG') ouvrirFaitsAmiante(file.name);
+      else if (type === 'CONTRAINTES') ouvrirFaitsContraintes(file.name);
+      else if (type === 'PLAN') ouvrirFaitsPlanning(file.name);
+      else if (type === 'ICR') ouvrirFaitsInspection(file.name);
+      else if (type === 'CRMOA') ouvrirFaitsCR(file.name);
+    }
+    return 'ok';
   } catch (err) {
     showToast('Erreur depot : ' + err.message, 'error');
+    return 'erreur';
   }
 }
 
