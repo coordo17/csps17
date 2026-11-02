@@ -2484,6 +2484,25 @@ function relireChantier() {
 // prealable". Ecrit dans affaire.faits.inspectionPrealable, qui alimente
 // deja les observations du CSPS (§11) sur la fiche IC.
 // ============================================================================
+// Construit les <option> d'un menu deroulant a partir des entreprises deja
+// saisies dans Intervenants pour CETTE affaire -- evite d'avoir a retaper
+// de memoire le nom exact d'une entreprise, chantier apres chantier
+// (demande du 02/11). Le champ texte juste en dessous reste modifiable :
+// une entreprise pas encore ajoutee aux Intervenants (un sous-traitant,
+// par exemple) peut toujours etre tapee a la main.
+function faitsOptionsEntreprises(affaire, valeurActuelle) {
+  var opts = '<option value="">-- Choisir dans le dossier --</option>';
+  (affaire.entreprises || []).forEach(function (e) {
+    var nom = e.nom || '';
+    if (!nom) return;
+    opts += '<option value="' + icEscAttr(nom) + '"' + (nom === valeurActuelle ? ' selected' : '') + '>' + icEscAttr(nom) + (e.lot ? ' — ' + icEscAttr(e.lot) : '') + '</option>';
+  });
+  if (valeurActuelle && !(affaire.entreprises || []).some(function (e) { return e.nom === valeurActuelle; })) {
+    opts += '<option value="' + icEscAttr(valeurActuelle) + '" selected>' + icEscAttr(valeurActuelle) + ' (hors Intervenants)</option>';
+  }
+  return opts;
+}
+
 // Depuis le 02/11 : inspectionPrealable est une LISTE (une entree par
 // entreprise inspectee), comme pour les CR de reunion -- un chantier a
 // plusieurs IC prealables, une par entreprise. On retrouve l'entree existante
@@ -2505,7 +2524,10 @@ function ouvrirFaitsInspection(fichierNom) {
     + (fichierNom ? 'Document depose : <strong>' + icEscAttr(fichierNom) + '</strong>. ' : '')
     + 'Une fiche par entreprise inspectee. Alimente les observations du CSPS (§11) sur la fiche IC de cette entreprise. Laissez vide si non concerne.</p>'
     + '<div class="field" style="margin-bottom:10px;"><label>Entreprise concernee</label>'
-    + '<input type="text" id="faits-insp-ent" value="' + icEscAttr(f.entreprise) + '" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;" placeholder="Ex: SARL Dupont Gros-Oeuvre"></div>'
+    + '<select id="faits-insp-ent-sel" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;" onchange="document.getElementById(\'faits-insp-ent\').value = this.value;">'
+    + faitsOptionsEntreprises(affaire, f.entreprise)
+    + '</select>'
+    + '<input type="text" id="faits-insp-ent" value="' + icEscAttr(f.entreprise) + '" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;" placeholder="Ou saisissez un nom (sous-traitant non encore ajoute aux intervenants)"></div>'
     + '<div class="form-row"><div class="field"><label>Article / motif (ex: R.4532-13)</label>'
     + '<input type="text" id="faits-insp-art" value="' + icEscAttr(f.article) + '" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;"></div>'
     + '<div class="field"><label>Delai de remise du PPSPS (jours)</label>'
