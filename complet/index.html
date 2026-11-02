@@ -2434,7 +2434,11 @@ function relireChantier() {
   var diagAmiante = null, diagPlomb = null;
   diagDocs.forEach(function (e) {
     var n = normFichierClassement(e.fichierNom || e.objet || '');
-    if (/plomb/.test(n) && !/amiante/.test(n)) diagPlomb = e; else diagAmiante = e;
+    if (/plomb|crep/.test(n)) diagPlomb = e;
+    else if (/amiante/.test(n)) diagAmiante = e;
+    // un DIAG dont le nom n'evoque ni l'un ni l'autre (ex: une analyse
+    // deposee par erreur sous DIAG) n'est pas retenu ici : on ne veut pas
+    // qu'il soit pris, a tort, pour le rapport amiante ou plomb.
   });
   if (diagAmiante && !faits.amiante.source) manques.push({ label: 'Amiante (diagnostic depose)', fichier: diagAmiante.fichierNom || diagAmiante.objet, fn: ouvrirFaitsAmiante });
   if (diagPlomb && !faits.plomb.source) manques.push({ label: 'Plomb (diagnostic depose)', fichier: diagPlomb.fichierNom || diagPlomb.objet, fn: ouvrirFaitsPlomb });
@@ -2807,7 +2811,9 @@ async function deposerPieceDossier(affaire, file, type, bulk) {
         // tout DIAG ouvrait uniquement la fiche amiante, meme un rapport
         // plomb, qui ne se remplissait donc jamais tout seul).
         var nomDiagNorm = normFichierClassement(file.name);
-        if (/plomb/.test(nomDiagNorm) && !/amiante/.test(nomDiagNorm)) ouvrirFaitsPlomb(file.name);
+        // "crep" = Constat de Risque d'Exposition au Plomb -- autre nom
+        // courant d'un diagnostic plomb avant travaux.
+        if (/plomb|crep/.test(nomDiagNorm)) ouvrirFaitsPlomb(file.name);
         else ouvrirFaitsAmiante(file.name);
       }
       else if (type === 'CONTRAINTES') ouvrirFaitsContraintes(file.name);
@@ -6895,7 +6901,7 @@ function icPreRemplirGrilleDepuisFaits() {
       var diagAm = (terrainAffaire.rjc || []).filter(function (e) {
         if (e.docRef !== 'DIAG') return false;
         var n = normFichierClassement(e.fichierNom || e.objet || '');
-        return !(/plomb/.test(n) && !/amiante/.test(n));
+        return /amiante/.test(n);
       }).pop();
       if (diagAm) ss4Nom = diagAm.fichierNom || diagAm.objet;
     }
