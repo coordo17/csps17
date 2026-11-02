@@ -807,7 +807,7 @@
           <div class="form-card-body">
             <div class="form-row">
               <div class="field"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;"><input type="checkbox" id="rp-amiante"> Presence amiante (Sous-section 3 ou 4)</label> <button type="button" class="btn btn-outline btn-sm" style="padding:2px 8px;font-size:11px;margin-top:4px;" onclick="ouvrirFaitsAmiante()">Details (RAAT)</button></div>
-              <div class="field"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;"><input type="checkbox" id="rp-plomb"> Presence plomb (CREP)</label></div>
+              <div class="field"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;"><input type="checkbox" id="rp-plomb"> Presence plomb (CREP)</label> <button type="button" class="btn btn-outline btn-sm" style="padding:2px 8px;font-size:11px;margin-top:4px;" onclick="ouvrirFaitsPlomb()">Details (CREP)</button></div>
               <div class="field"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;"><input type="checkbox" id="rp-demolition"> Travaux de demolition</label></div>
               <div class="field"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;"><input type="checkbox" id="rp-terrassement"> Terrassement / fouilles</label></div>
               <div class="field"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;"><input type="checkbox" id="rp-reseaux"> Travaux a proximite reseaux (AIPR)</label></div>
@@ -2613,6 +2613,9 @@ function enregistrerFaitsPlomb(affaire, fichierNom) {
   };
   affaire.risques = affaire.risques || {};
   affaire.risques.plomb = ff.plomb.presence;
+  if (currentAffaireId === affaire.id) {
+    var cbp = document.getElementById('rp-plomb'); if (cbp) cbp.checked = ff.plomb.presence;
+  }
   persistAffaires();
   showToast('Faits plomb enregistres', 'success');
 }
