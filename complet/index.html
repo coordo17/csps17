@@ -2563,6 +2563,33 @@ function enregistrerFaitsInspection(affaire, fichierNom) {
 // Alain au lieu d'etre devines. Ecrit dans affaire.faits.amiante, qui
 // alimente deja le PGC et la fiche IC (§12 observations).
 // ============================================================================
+// icAjouterDuree : date ISO (ent.dateInterv) + duree libre (ent.duree) ->
+// date de fin, uniquement quand la duree est ecrite dans un format simple
+// ("3 semaines", "2 mois", "15 jours"). Sinon renvoie null -- pas de calcul
+// deterministe possible (pas d'IA, pas de devinette sur un texte ambigu).
+// Partagee par icCalculerFinDesamiantage et icFormaterPeriodeEntreprise.
+function icAjouterDuree(dateISO, dureeTexte) {
+  if (!dateISO) return null;
+  var m = String(dureeTexte || '').match(/(\d+)\s*(jour|semaine|mois)/i);
+  if (!m) return null;
+  var n = parseInt(m[1], 10);
+  var joursParUnite = { jour: 1, semaine: 7, mois: 30 }[m[2].toLowerCase()];
+  var debut = new Date(dateISO + 'T00:00:00');
+  if (isNaN(debut.getTime())) return null;
+  return new Date(debut.getTime() + n * joursParUnite * 86400000);
+}
+// icFormaterPeriodeEntreprise : pre-remplit le §2 "Periode intervention"
+// d'une fiche IC a partir des dates saisies UNE FOIS dans les Intervenants
+// (Date approx. d'intervention + Duree prevue) -- meme principe que
+// l'automatisation Harmo (une donnee saisie une fois, reutilisee partout),
+// mais en deterministe/manuel plutot que par extraction IA (demande
+// d'Alain du 03/11). Renvoie '' si la date de debut n'est pas renseignee.
+function icFormaterPeriodeEntreprise(e) {
+  if (!e || !e.dateInterv) return '';
+  var debut = formatDateFR(e.dateInterv);
+  var fin = icAjouterDuree(e.dateInterv, e.duree);
+  return fin ? (debut + ' au ' + formatDateFR(fin.toISOString().split('T')[0])) : debut;
+}
 // icCalculerFinDesamiantage : repere dans les Intervenants l'entreprise de
 // demolition/desamiantage (par mot-cle sur le lot/type) et calcule sa date
 // de fin probable = date approx. d'intervention + duree prevue, uniquement
@@ -2575,14 +2602,8 @@ function icCalculerFinDesamiantage(affaire) {
     var e = liste[i];
     var motsCle = normaliserTexte((e.lot || '') + ' ' + (e.type || ''));
     if (!/demolition|desamiant|amiante/.test(motsCle)) continue;
-    if (!e.dateInterv) continue;
-    var m = String(e.duree || '').match(/(\d+)\s*(jour|semaine|mois)/i);
-    if (!m) continue;
-    var n = parseInt(m[1], 10);
-    var joursParUnite = { jour: 1, semaine: 7, mois: 30 }[m[2].toLowerCase()];
-    var debut = new Date(e.dateInterv + 'T00:00:00');
-    if (isNaN(debut.getTime())) continue;
-    var fin = new Date(debut.getTime() + n * joursParUnite * 86400000);
+    var fin = icAjouterDuree(e.dateInterv, e.duree);
+    if (!fin) continue;
     return formatDateFR(fin.toISOString().split('T')[0]);
   }
   return null;
@@ -7075,6 +7096,15 @@ function icApresChoixEntreprise(ent) {
   icSet('fic-ent-nom', ent.nom); icSet('fic-ent-contact', ent.contact); icSet('fic-ent-tel', ent.tel);
   icSet('fic-ent-tel-fixe', ent.telFixe); icSet('fic-ent-lot', ent.lot); icSet('fic-ent-effectif', ent.effectif);
   icSet('t-ent-nom-sig', ent.contact); icSet('t-ent-qualite-sig', ent.nom);
+  // Periode intervention (§2) pre-remplie depuis les dates saisies une fois
+  // dans les Intervenants (Date approx. d'intervention + Duree prevue), sans
+  // ecraser une periode deja tapee sur cette fiche. Alain garde la main pour
+  // corriger/affiner (demande du 03/11 : "comme on a fait pour harmo").
+  var champPer = document.getElementById('fic-ent-periode');
+  if (champPer && !champPer.value) {
+    var perSuggeree = icFormaterPeriodeEntreprise(ent);
+    if (perSuggeree) champPer.value = perSuggeree;
+  }
   // Sous-traitants et prestataires rattaches
   var sts = icEnfants(ent, 'sous-traitant'), prests = icEnfants(ent, 'prestataire');
   var liste = document.getElementById('fic-st-liste');
