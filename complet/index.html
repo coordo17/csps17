@@ -7814,7 +7814,14 @@ function injecterICComplete(zip, d, isCat3) {
     // les reglementaires (r1-r14) avant les BTP courants (r15-r27) ; on
     // ajoute ici le repere textuel pour que ca se voie sans avoir a
     // connaitre les identifiants.
-    var l7 = { a: [], b: [], c: [] };
+    // Restructuration du 03/11 (remarque d'Alain) : le §6 ne compte plus que
+    // les 3 categories OPPBTP (importes / exportes / propres), pas une 4eme
+    // case "co-activite site actif" qui faisait doublon et compliquait la
+    // lecture pour l'entreprise. Un risque coche mais pas encore qualifie
+    // "importe" ou "exporte" pendant l'IC n'apparait plus nulle part --
+    // choix explicite d'Alain pour forcer la qualification sur place plutot
+    // que de laisser une case fourre-tout.
+    var l7 = { b: [], c: [] };
     (d.risquesIC || []).forEach(function (r) {
       var def = (typeof IC_RISQUES_DEF !== 'undefined' && IC_RISQUES_DEF[r.id]) || {};
       var lib = PGC_RISQUES_LIB[r.id] || {};
@@ -7838,12 +7845,10 @@ function injecterICComplete(zip, d, isCat3) {
       // enregistrees avant cette evolution.
       if (r.imp) l7.b.push([label, mes, r.obsImp || r.obs || '']);
       if (r.ex) l7.c.push([label, mesExp, r.obsExp || r.obs || '']);
-      if (r.id === 'r24' || (!r.imp && !r.ex)) l7.a.push([label, mes, r.obs || '']);
     });
     var vide = ['Aucun risque relev\u00e9 lors de l\u2019IC', '', ''];
-    icRemplirLignes(doc, icTable(doc, '6A — Co-activité'), 2, l7.a.length ? l7.a : [vide]);
-    icRemplirLignes(doc, icTable(doc, '6B — Risques importés'), 2, l7.b.length ? l7.b : [vide]);
-    icRemplirLignes(doc, icTable(doc, '6C — Risques exportés'), 2, l7.c.length ? l7.c : [vide]);
+    icRemplirLignes(doc, icTable(doc, '6A — Risques importés'), 2, l7.b.length ? l7.b : [vide]);
+    icRemplirLignes(doc, icTable(doc, '6B — Risques exportés'), 2, l7.c.length ? l7.c : [vide]);
   } else {
     // Cat. 3 : formalites exigees
     var tF = icTable(doc, 'Document exigé');
