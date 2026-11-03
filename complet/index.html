@@ -9147,7 +9147,12 @@ function terrainRemplirEntreprise(idx) {
 // Alain au fil de l'usage -- le choix des risques par lot est un jugement
 // metier, pas une regle ecrite noir sur blanc.
 var METIERS_RISQUES_IDS = {
-  gros_oeuvre: ['r1', 'r15', 'r16', 'r18', 'r19', 'r22'],
+  // r6 ajoute le 03/11 : sur les chantiers d'Alain, c'est generalement le GO
+  // qui installe/raccorde la base vie (eau, electricite, sanitaires) --
+  // declenche donc directement sur le lot Gros œuvre, pas seulement sur un
+  // lot "installations de chantier" separe (cf. base_vie ci-dessous, garde
+  // pour les cas ou une autre entreprise s'en charge).
+  gros_oeuvre: ['r1', 'r6', 'r15', 'r16', 'r18', 'r19', 'r22'],
   charpente_couverture: ['r1', 'r16', 'r18', 'r19'],
   'électricité': ['r6', 'r17', 'r23'],
   plomberie_cvc: ['r3', 'r17', 'r23'],
