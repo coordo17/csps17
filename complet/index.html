@@ -7038,6 +7038,7 @@ function ic7dAjouter(label, coche, proposition, g, rappel) {
   icRpCount++;
   var d = document.createElement('div');
   d.className = 'ic7d-row'; if (proposition) d.setAttribute('data-prop', '1');
+  if (g) d.setAttribute('data-g', g);
   d.style.cssText = 'padding:6px 0;border-bottom:1px solid var(--border);' + (proposition ? 'background:#f8fafc;' : '');
   d.innerHTML = '<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;">'
     + '<input type="checkbox" class="ic7d-ok" title="Confirm\u00e9 avec l\u2019entreprise"' + (coche ? ' checked' : '') + ' style="width:18px;height:18px;">'
@@ -7079,7 +7080,7 @@ function ic7dCollecter() {
   return Array.prototype.slice.call(document.querySelectorAll('#ic7d-liste .ic7d-row')).filter(function (r) {
     return r.querySelector('.ic7d-ok').checked && r.querySelector('.ic7d-lab').value.trim();
   }).map(function (r) {
-    return { label: r.querySelector('.ic7d-lab').value.trim(), origine: r.querySelector('.ic7d-orig').value, mesure: r.querySelector('.ic7d-mes').value.trim() };
+    return { label: r.querySelector('.ic7d-lab').value.trim(), origine: r.querySelector('.ic7d-orig').value, mesure: r.querySelector('.ic7d-mes').value.trim(), gravite: parseInt(r.getAttribute('data-g'), 10) || 0 };
   });
 }
 
@@ -7641,9 +7642,15 @@ function injecterICComplete(zip, d, isCat3) {
     }
   }
 
-  // 7D : risques propres
-  var rp = (d.risquesPropres || []).map(function (r) {
-    return [r.label + (r.origine ? ' (' + r.origine.toLowerCase() + ')' : ''), r.mesure || '\u00c0 pr\u00e9ciser dans le PPSPS', '\u2713'];
+  // 7D : risques propres -- tries par gravite decroissante et marques
+  // "G1" a "G5" dans le libelle (point 3 de la liste convenue avec Alain) :
+  // la donnee de gravite existe deja par fiche metier mais ne remontait
+  // jusqu'ici que dans l'ecran de saisie (badge "G5"), jamais a l'impression.
+  var rp = (d.risquesPropres || []).slice().sort(function (x, y) {
+    return (y.gravite || 0) - (x.gravite || 0);
+  }).map(function (r) {
+    var label = (r.gravite ? 'G' + r.gravite + ' \u2014 ' : '') + r.label + (r.origine ? ' (' + r.origine.toLowerCase() + ')' : '');
+    return [label, r.mesure || '\u00c0 pr\u00e9ciser dans le PPSPS', '\u2713'];
   });
   var t7d = icTable(doc, 'Risque propre (origine)');
   if (t7d) {
