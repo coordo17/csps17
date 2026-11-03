@@ -7178,9 +7178,10 @@ function icInitFormulaire() {
   // saisies a la main plutot qu'extraites par IA). Se redeclenche a chaque
   // modification de la periode.
   var champPeriode = document.getElementById('fic-ent-periode');
-  if (champPeriode) { champPeriode.oninput = function () { icVerifierPeriodeAmiante(); icVerifierCoactiviteDemolition(); }; }
+  if (champPeriode) { champPeriode.oninput = function () { icVerifierPeriodeAmiante(); icVerifierCoactiviteDemolition(); icVerifierCoactiviteEntreprises(); }; }
   icVerifierPeriodeAmiante();
   icVerifierCoactiviteDemolition();
+  icVerifierCoactiviteEntreprises();
 }
 function icDateFR(s) {
   var m = String(s || '').match(/(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{2,4})/);
@@ -7201,6 +7202,24 @@ function icDateDebutPeriode(s) {
   var m = s.match(/(\d{1,2})[\/\.\-](\d{1,2})(?:[\/\.\-](\d{2,4}))?\s*(?:au|à|-|→)\s*(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{2,4})/i);
   if (m) {
     var j = +m[1], mo = +m[2], a = m[3] ? +m[3] : +m[6]; if (a < 100) a += 2000;
+    var d = new Date(a, mo - 1, j);
+    if (!isNaN(d.getTime())) return d;
+  }
+  return icDateFR(s);
+}
+// icDateFinPeriode : symetrique d'icDateDebutPeriode mais pour la date de FIN
+// de periode ("15/11/2026 au 18/11/2026" -> 18/11/2026). Bug trouve le 03/11
+// en testant icVerifierCoactiviteEntreprises : jusqu'ici, tout code qui
+// voulait "la fin de periode" appelait icDateFR(champ), qui ne fait que
+// matcher la PREMIERE date trouvee dans le texte (donc le debut, jamais la
+// fin, sur un champ "X au Y") -- corrige ici, et repris dans
+// icVerifierCoactiviteDemolition (meme bug latent, moins visible car il ne
+// comparait qu'une seule date de part et d'autre).
+function icDateFinPeriode(s) {
+  s = String(s || '');
+  var m = s.match(/(\d{1,2})[\/\.\-](\d{1,2})(?:[\/\.\-](\d{2,4}))?\s*(?:au|à|-|→)\s*(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{2,4})/i);
+  if (m) {
+    var j = +m[4], mo = +m[5], a = +m[6]; if (a < 100) a += 2000;
     var d = new Date(a, mo - 1, j);
     if (!isNaN(d.getTime())) return d;
   }
@@ -7266,7 +7285,7 @@ function icVerifierCoactiviteDemolition() {
   var demoFin = demoFinTxt ? icDateFR(demoFinTxt) : null;
   if (!demoDebut || isNaN(demoDebut.getTime()) || !demoFin) return;
   var entDebut = icDateDebutPeriode(getVal('fic-ent-periode'));
-  var entFin = icDateFR(getVal('fic-ent-periode'));
+  var entFin = icDateFinPeriode(getVal('fic-ent-periode'));
   if (!entDebut || !entFin) return;
   var chevauche = entDebut.getTime() <= demoFin.getTime() && entFin.getTime() >= demoDebut.getTime();
   if (!chevauche) return;
@@ -7278,6 +7297,66 @@ function icVerifierCoactiviteDemolition() {
     var obs = document.getElementById('rqobs-' + id);
     if (obs && !obs.value) obs.value = note;
   });
+}
+// icVerifierCoactiviteEntreprises : generalise icVerifierCoactiviteDemolition
+// a TOUTES les entreprises du chantier, pas seulement celle de demolition
+// (03/11, demande d'Alain -- meme exercice que celui deja fait pour Forge
+// avec PGC_IMPORTES/PGC_EXPORTES, mais fonde ici sur les risques typiques du
+// LOT de chaque entreprise -- risquesDuLot()/METIERS_RISQUES, deja utilise
+// pour le §6D -- plutot que sur des mots-cles detectes dans un texte de PGC).
+// Pour l'entreprise courante de l'IC :
+//  - RISQUES IMPORTES (6B) = risques typiques du lot de CHAQUE AUTRE
+//    entreprise dont la periode chevauche celle de l'entreprise courante
+//    (ce que l'activite des autres fait peser sur elle).
+//  - RISQUES EXPORTES (6C) = risques typiques du lot de l'entreprise
+//    courante elle-meme, uniquement s'il existe au moins une autre
+//    entreprise en chevauchement (sinon rien a exporter vers personne).
+// Jamais de decochage automatique : on ne fait qu'ajouter, comme pour toutes
+// les autres verifications automatiques de la fiche IC -- Alain reste libre
+// de decocher a la main pendant la vraie IC.
+function icVerifierCoactiviteEntreprises() {
+  if (!terrainAffaire) return;
+  var courante = terrainAffaire._entCourante;
+  if (!courante) return;
+  var entDebut = icDateDebutPeriode(getVal('fic-ent-periode'));
+  var entFin = icDateFinPeriode(getVal('fic-ent-periode'));
+  if (!entDebut || !entFin) return;
+  var lotCourant = getVal('fic-ent-lot') || courante.lot || '';
+  var risquesCourants = risquesDuLot(lotCourant);
+  var autresEnChevauchement = [];
+  (terrainAffaire.entreprises || []).forEach(function (e) {
+    if (e === courante || !e.dateInterv) return;
+    var autreDebut = new Date(e.dateInterv + 'T00:00:00');
+    if (isNaN(autreDebut.getTime())) return;
+    var autreFin = icAjouterDuree(e.dateInterv, e.duree) || autreDebut;
+    var chevauche = entDebut.getTime() <= autreFin.getTime() && entFin.getTime() >= autreDebut.getTime();
+    if (!chevauche) return;
+    autresEnChevauchement.push(e);
+    var noteImp = 'Coactivité avec ' + (e.nom || 'une autre entreprise') + ' (' + (e.lot || 'lot non précisé') + '), période en chevauchement — à vérifier pendant l’IC.';
+    risquesDuLot(e.lot).forEach(function (id) {
+      var chk = document.getElementById('rq-' + id);
+      if (!chk) return;
+      if (!chk.checked) { chk.checked = true; toggleRQ(id); }
+      var imp = document.getElementById('imp-' + id);
+      if (imp && !imp.checked) imp.checked = true;
+      var obs = document.getElementById('rqobs-' + id);
+      if (obs && !obs.value) obs.value = noteImp;
+    });
+  });
+  if (autresEnChevauchement.length) {
+    var noms = autresEnChevauchement.map(function (e) { return e.nom; }).filter(Boolean).join(', ');
+    var noteExp = 'Risque propre au lot de l’entreprise, à signaler aux entreprises en coactivité' + (noms ? ' (' + noms + ')' : '') + ' — à vérifier pendant l’IC.';
+    risquesCourants.forEach(function (id) {
+      var chk = document.getElementById('rq-' + id);
+      if (!chk) return;
+      if (!chk.checked) { chk.checked = true; toggleRQ(id); }
+      var ex = document.getElementById('ex-' + id);
+      if (ex && !ex.checked) ex.checked = true;
+      var obs = document.getElementById('rqobs-' + id);
+      if (obs && !obs.value) obs.value = noteExp;
+    });
+  }
+  countRQ();
 }
 // Pre-remplit la grille IC §7 (CMR) et §8 (permis) avec ce qu'on sait deja
 // (affaire.faits) -- vous restez libres de corriger a l'ecran avant de
