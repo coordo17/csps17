@@ -2574,7 +2574,10 @@ function ouvrirFaitsAmiante(fichierNom) {
     + '<div class="field"><label>Bureau / operateur</label>'
     + '<input type="text" id="faits-am-bureau" value="' + icEscAttr(f.bureau) + '" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;"></div></div>'
     + '<div class="field" style="margin-top:10px;"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:14px;">'
-    + '<input type="checkbox" id="faits-am-ss4"' + (f.ss4_obligatoire ? ' checked' : '') + '> Entreprise certifiee SS3/SS4 exigee</label></div>';
+    + '<input type="checkbox" id="faits-am-ss4"' + (f.ss4_obligatoire ? ' checked' : '') + '> Entreprise certifiee SS3/SS4 exigee</label></div>'
+    + '<div class="field" style="margin-top:10px;"><label>Fin prevue du retrait amiante / demolition (JJ/MM/AAAA)</label>'
+    + '<input type="text" id="faits-am-fin" value="' + icEscAttr(f.fin_desamiantage) + '" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;" placeholder="Ex: 15/07/2026">'
+    + '<p style="font-size:12px;color:var(--text-light);margin-top:4px;">Si rempli : sur la fiche IC d\'une entreprise dont la periode d\'intervention (§2) demarre apres cette date, la ligne « Amiante » du §7 se decoche automatiquement avec une observation (l\'entreprise n\'est pas concernee par le desamiantage). Laissez vide pour desactiver ce controle.</p></div>';
   openDocModal('Faits amiante' + (f.source ? ' — source : ' + icEscAttr(f.source) : ''), html, 'Enregistrer', function () {
     enregistrerFaitsAmiante(affaire, fichierNom);
   });
@@ -2587,6 +2590,7 @@ function enregistrerFaitsAmiante(affaire, fichierNom) {
     raat_date: document.getElementById('faits-am-date').value.trim(),
     bureau: document.getElementById('faits-am-bureau').value.trim(),
     ss4_obligatoire: document.getElementById('faits-am-ss4').checked,
+    fin_desamiantage: document.getElementById('faits-am-fin').value.trim(),
     source: (fichierNom ? fichierNom + ' — ' : '') + 'saisi le ' + new Date().toLocaleDateString('fr-FR')
   };
   affaire.risques = affaire.risques || {};
@@ -3259,7 +3263,7 @@ function dateDernieresMesures(affaire) {
 // silencieusement, les anciennes donnees si elles existent encore.
 function faitsVierges() {
   return {
-    amiante: { presence: false, localisation: '', raat_date: '', bureau: '', ss4_obligatoire: false, source: '' },
+    amiante: { presence: false, localisation: '', raat_date: '', bureau: '', ss4_obligatoire: false, fin_desamiantage: '', source: '' },
     plomb: { presence: false, localisation: '', date_rapport: '', bureau: '', source: '' },
     reseaux: { dt_recue: false, dict_envoyee: false, dict_recue: false, date: '', observation: '', source: '' },
     inspectionPrealable: [],
@@ -6885,6 +6889,41 @@ function icInitFormulaire() {
     icApresChoixEntreprise(ent);
   }
   icPreRemplirGrilleDepuisFaits();
+  // Decoche automatiquement "Amiante" au §7 si la periode d'intervention de
+  // l'entreprise (§2) demarre apres la fin du desamiantage/demolition
+  // (03/11, demande d'Alain : meme logique que Harmo, mais sur des dates
+  // saisies a la main plutot qu'extraites par IA). Se redeclenche a chaque
+  // modification de la periode.
+  var champPeriode = document.getElementById('fic-ent-periode');
+  if (champPeriode) { champPeriode.oninput = icVerifierPeriodeAmiante; }
+  icVerifierPeriodeAmiante();
+}
+function icDateFR(s) {
+  var m = String(s || '').match(/(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{2,4})/);
+  if (!m) return null;
+  var j = +m[1], mo = +m[2], a = +m[3]; if (a < 100) a += 2000;
+  var d = new Date(a, mo - 1, j);
+  return isNaN(d.getTime()) ? null : d;
+}
+function icVerifierPeriodeAmiante() {
+  if (!terrainAffaire) return;
+  var f = affaireFaits(terrainAffaire).amiante;
+  var cb = document.getElementById('icg-amiante'), txt = document.getElementById('icg-amiante-t');
+  if (!cb || !txt || !f.fin_desamiantage) return;
+  var finDate = icDateFR(f.fin_desamiantage);
+  var debutEnt = icDateFR(getVal('fic-ent-periode'));
+  var baseTexte = [f.localisation, f.raat_date ? 'RAAT du ' + f.raat_date : '', f.bureau, f.ss4_obligatoire ? 'SS3/SS4 exigee' : ''].filter(Boolean).join(' — ');
+  var noteHorsPeriode = 'Hors periode de desamiantage/demolition (travaux jusqu’au ' + f.fin_desamiantage + ') — entreprise non concernee.';
+  if (finDate && debutEnt && debutEnt.getTime() > finDate.getTime()) {
+    cb.checked = false;
+    txt.value = noteHorsPeriode;
+  } else if (txt.value === noteHorsPeriode) {
+    // La periode a ete corrigee et rentre maintenant dans le delai : on
+    // revient a l'etat normal (sans ecraser un texte qu'Alain aurait tape
+    // lui-meme entre-temps).
+    cb.checked = !!(f.presence || f.raat_date);
+    txt.value = baseTexte;
+  }
 }
 // Pre-remplit la grille IC §7 (CMR) et §8 (permis) avec ce qu'on sait deja
 // (affaire.faits) -- vous restez libres de corriger a l'ecran avant de
