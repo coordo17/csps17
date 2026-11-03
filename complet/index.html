@@ -7650,8 +7650,18 @@ function injecterICComplete(zip, d, isCat3) {
     var debut7d = icEnfantsW(t7d, 'tr').length === 2 ? 1 : 2;
     icRemplirLignes(doc, t7d, debut7d, rp.length ? rp : [['Aucun risque propre relev\u00e9 lors de l\u2019IC', '', '']]);
   }
-  // Points a reporter dans le PPSPS
-  var pts = (d.risquesPropres || []).map(function (r) { return r.label + (r.mesure ? ' : ' + r.mesure : ''); });
+  // Points a reporter dans le PPSPS : les risques reglementaires coches en
+  // §6 (loi:true -- arrete 25/02/2003, les plus graves : hauteur, amiante,
+  // demolition, HTB...) doivent y figurer explicitement, pas seulement les
+  // risques propres du §6D -- sinon une IC qui coche l'amiante en §6A sans
+  // le reporter ici laisse a l'entreprise un pretexte pour ne rien detailler
+  // dans son PPSPS (03/11, point 2 de la liste convenue avec Alain).
+  var loiIds = (typeof icRisquesLoiIds === 'function') ? icRisquesLoiIds() : [];
+  var risquesLoi = (d.risquesIC || []).filter(function (r) { return loiIds.indexOf(r.id) !== -1; }).map(function (r) {
+    var lib = PGC_RISQUES_LIB[r.id] || {};
+    return (lib.label || r.id) + (r.obs ? ' : ' + r.obs : '');
+  });
+  var pts = risquesLoi.concat((d.risquesPropres || []).map(function (r) { return r.label + (r.mesure ? ' : ' + r.mesure : ''); }));
   if (d.pointsPPSPS) pts.push(d.pointsPPSPS);
   var tPts = icRemplacerT(doc, 'Points à reporter dans le PPSPS', function (s) { return s; });
   if (tPts) {
@@ -9290,6 +9300,46 @@ function recroiserRisquesLot() {
   showToast(nbAjoutes > 0 ? (nbAjoutes + ' risque(s) ajoute(s) suivant le lot "' + lotTexte + '"') : 'Risques du lot deja tous coches.', 'success');
 }
 
+// Catalogue des 27 risques du §6 (arrete 25/02/2003 + risques BTP
+// courants) -- sorti d'initRisquesWidget() le 03/11 (point 2 de la liste
+// convenue avec Alain) pour etre reutilise par injecterICComplete() : les
+// risques "loi:true" (reglementaires, les plus graves) coches en IC doivent
+// se retrouver dans "Points a reporter dans le PPSPS", pas seulement les
+// risques propres du §6D.
+var IC_RISQUES_CATALOGUE = [
+  {sep:'Risques particuliers reglementaires — Arrete 25/02/2003'},
+  {id:'r1',  label:'Chute de hauteur > 3 m',                         ref:'Pt.1',  loi:true},
+  {id:'r2',  label:'Ensevelissement / enlisement',                    ref:'Pt.1',  loi:true},
+  {id:'r3',  label:'Substances chimiques / agents biologiques',       ref:'Pt.2',  loi:true},
+  {id:'r4',  label:'Amiante — retrait ou confinement',               ref:'Pt.3',  loi:true},
+  {id:'r5',  label:'Radiations ionisantes',                           ref:'Pt.4',  loi:true},
+  {id:'r6',  label:'Travaux sous tension / HTB (reseaux elec.)',      ref:'Pt.5',  loi:true},
+  {id:'r7',  label:'Risque de noyade',                                ref:'Pt.6',  loi:true},
+  {id:'r8',  label:'Puits / terrassements souterrains / tunnels',     ref:'Pt.7',  loi:true},
+  {id:'r9',  label:'Travaux en plongee appareillee',                  ref:'Pt.8',  loi:true},
+  {id:'r10', label:'Milieu hyperbare',                                ref:'Pt.9',  loi:true},
+  {id:'r11', label:'Demolition / deconstruction > 200 m3',           ref:'Pt.10', loi:true},
+  {id:'r12', label:'Travaux avec explosifs',                          ref:'Pt.11', loi:true},
+  {id:'r13', label:'Montage / demontage elements prefabriques lourds',ref:'Pt.12', loi:true},
+  {id:'r14', label:'Levage lourd > 60 t/m',                          ref:'Pt.13', loi:true},
+  {sep:'Risques courants BTP'},
+  {id:'r15', label:'Chute de plain-pied',                            ref:'BTP',   loi:false},
+  {id:'r16', label:'Projections / Chutes de materiaux',              ref:'BTP',   loi:false},
+  {id:'r17', label:'Points Chauds / Incendie',                       ref:'BTP',   loi:false},
+  {id:'r18', label:'Manutention manuelle / TMS',                     ref:'BTP',   loi:false},
+  {id:'r19', label:'Bruit',                                          ref:'BTP',   loi:false},
+  {id:'r20', label:'Poussieres (hors amiante)',                      ref:'BTP',   loi:false},
+  {id:'r21', label:'Produits dangereux / CMR (hors surv. medicale)', ref:'BTP',   loi:false},
+  {id:'r22', label:'Engins / heurt de vehicules',                    ref:'BTP',   loi:false},
+  {id:'r23', label:'Coupures / blessures outils',                    ref:'BTP',   loi:false},
+  {id:'r24', label:'Coactivite / superposition de taches',           ref:'BTP',   loi:false},
+  {id:'r25', label:'Risque Canicule (decret 2025-482)',              ref:'BTP',   loi:false},
+  {id:'r27', label:'Intemperies / conditions meteo degradees',       ref:'BTP',   loi:false},
+  {id:'r26', label:'AUTRES — precision entreprise',                  ref:'BTP',   loi:false},
+];
+function icRisquesLoiIds() {
+  return IC_RISQUES_CATALOGUE.filter(function (r) { return r.loi; }).map(function (r) { return r.id; });
+}
 function initRisquesWidget() {
   var tbody = document.getElementById('risques-tbody');
   if (!tbody) return;
@@ -9304,37 +9354,7 @@ function initRisquesWidget() {
   var risquesMetier = risquesDuLot(lotCourant);
   window._risquesMetierActifs = risquesMetier;
 
-  var RISQUES = [
-    {sep:'Risques particuliers reglementaires — Arrete 25/02/2003'},
-    {id:'r1',  label:'Chute de hauteur > 3 m',                         ref:'Pt.1',  loi:true},
-    {id:'r2',  label:'Ensevelissement / enlisement',                    ref:'Pt.1',  loi:true},
-    {id:'r3',  label:'Substances chimiques / agents biologiques',       ref:'Pt.2',  loi:true},
-    {id:'r4',  label:'Amiante — retrait ou confinement',               ref:'Pt.3',  loi:true},
-    {id:'r5',  label:'Radiations ionisantes',                           ref:'Pt.4',  loi:true},
-    {id:'r6',  label:'Travaux sous tension / HTB (reseaux elec.)',      ref:'Pt.5',  loi:true},
-    {id:'r7',  label:'Risque de noyade',                                ref:'Pt.6',  loi:true},
-    {id:'r8',  label:'Puits / terrassements souterrains / tunnels',     ref:'Pt.7',  loi:true},
-    {id:'r9',  label:'Travaux en plongee appareillee',                  ref:'Pt.8',  loi:true},
-    {id:'r10', label:'Milieu hyperbare',                                ref:'Pt.9',  loi:true},
-    {id:'r11', label:'Demolition / deconstruction > 200 m3',           ref:'Pt.10', loi:true},
-    {id:'r12', label:'Travaux avec explosifs',                          ref:'Pt.11', loi:true},
-    {id:'r13', label:'Montage / demontage elements prefabriques lourds',ref:'Pt.12', loi:true},
-    {id:'r14', label:'Levage lourd > 60 t/m',                          ref:'Pt.13', loi:true},
-    {sep:'Risques courants BTP'},
-    {id:'r15', label:'Chute de plain-pied',                            ref:'BTP',   loi:false},
-    {id:'r16', label:'Projections / Chutes de materiaux',              ref:'BTP',   loi:false},
-    {id:'r17', label:'Points Chauds / Incendie',                       ref:'BTP',   loi:false},
-    {id:'r18', label:'Manutention manuelle / TMS',                     ref:'BTP',   loi:false},
-    {id:'r19', label:'Bruit',                                          ref:'BTP',   loi:false},
-    {id:'r20', label:'Poussieres (hors amiante)',                      ref:'BTP',   loi:false},
-    {id:'r21', label:'Produits dangereux / CMR (hors surv. medicale)', ref:'BTP',   loi:false},
-    {id:'r22', label:'Engins / heurt de vehicules',                    ref:'BTP',   loi:false},
-    {id:'r23', label:'Coupures / blessures outils',                    ref:'BTP',   loi:false},
-    {id:'r24', label:'Coactivite / superposition de taches',           ref:'BTP',   loi:false},
-    {id:'r25', label:'Risque Canicule (decret 2025-482)',              ref:'BTP',   loi:false},
-    {id:'r27', label:'Intemperies / conditions meteo degradees',       ref:'BTP',   loi:false},
-    {id:'r26', label:'AUTRES — precision entreprise',                  ref:'BTP',   loi:false},
-  ];
+  var RISQUES = IC_RISQUES_CATALOGUE;
 
   var html = '';
   RISQUES.forEach(function(r) {
