@@ -6914,7 +6914,8 @@ function icVerifierPeriodeAmiante() {
   var debutEnt = icDateFR(getVal('fic-ent-periode'));
   var baseTexte = [f.localisation, f.raat_date ? 'RAAT du ' + f.raat_date : '', f.bureau, f.ss4_obligatoire ? 'SS3/SS4 exigee' : ''].filter(Boolean).join(' — ');
   var noteHorsPeriode = 'Hors periode de desamiantage/demolition (travaux jusqu’au ' + f.fin_desamiantage + ') — entreprise non concernee.';
-  if (finDate && debutEnt && debutEnt.getTime() > finDate.getTime()) {
+  var horsPeriode = !!(finDate && debutEnt && debutEnt.getTime() > finDate.getTime());
+  if (horsPeriode) {
     cb.checked = false;
     txt.value = noteHorsPeriode;
   } else if (txt.value === noteHorsPeriode) {
@@ -6923,6 +6924,23 @@ function icVerifierPeriodeAmiante() {
     // lui-meme entre-temps).
     cb.checked = !!(f.presence || f.raat_date);
     txt.value = baseTexte;
+  }
+  // Meme logique sur le §6 "Analyse des risques — Interferences" (la ligne
+  // "Amiante — retrait ou confinement", rq-r4) : c'est elle, pas le simple
+  // tableau CMR du §7, qui porte le risque + mesures que l'entreprise
+  // consulte et signe (remarque d'Alain du 03/11).
+  var rqCb = document.getElementById('rq-r4'), rqObs = document.getElementById('rqobs-r4');
+  if (rqCb) {
+    if (horsPeriode && rqCb.checked) {
+      rqCb.checked = false;
+      if (rqObs) rqObs.value = noteHorsPeriode;
+      toggleRQ('r4');
+    } else if (!horsPeriode && rqObs && rqObs.value === noteHorsPeriode) {
+      var pgcR = (terrainAffaire.risques_pgc) ? terrainAffaire.risques_pgc : (window._risquesPGC || {});
+      rqCb.checked = !!pgcR['r4'];
+      rqObs.value = '';
+      toggleRQ('r4');
+    }
   }
 }
 // Pre-remplit la grille IC §7 (CMR) et §8 (permis) avec ce qu'on sait deja
