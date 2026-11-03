@@ -2772,17 +2772,21 @@ function icFormaterPeriodeEntreprise(e) {
 // quand la duree est ecrite dans un format simple ("3 semaines", "2 mois",
 // "15 jours"). Sinon renvoie null -- pas de calcul deterministe possible,
 // on laisse Alain saisir lui-meme (pas d'IA, pas de devinette).
-function icCalculerFinDesamiantage(affaire) {
+function icTrouverEntrepriseDemolition(affaire) {
   var liste = (affaire && affaire.entreprises) || [];
   for (var i = 0; i < liste.length; i++) {
     var e = liste[i];
     var motsCle = normaliserTexte((e.lot || '') + ' ' + (e.type || ''));
-    if (!/demolition|desamiant|amiante/.test(motsCle)) continue;
-    var fin = icAjouterDuree(e.dateInterv, e.duree);
-    if (!fin) continue;
-    return formatDateFR(fin.toISOString().split('T')[0]);
+    if (/demolition|desamiant|amiante/.test(motsCle)) return e;
   }
   return null;
+}
+function icCalculerFinDesamiantage(affaire) {
+  var e = icTrouverEntrepriseDemolition(affaire);
+  if (!e) return null;
+  var fin = icAjouterDuree(e.dateInterv, e.duree);
+  if (!fin) return null;
+  return formatDateFR(fin.toISOString().split('T')[0]);
 }
 function ouvrirFaitsAmiante(fichierNom) {
   var affaire = currentAffaireObj();
@@ -2837,6 +2841,7 @@ function enregistrerFaitsAmiante(affaire, fichierNom) {
   // fallait fermer/rouvrir la fiche IC pour que la nouvelle date "Fin
   // prevue" soit prise en compte (constat d'Alain le 03/11).
   if (typeof icVerifierPeriodeAmiante === 'function') icVerifierPeriodeAmiante();
+  if (typeof icVerifierCoactiviteDemolition === 'function') icVerifierCoactiviteDemolition();
   showToast('Faits amiante enregistres', 'success');
 }
 
@@ -7156,8 +7161,9 @@ function icInitFormulaire() {
   // saisies a la main plutot qu'extraites par IA). Se redeclenche a chaque
   // modification de la periode.
   var champPeriode = document.getElementById('fic-ent-periode');
-  if (champPeriode) { champPeriode.oninput = icVerifierPeriodeAmiante; }
+  if (champPeriode) { champPeriode.oninput = function () { icVerifierPeriodeAmiante(); icVerifierCoactiviteDemolition(); }; }
   icVerifierPeriodeAmiante();
+  icVerifierCoactiviteDemolition();
 }
 function icDateFR(s) {
   var m = String(s || '').match(/(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{2,4})/);
@@ -7220,6 +7226,41 @@ function icVerifierPeriodeAmiante() {
       toggleRQ('r4');
     }
   }
+}
+// icVerifierCoactiviteDemolition : symetrique d'icVerifierPeriodeAmiante,
+// mais dans l'autre sens -- si la periode de L'ENTREPRISE COURANTE recoupe
+// reellement celle de la demolition/desamiantage (et que ce n'est pas elle-
+// meme l'entreprise de demolition), on active les risques de coactivite qui
+// vont avec (ensevelissement, demolition>200m3, projections, poussieres,
+// engins) plutot que de laisser ca a la seule vigilance manuelle (03/11,
+// liste convenue avec Alain -- point 1). On ne decoche jamais ces cases
+// automatiquement : on ne fait qu'ajouter, pour ne pas ecraser une decision
+// prise a la main pendant une vraie IC.
+var IC_RISQUES_COACTIVITE_DEMOLITION = ['r2', 'r11', 'r16', 'r20', 'r22'];
+function icVerifierCoactiviteDemolition() {
+  if (!terrainAffaire) return;
+  var demo = icTrouverEntrepriseDemolition(terrainAffaire);
+  if (!demo) return;
+  var courante = terrainAffaire._entCourante;
+  if (courante && demo === courante) return; // l'entreprise de demolition a deja ses propres risques via son lot
+  var demoDebut = demo.dateInterv ? new Date(demo.dateInterv + 'T00:00:00') : null;
+  var f = affaireFaits(terrainAffaire).amiante;
+  var demoFinTxt = f.fin_desamiantage || icCalculerFinDesamiantage(terrainAffaire);
+  var demoFin = demoFinTxt ? icDateFR(demoFinTxt) : null;
+  if (!demoDebut || isNaN(demoDebut.getTime()) || !demoFin) return;
+  var entDebut = icDateDebutPeriode(getVal('fic-ent-periode'));
+  var entFin = icDateFR(getVal('fic-ent-periode'));
+  if (!entDebut || !entFin) return;
+  var chevauche = entDebut.getTime() <= demoFin.getTime() && entFin.getTime() >= demoDebut.getTime();
+  if (!chevauche) return;
+  var note = 'Chevauchement avec la démolition/désamiantage (' + (demo.nom || 'entreprise concernée') + ', jusqu’au ' + demoFinTxt + ') — coactivité à vérifier pendant l’IC.';
+  IC_RISQUES_COACTIVITE_DEMOLITION.forEach(function (id) {
+    var chk = document.getElementById('rq-' + id);
+    if (!chk) return;
+    if (!chk.checked) { chk.checked = true; toggleRQ(id); }
+    var obs = document.getElementById('rqobs-' + id);
+    if (obs && !obs.value) obs.value = note;
+  });
 }
 // Pre-remplit la grille IC §7 (CMR) et §8 (permis) avec ce qu'on sait deja
 // (affaire.faits) -- vous restez libres de corriger a l'ecran avant de
