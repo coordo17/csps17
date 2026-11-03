@@ -5187,6 +5187,49 @@ var PGC_RISQUES_LIB = {
   r27: { label: 'Intempéries', mesures: 'Arrêt des travaux en hauteur ou de levage si vent > 50-60 km/h ou vigilance orange/rouge. Suivi Météo-France. Report des travaux extérieurs en cas de verglas, neige, fortes pluies.' },
 };
 
+// PGC_RISQUES_LIB_EXPORTE : mesures distinctes pour le §6C "Risques exportes"
+// -- l'OPPBTP distingue clairement risques importes (mesures = comment
+// L'ENTREPRISE se protege d'un risque venant d'un tiers) et risques exportes
+// (mesures = comment L'ENTREPRISE protege LES AUTRES d'un risque qu'elle
+// genere elle-meme) : ce ne sont jamais les memes consignes, meme quand le
+// risque technique porte le meme nom (ex. "Bruit" importe = porter une
+// protection auditive ; "Bruit" exporte = regrouper ses propres horaires
+// bruyants et prevenir les autres). Remarque d'Alain du 03/11, confirmee
+// sur preventionbtp.fr (3 categories distinctes du PPSPS, mesures a
+// distinguer). Memes 27 risques que PGC_RISQUES_LIB, cote "je protege les
+// autres" plutot que "je me protege" -- base sur le meme niveau de
+// generalite (coordination de chantier) que le reste du catalogue, pas du
+// chiffre invente.
+var PGC_RISQUES_LIB_EXPORTE = {
+  r1:  { mesures: "Zone de survol balisée et interdite aux autres corps d'état pendant les travaux en hauteur. Sac porte-outils attaché, filet de recueil sous la zone si nécessaire. Signal sonore avant toute manutention en hauteur." },
+  r2:  { mesures: "Fouille balisée (K2, filets, panneaux) interdisant l'accès aux autres corps d'état. Aucun stockage ni circulation d'engins tiers à proximité du bord. Remblai ou protection dès la fin de l'intervention." },
+  r3:  { mesures: "Zone de manipulation/stockage des produits balisée et interdite aux autres intervenants. FDS affichées en entrée de zone. Information des entreprises voisines avant toute application émettant des vapeurs." },
+  r4:  { mesures: "Aucune coactivité pendant le retrait (zone confinée, accès interdit aux autres corps d'état). Information du CSPS et des entreprises voisines avant et après intervention. Évacuation sans délai des déchets amiantés hors zone commune." },
+  r5:  { mesures: "Périmètre balisé et interdit aux personnes non habilitées. Signalisation réglementaire visible depuis les zones voisines. Information des entreprises voisines des horaires d'exposition." },
+  r6:  { mesures: "Câbles provisoires fixés en hauteur, hors des zones de passage des autres corps d'état. Signalisation des zones sous tension ou consignées. Information des entreprises voisines avant toute phase de consignation/réalimentation." },
+  r7:  { mesures: "Zone à proximité de l'eau balisée et interdite aux intervenants non équipés. Dispositif de récupération visible et accessible depuis les zones voisines." },
+  r8:  { mesures: "Accès à l'espace confiné interdit et signalé aux autres corps d'état. Information du CSPS avant toute intervention." },
+  r9:  { mesures: "Périmètre nautique balisé. Information des autres intervenants des horaires d'intervention." },
+  r10: { mesures: "Zone d'intervention balisée et interdite. Information des entreprises voisines des horaires d'intervention." },
+  r11: { mesures: "Zone de démolition définie, délimitée et rendue inaccessible aux autres corps d'état — aucune superposition de tâches. Protection des constructions et zones voisines contre heurts et projections. Terrain laissé exempt de tout élément à risque pour les lots suivants." },
+  r12: { mesures: "Périmètre de sécurité et évacuation des autres intervenants avant tir. Signalisation réglementaire. Information préalable de toutes les entreprises du chantier." },
+  r13: { mesures: "Zone de levage/montage balisée et interdite aux autres corps d'état pendant la manœuvre. Signal sonore avant levage." },
+  r14: { mesures: "Zone d'évolution barriérée interdite aux autres corps d'état, pas de survol de zones occupées hors emprise autorisée. Coordination radio avant toute manœuvre." },
+  r15: { mesures: "Aucun stockage de matériel/déchets dans les zones de circulation communes. Nettoyage du poste de travail en fin de journée pour ne pas gêner les autres intervenants." },
+  r16: { mesures: "Écrans ou neutralisation des zones pouvant être impactées par les projections ou chutes de matériaux issus de l'activité de l'entreprise. Zone à risque affichée pour les autres corps d'état." },
+  r17: { mesures: "Permis de feu déclaré au MOE/CSPS. Information des entreprises voisines avant travaux par point chaud. Extincteur adapté visible, zone surveillée pendant et après l'opération." },
+  r18: { mesures: "Zones de manutention/stockage de charges signalées et dégagées pour ne pas gêner la circulation des autres corps d'état." },
+  r19: { mesures: "Horaires des travaux bruyants regroupés et communiqués au CSPS et aux autres entreprises avant la phase bruyante. Capots insonorisants ou écrans acoustiques si possible." },
+  r20: { mesures: "Aspiration à la source, arrosage ou bâche de confinement pour limiter la diffusion vers les zones occupées par d'autres corps d'état. Information du CSPS avant toute opération poussiéreuse importante." },
+  r21: { mesures: "Zone de stockage/application signalée et interdite aux autres intervenants pendant la manipulation ou le séchage. Information préalable en cas d'émission de vapeurs (COV)." },
+  r22: { mesures: "Guideur de manœuvre désigné pour les livraisons/manœuvres à proximité d'autres corps d'état. Plan de circulation affiché et respecté. Vitesse limitée en zone commune." },
+  r23: { mesures: "Outils et équipements rangés hors des zones de passage commun. Aucun déchet coupant laissé en zone de circulation partagée." },
+  r24: { mesures: "Planning de coactivité établi et affiché. Zones de travaux balisées hermétiquement vis-à-vis des autres corps d'état." },
+  r25: { mesures: "Information des autres entreprises en cas d'arrêt de travaux programmé pour alerte canicule, pour coordination du planning commun." },
+  r26: { mesures: "Balisage hermétique des zones de travaux vis-à-vis des autres corps d'état. Précisions à apporter par l'entreprise dans son PPSPS." },
+  r27: { mesures: "Information des autres entreprises en cas de report de travaux extérieurs pour coordination du planning commun." },
+};
+
 // ── PASSE B : agregation des elements deposes (diagnostics + plannings +
 // contraintes + plans) pour PRE-REMPLIR le PGC. Lit affaire.rapportsAnalyses
 // (rempli par les analyses IA au depot) et compose des textes prets a injecter
@@ -7774,10 +7817,19 @@ function injecterICComplete(zip, d, isCat3) {
       var estLoi = icRisquesLoiIds().indexOf(r.id) !== -1;
       var ref = icRisqueRef(r.id);
       var label = (estLoi ? '[Art. 25/02/2003 ' + ref + '] ' : '') + (lib.label || def.label || r.id);
-      var ligne = [label, mes, r.obs || ''];
-      if (r.imp) l7.b.push(ligne);
-      if (r.ex) l7.c.push(ligne);
-      if (r.id === 'r24' || (!r.imp && !r.ex)) l7.a.push(ligne);
+      // 6B/6C : l'OPPBTP distingue clairement risques importes (subis par
+      // l'entreprise -- les mesures decrivent comment ELLE se protege) et
+      // risques exportes (generes par l'entreprise -- les mesures decrivent
+      // comment ELLE protege LES AUTRES) : ce ne sont jamais les memes
+      // mesures, meme quand le risque technique porte le meme nom
+      // (remarque d'Alain du 03/11, confirmee sur preventionbtp.fr). 6B
+      // reprend "mes" (mesures de protection de l'entreprise, deja
+      // existantes) ; 6C utilise le catalogue dedie PGC_RISQUES_LIB_EXPORTE
+      // (comment l'entreprise protege les autres), pas le meme texte.
+      var mesExp = (PGC_RISQUES_LIB_EXPORTE[r.id] && PGC_RISQUES_LIB_EXPORTE[r.id].mesures) || mes;
+      if (r.imp) l7.b.push([label, mes, r.obs || '']);
+      if (r.ex) l7.c.push([label, mesExp, r.obs || '']);
+      if (r.id === 'r24' || (!r.imp && !r.ex)) l7.a.push([label, mes, r.obs || '']);
     });
     var vide = ['Aucun risque relev\u00e9 lors de l\u2019IC', '', ''];
     icRemplirLignes(doc, icTable(doc, '6A — Co-activité'), 2, l7.a.length ? l7.a : [vide]);
