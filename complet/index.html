@@ -7615,13 +7615,24 @@ function injecterICComplete(zip, d, isCat3) {
       if (m[2] === 'nom') icLigne(doc, t11, m[0], [val ? '\u2713' : '\u2014', val || '']);
       else icLigne(doc, t11, m[0], [icCoche(val), '']);
     });
-    // 7A / 7B / 7C : risques coches, mesures verifiees (PGC_RISQUES_LIB)
+    // 7A / 7B / 7C : risques coches, mesures verifiees (PGC_RISQUES_LIB).
+    // Point 4 de la liste convenue avec Alain : distinguer visuellement les
+    // risques reglementaires (arrete 25/02/2003, intrinsequement les plus
+    // graves) des risques BTP courants -- l'ecran de saisie le montre deja
+    // (badge "Pt.X" vs "BTP"), jamais l'impression. L'ordre de d.risquesIC
+    // (construit par countRQ() sur r1..r27 dans l'ordre) place deja de fait
+    // les reglementaires (r1-r14) avant les BTP courants (r15-r27) ; on
+    // ajoute ici le repere textuel pour que ca se voie sans avoir a
+    // connaitre les identifiants.
     var l7 = { a: [], b: [], c: [] };
     (d.risquesIC || []).forEach(function (r) {
       var def = (typeof IC_RISQUES_DEF !== 'undefined' && IC_RISQUES_DEF[r.id]) || {};
       var lib = PGC_RISQUES_LIB[r.id] || {};
       var mes = def.mesures ? def.mesures.join('\n') : (lib.mesures || '');
-      var ligne = [lib.label || def.label || r.id, mes, r.obs || ''];
+      var estLoi = icRisquesLoiIds().indexOf(r.id) !== -1;
+      var ref = icRisqueRef(r.id);
+      var label = (estLoi ? '[Art. 25/02/2003 ' + ref + '] ' : '') + (lib.label || def.label || r.id);
+      var ligne = [label, mes, r.obs || ''];
       if (r.imp) l7.b.push(ligne);
       if (r.ex) l7.c.push(ligne);
       if (r.id === 'r24' || (!r.imp && !r.ex)) l7.a.push(ligne);
@@ -9346,6 +9357,10 @@ var IC_RISQUES_CATALOGUE = [
 ];
 function icRisquesLoiIds() {
   return IC_RISQUES_CATALOGUE.filter(function (r) { return r.loi; }).map(function (r) { return r.id; });
+}
+function icRisqueRef(id) {
+  var r = IC_RISQUES_CATALOGUE.filter(function (x) { return x.id === id; })[0];
+  return r ? r.ref : '';
 }
 function initRisquesWidget() {
   var tbody = document.getElementById('risques-tbody');
