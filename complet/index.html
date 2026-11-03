@@ -906,7 +906,10 @@
               <button class="btn btn-outline btn-sm" onclick="addEntreprise('principale')">+ Entreprise principale</button>
               <button class="btn btn-outline btn-sm" onclick="addEntreprise('sous-traitant')">+ Sous-traitant</button>
               <button class="btn btn-outline btn-sm" onclick="addEntreprise('prestataire')">+ Prestataire de service</button>
+              <button type="button" class="btn btn-outline btn-sm" onclick="planningChoisirFichier()">&#128197; Analyser un planning (PDF)</button>
+              <input type="file" id="planning-import-input" accept=".pdf" style="display:none;" onchange="planningFichierChoisi(event)">
             </div>
+            <p style="font-size:11px;color:var(--text-light);margin-top:6px;">Lit le tableau d'un planning PDF (type export MS Project) et propose une Date d'intervention + Duree par entreprise, par rapprochement de mots-cles avec son lot. Aucune IA — lecture du texte du PDF uniquement. Vous validez/corrigez chaque ligne avant application.</p>
           </div>
         </div>
       </div>
@@ -1297,6 +1300,179 @@ function addEntreprise(type) {
   div.innerHTML = h;
   document.getElementById('entreprise-list').appendChild(div);
   if (typeof icCarteEntreprise === 'function') icCarteEntreprise(div, type);
+}
+
+// ============================================================================
+// Import planning (03/11, demande d'Alain : "comment faire pour que les
+// dates se mettent comme on a fait pour harmo ?"). Principe deterministe
+// (pas d'IA) : on lit le texte d'un planning PDF deja structure en tableau
+// (export MS Project -- colonnes Nom de la tache / Duree / Debut / Fin),
+// on repere la ligne de chaque lot d'entreprise par mot-cle, on en tire une
+// date de debut + duree, et Alain valide/corrige avant que ca ecrase quoi
+// que ce soit dans Intervenants. Ne fonctionne que sur un PDF avec une
+// couche texte exploitable (pas un planning scanne/image) -- dans ce cas
+// aucune ligne n'est trouvee et la saisie reste manuelle.
+// ============================================================================
+function planningNormaliser(s) {
+  return normaliserTexte(String(s || '').toLowerCase().replace(/œ/g, 'oe').replace(/æ/g, 'ae'))
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+}
+// Reconstruit des "lignes" de tableau a partir des positions (x,y) des
+// morceaux de texte du PDF -- pdf.js ne donne que des fragments bruts, pas
+// de notion de ligne/colonne. On regroupe par Y proche puis on trie par X.
+async function planningLireLignesPDF(file) {
+  var ab = await file.arrayBuffer();
+  var pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+  var maxPages = Math.min(pdf.numPages, 60);
+  var lignes = [];
+  for (var p = 1; p <= maxPages; p++) {
+    var page = await pdf.getPage(p);
+    var tc = await page.getTextContent();
+    var items = tc.items.map(function (it) {
+      return { str: it.str, x: it.transform[4], y: it.transform[5] };
+    }).filter(function (it) { return it.str && it.str.trim(); });
+    items.sort(function (a, b) { return (b.y - a.y) || (a.x - b.x); });
+    var courante = [], yCour = null;
+    items.forEach(function (it) {
+      if (yCour === null || Math.abs(it.y - yCour) <= 2) {
+        courante.push(it); if (yCour === null) yCour = it.y;
+      } else {
+        courante.sort(function (a, b) { return a.x - b.x; });
+        lignes.push(courante.map(function (i2) { return i2.str; }).join(' '));
+        courante = [it]; yCour = it.y;
+      }
+    });
+    if (courante.length) {
+      courante.sort(function (a, b) { return a.x - b.x; });
+      lignes.push(courante.map(function (i2) { return i2.str; }).join(' '));
+    }
+  }
+  return lignes;
+}
+// Cherche les deux premieres dates JJ/MM/AA(AA) dans une fenetre de
+// quelques lignes a partir de "depart" -- les plannings exportes etalent
+// souvent une meme ligne de tableau sur 2-3 lignes de texte (nom de tache
+// qui retombe a la ligne), les dates se retrouvant parfois juste en
+// dessous du nom plutot que sur la meme ligne.
+function planningExtraireDeuxDates(lignes, depart, fenetre) {
+  var dates = [];
+  for (var i = depart; i < Math.min(lignes.length, depart + fenetre) && dates.length < 2; i++) {
+    var re = /(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{2,4})/g, m;
+    while ((m = re.exec(lignes[i])) && dates.length < 2) {
+      var j = +m[1], mo = +m[2], a = +m[3]; if (a < 100) a += 2000;
+      var d = new Date(a, mo - 1, j);
+      if (!isNaN(d.getTime())) dates.push(d);
+    }
+  }
+  if (dates.length < 2) return null;
+  dates.sort(function (a, b) { return a - b; });
+  return { debut: dates[0], fin: dates[dates.length - 1] };
+}
+function planningListerEntreprisesDOM() {
+  return Array.prototype.slice.call(document.querySelectorAll('#entreprise-list .entreprise-card')).map(function (card) {
+    return {
+      nom: card.querySelector('.ent-nom') ? card.querySelector('.ent-nom').value : '',
+      lot: card.querySelector('.ent-lot') ? card.querySelector('.ent-lot').value : ''
+    };
+  });
+}
+// Pour chaque entreprise, on decoupe son lot en mots-cles ("VRD /
+// Demolition / Desamiantage" -> ["vrd","demolition","desamiantage"]) et on
+// cherche la ligne du planning qui contient un de ces mots-cles en mot
+// entier -- en priorite une ligne "phase" (le mot-cle demarre juste apres
+// le(s) numero(s) de ligne en debut de tableau, ex: "25 26 DALLAGE ..."),
+// qui donne la periode globale du lot, plutot qu'une sous-tache qui le
+// mentionne juste en passant (ex: "16 Reseaux sous dallage ..." match
+// aussi "dallage" mais n'est pas la periode du lot Dallage). A defaut de
+// ligne "phase", on garde la 1ere occurrence trouvee dans le document.
+function planningApparierEntreprises(entreprisesDOM, lignes) {
+  var lignesNorm = lignes.map(planningNormaliser);
+  return entreprisesDOM.map(function (e, idx) {
+    var mots = String(e.lot || '').split(/[\/,;]| et /i).map(planningNormaliser).filter(function (s) { return s.length > 2; });
+    for (var mi = 0; mi < mots.length; mi++) {
+      var mot = mots[mi];
+      var re = new RegExp('\\b' + mot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b');
+      var candidats = [];
+      for (var li = 0; li < lignesNorm.length; li++) { if (re.test(lignesNorm[li])) candidats.push(li); }
+      if (!candidats.length) continue;
+      var ligneChoisie = candidats.find(function (c) {
+        var reste = lignesNorm[c].replace(/^[\d\s]+/, '');
+        return reste === mot || reste.indexOf(mot + ' ') === 0;
+      });
+      if (ligneChoisie === undefined) ligneChoisie = candidats[0];
+      var periode = planningExtraireDeuxDates(lignes, ligneChoisie, 3);
+      if (periode) {
+        return {
+          idx: idx, nom: e.nom, lot: e.lot, motTrouve: mot, ligneTrouvee: lignes[ligneChoisie].trim().slice(0, 90),
+          debutISO: periode.debut.toISOString().split('T')[0], finISO: periode.fin.toISOString().split('T')[0]
+        };
+      }
+    }
+    return { idx: idx, nom: e.nom, lot: e.lot, motTrouve: null };
+  });
+}
+function planningChoisirFichier() {
+  var input = document.getElementById('planning-import-input');
+  if (input) input.click();
+}
+async function planningFichierChoisi(event) {
+  var file = event.target.files && event.target.files[0];
+  event.target.value = '';
+  if (!file) return;
+  if (!document.querySelectorAll('#entreprise-list .entreprise-card').length) {
+    showToast('Ajoutez d’abord vos entreprises dans Intervenants', 'error'); return;
+  }
+  showToast('Lecture du planning en cours...', 'success');
+  try {
+    var lignes = await planningLireLignesPDF(file);
+    var resultats = planningApparierEntreprises(planningListerEntreprisesDOM(), lignes);
+    planningAfficherResultats(file.name, resultats);
+  } catch (err) {
+    showToast('Lecture du planning impossible : ' + err.message, 'error');
+  }
+}
+function planningAfficherResultats(fichierNom, resultats) {
+  var html = '<p style="margin-bottom:10px;font-size:13px;color:var(--text-light);">'
+    + 'Périodes repérées dans <strong>' + icEscAttr(fichierNom) + '</strong> par rapprochement de mots-clés avec le lot de chaque entreprise (aucune IA — simple lecture du tableau du planning, pas toujours fiable sur un planning scanné ou très complexe). '
+    + 'Vérifiez/corrigez chaque ligne avant d’appliquer : cocher une ligne écrase la Date d’intervention et la Durée de cette entreprise dans Intervenants.</p>'
+    + '<div style="display:flex;flex-direction:column;gap:8px;">';
+  resultats.forEach(function (r, i) {
+    if (!r.motTrouve) {
+      html += '<div style="padding:8px 10px;background:var(--bg-accent);border-radius:6px;font-size:13px;">'
+        + '<strong>' + icEscAttr(r.nom || 'Entreprise ' + (i + 1)) + '</strong> (' + icEscAttr(r.lot || 'lot non précisé') + ') — aucune ligne du planning ne correspond. À saisir manuellement.</div>';
+      return;
+    }
+    var jours = Math.max(1, Math.round((new Date(r.finISO) - new Date(r.debutISO)) / 86400000));
+    html += '<div style="padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;">'
+      + '<label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" class="plan-res-cb" data-idx="' + r.idx + '" checked>'
+      + '<strong>' + icEscAttr(r.nom || 'Entreprise ' + (i + 1)) + '</strong> (' + icEscAttr(r.lot || '') + ')</label>'
+      + '<div style="margin-top:4px;color:var(--text-light);">Trouvé via « ' + icEscAttr(r.motTrouve) + ' » — ligne : « ' + icEscAttr(r.ligneTrouvee) + ' »</div>'
+      + '<div class="form-row" style="margin-top:6px;">'
+      + '<div class="field"><label>Date début</label><input type="date" class="plan-res-debut" data-idx="' + r.idx + '" value="' + r.debutISO + '" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;"></div>'
+      + '<div class="field"><label>Durée</label><input type="text" class="plan-res-duree" data-idx="' + r.idx + '" value="' + jours + ' jours" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;"></div>'
+      + '</div></div>';
+  });
+  html += '</div>';
+  openDocModal('Import planning — périodes proposées', html, 'Appliquer les lignes cochées', function () {
+    planningAppliquerResultats();
+  });
+}
+function planningAppliquerResultats() {
+  var cards = document.querySelectorAll('#entreprise-list .entreprise-card');
+  var n = 0;
+  document.querySelectorAll('.plan-res-cb').forEach(function (cb) {
+    if (!cb.checked) return;
+    var idx = parseInt(cb.getAttribute('data-idx'), 10);
+    var card = cards[idx];
+    if (!card) return;
+    var debutEl = document.querySelector('.plan-res-debut[data-idx="' + idx + '"]');
+    var dureeEl = document.querySelector('.plan-res-duree[data-idx="' + idx + '"]');
+    var ci = card.querySelector('.ent-dateInterv'), cd = card.querySelector('.ent-duree');
+    if (ci && debutEl && debutEl.value) ci.value = debutEl.value;
+    if (cd && dureeEl) cd.value = dureeEl.value;
+    if (ci && debutEl && debutEl.value) n++;
+  });
+  showToast(n + ' entreprise(s) mise(s) à jour — pensez à Enregistrer l’affaire', 'success');
 }
 
 function toggleEntCard(id) {
