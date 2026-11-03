@@ -1245,6 +1245,11 @@ function showNewAffaire() {
   ['rp-amiante','rp-plomb','rp-demolition','rp-terrassement','rp-reseaux','rp-hauteur'].forEach(function(id){
     document.getElementById(id).checked=false;
   });
+  // Travaux en hauteur >3m coche par defaut sur toute nouvelle affaire : sur
+  // une construction, la hauteur (toiture, elevation...) est quasi certaine ;
+  // l'absence de risque hauteur est le cas rare (ex: reseaux enterres).
+  // Alain decoche lui-meme dans ces cas-la (demande du 03/11).
+  document.getElementById('rp-hauteur').checked = true;
   document.getElementById('form-title').textContent='Nouvelle affaire';
   document.getElementById('form-subtitle').textContent='Renseignez les informations pour pre-remplir tous vos documents';
   document.getElementById('gen-progress').classList.remove('show');
