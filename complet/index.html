@@ -2629,6 +2629,12 @@ function enregistrerFaitsAmiante(affaire, fichierNom) {
     var cb = document.getElementById('rp-amiante'); if (cb) cb.checked = ff.amiante.presence;
   }
   persistAffaires();
+  // Si la fiche IC de cette affaire est deja ouverte (ex: Faits amiante
+  // ouverte depuis le bouton Details pendant que l'IC est affichee), on
+  // reapplique tout de suite le controle periode/amiante -- sinon il
+  // fallait fermer/rouvrir la fiche IC pour que la nouvelle date "Fin
+  // prevue" soit prise en compte (constat d'Alain le 03/11).
+  if (typeof icVerifierPeriodeAmiante === 'function') icVerifierPeriodeAmiante();
   showToast('Faits amiante enregistres', 'success');
 }
 
