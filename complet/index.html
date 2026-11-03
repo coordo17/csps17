@@ -4237,8 +4237,24 @@ function injecterFIC(zip, ficData) {
   xmlStr = remplirCellule(xmlStr, 'Point de rassemblement / accès pompiers', d.secRDV || '');
 
   // === SECTION 13 - Observations CSPS ===
+  // Point 5 de la liste convenue avec Alain (03/11) : "Notification (avant
+  // reprise)" et "DANGER GRAVE IMMINENT" n'avaient aucun champ de saisie --
+  // toujours vides, meme pour un vrai evenement grave. Trois champs
+  // distincts desormais (plutot qu'un selecteur de niveau partageant un seul
+  // texte), remplis chacun dans sa propre case. Le DGI est prefixe fort a
+  // l'impression pour qu'il ne se noie jamais pres d'une observation anodine
+  // (le moteur actuel ne permet pas de mettre le texte en rouge).
   if (d.obsCSPS) {
     xmlStr = remplirCellule(xmlStr, 'Observation (sans urgence)', d.obsCSPS);
+  }
+  if (d.obsNotif) {
+    xmlStr = remplirCellule(xmlStr, 'Notification (avant', '⚠ NOTIFICATION — ' + d.obsNotif);
+  }
+  if (d.obsDGI) {
+    xmlStr = remplirCellule(xmlStr, 'DANGER GRAVE', '🔴 DANGER GRAVE IMMINENT — ARRET IMMEDIAT — ' + d.obsDGI);
+  }
+  if (d.obsDelai) {
+    xmlStr = remplirCellule(xmlStr, 'Délai levée', d.obsDelai);
   }
   xmlStr = remplirCellule(xmlStr, 'Fréquence visites CSPS', d.freqVisites || '');
   xmlStr = remplirCellule(xmlStr, 'Réunions coordination', d.freqReunions || '');
@@ -7917,7 +7933,17 @@ function genFormulaireFIC() {
     }
   }
   html2 += sectionHeader('11', 'Observations du CSPS', '&#128221;');
-  html2 += fieldRow('Observations / prescriptions', 'fic-obs-csps', 'textarea', 'Observations, prescriptions...', obsAuto.join('\n'));
+  html2 += fieldRow('Observation (sans urgence)', 'fic-obs-csps', 'textarea', 'Observations, prescriptions...', obsAuto.join('\n'));
+  // Point 5 de la liste convenue avec Alain (03/11) : "Notification" et
+  // "DANGER GRAVE IMMINENT" n'avaient aucun champ -- toujours vides au
+  // §12, meme pour un vrai evenement grave. Trois champs distincts, chacun
+  // rempli dans sa propre case du tableau (plutot qu'un selecteur de niveau
+  // partageant un seul texte). Le champ DGI est mis en evidence a l'ecran
+  // (le libelle l'est deja en rouge/gras dans le modele Word imprime).
+  html2 += fieldRow('Notification (avant reprise)', 'fic-obs-notif', 'textarea', 'A notifier avant toute reprise des travaux...', '');
+  html2 += '<div class="field" style="margin-bottom:10px;"><label style="color:#CC0000;font-weight:700;">Danger Grave Imminent (arret immediat)</label>'
+    + '<textarea id="fic-obs-dgi" placeholder="Description du danger grave et imminent constate..." style="width:100%;padding:10px;border:2px solid #CC0000;border-radius:6px;font-family:inherit;font-size:14px;min-height:70px;"></textarea></div>';
+  html2 += fieldRow('Delai levee / Suite donnee', 'fic-obs-delai', 'textarea', 'Suite donnee a la notification ou au DGI ci-dessus...', '');
   html2 += twoCol(
     fieldRow('Frequence visites CSPS', 'fic-obs-freq', 'text', 'Ex: Mensuelle', ''),
     fieldRow('Reunions coordination', 'fic-obs-reunion', 'text', 'Ex: Bimensuelle', '')
@@ -9567,6 +9593,9 @@ async function genererDocTerrain() {
       secRDV:        getVal('fic-sec-rdv'),
       // Observations
       obsCSPS:       getVal('fic-obs-csps'),
+      obsNotif:      getVal('fic-obs-notif'),
+      obsDGI:        getVal('fic-obs-dgi'),
+      obsDelai:      getVal('fic-obs-delai'),
       // Section I Cat.3 - Explications PGC
       cat3_acces:         getVal('fic-cat3-acces'),
       cat3_securisation:  getVal('fic-cat3-securisation'),
