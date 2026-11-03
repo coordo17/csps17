@@ -7061,10 +7061,14 @@ function ic7dProposer(depuisBouton) {
     var lib = icTexteHarmo(r.sit) + ' : ' + icTexteHarmo(r.risk);
     if (deja.indexOf(lib) !== -1) return;
     deja.push(lib);
-    ic7dAjouter(lib, false, true, r.g, icTexteHarmo(r.mes)); n++;
+    // Coche par defaut depuis le 03/11 (demande d'Alain) : la fiche s'imprime
+    // directement en 6D ; le CSPS decoche ce qui ne s'applique pas pendant
+    // l'IC reelle, plutot que de partir d'une section vide qui donne a
+    // l'entreprise un argument pour ne rien detailler dans son PPSPS.
+    ic7dAjouter(lib, true, true, r.g, icTexteHarmo(r.mes)); n++;
   });
   var noms = icMetiersDuLot(lot).map(function (k) { return icTexteHarmo(IC_METIERS_RISQUES[k].label); });
-  if (depuisBouton) showToast(n ? n + ' fiche(s) propos\u00e9e(s) en 7D (' + noms.join(', ') + ') \u2014 \u00e0 confirmer' : 'Aucun m\u00e9tier reconnu pour ce lot : ajoutez les risques \u00e0 la main', n ? 'success' : 'error');
+  if (depuisBouton) showToast(n ? n + ' fiche(s) propos\u00e9e(s) en 7D (' + noms.join(', ') + ') \u2014 d\u00e9cochez ce qui ne s\u2019applique pas' : 'Aucun m\u00e9tier reconnu pour ce lot : ajoutez les risques \u00e0 la main', n ? 'success' : 'error');
 }
 function ic7dCollecter() {
   return Array.prototype.slice.call(document.querySelectorAll('#ic7d-liste .ic7d-row')).filter(function (r) {
@@ -7134,6 +7138,17 @@ function icInitFormulaire() {
     if (sel && idx >= 0) sel.value = String(idx);
     icApresChoixEntreprise(ent);
   }
+  // EU (établissement en activité) : saisie une fois pour l'affaire (ex.
+  // Chausson Materiaux), reprise sur chaque fiche IC des entreprises qui
+  // interviennent sur ce meme chantier (03/11, demande d'Alain).
+  var eu = terrainAffaire && terrainAffaire.chantier && terrainAffaire.chantier.eu;
+  if (eu) {
+    icSet('fic-eu-nom', eu.nom); icSet('fic-eu-contact', eu.contact);
+    icSet('fic-eu-tel', eu.tel); icSet('fic-eu-activite', eu.activite);
+    var chkEu = document.getElementById('fic-eu-actif');
+    if (chkEu) chkEu.checked = !!eu.actif;
+  }
+  icAppliquerRisquesEU();
   icPreRemplirGrilleDepuisFaits();
   // Decoche automatiquement "Amiante" au §7 si la periode d'intervention de
   // l'entreprise (§2) demarre apres la fin du desamiantage/demolition
@@ -7497,6 +7512,13 @@ function injecterICComplete(zip, d, isCat3) {
     else st = (d.stOui && d.stEntreprises && d.stEntreprises.length)
       ? d.stEntreprises.map(function (e) { return e.nom + (e.lot ? ' (' + e.lot + ')' : ''); }).join(' ; ') : 'Aucun sous-traitant d\u00e9clar\u00e9';
     icLigne(doc, tEE, 'Sous-traitants', [st]);
+    // §3 EU (etablissement en activite) : meme table que l'EE, colonnes de
+    // droite. Ajoute le 03/11 (demande d'Alain, cf. Chausson Materiaux) --
+    // auparavant toujours vide, meme quand l'EU etait saisie.
+    if (d.euNom || d.euActif) {
+      var euDesignation = (d.euActif ? '⚠ Site en activité pendant les travaux (R.4532-14)\n' : '') + (d.euNom || '') + (d.euActivite ? '\n' + d.euActivite : '');
+      icLigne(doc, tEE, 'Désignation / R. sociale', [euDesignation]);
+    }
   }
   icRemplacerT(doc, 'Prestataires : ___', function (s) { return s.replace(/_{3,}/, d.prestataires || 'aucun d\u00e9clar\u00e9'); });
 
@@ -7702,6 +7724,7 @@ function genFormulaireFIC() {
 
   // Section 3 - EU
   html2 += sectionHeader('3', 'Entreprise Utilisatrice (EU) / Site', '&#127963;');
+  html2 += '<label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-weight:500;"><input type="checkbox" id="fic-eu-actif" onchange="icAppliquerRisquesEU()" style="width:18px;height:18px;"> Établissement en activité pendant les travaux (R.4532-14)</label>';
   html2 += fieldRow('Raison sociale EU', 'fic-eu-nom', 'text', 'Nom EU ou N/A', '');
   html2 += twoCol(
     fieldRow('Representant EU', 'fic-eu-contact', 'text', 'Nom Prenom', ''),
@@ -9339,6 +9362,32 @@ function countRQ() {
   window._risquesICData = data;
 }
 
+// Ajoute le 03/11 (demande d'Alain) : quand l'EU (ex: Chausson Materiaux)
+// reste en activite pendant les travaux, certaines categories doivent
+// apparaitre d'office en importe/exporte en §6B/6C, sinon l'entreprise
+// peut arguer que le CSPS n'a rien releve en IC pour justifier de ne rien
+// mettre dans son PPSPS. Jugement metier (pas une regle ecrite) : cible
+// la circulation engins (double sens), le bruit/poussieres et les
+// projections que le chantier fait peser sur l'activite commerciale de
+// l'EU. N'ecrase rien si l'EU est decochee (on laisse tel quel).
+var IC_RISQUES_EU_IMP = ['r16', 'r19', 'r20', 'r22'];
+var IC_RISQUES_EU_EX = ['r22'];
+function icAppliquerRisquesEU() {
+  var actif = document.getElementById('fic-eu-actif');
+  if (!actif || !actif.checked) return;
+  IC_RISQUES_EU_IMP.concat(IC_RISQUES_EU_EX).forEach(function (id) {
+    var chk = document.getElementById('rq-' + id);
+    if (chk && !chk.checked) { chk.checked = true; toggleRQ(id); }
+  });
+  IC_RISQUES_EU_IMP.forEach(function (id) {
+    var imp = document.getElementById('imp-' + id); if (imp) imp.checked = true;
+  });
+  IC_RISQUES_EU_EX.forEach(function (id) {
+    var ex = document.getElementById('ex-' + id); if (ex) ex.checked = true;
+  });
+  countRQ();
+}
+
 function initSigCanvas(canvasId, key) {
   var canvas = document.getElementById(canvasId);
   if (!canvas) return;
@@ -9420,6 +9469,7 @@ async function genererDocTerrain() {
       euContact:     getVal('fic-eu-contact'),
       euTel:         getVal('fic-eu-tel'),
       euActivite:    getVal('fic-eu-activite'),
+      euActif:       getCheck('fic-eu-actif'),
       // Infos prealables
       infoMO:        getCheck('fic-info-mo'),
       infoCACES:     getCheck('fic-info-caces'),
@@ -9465,6 +9515,17 @@ async function genererDocTerrain() {
     };
     if (typeof countRQ === 'function') { countRQ(); terrainAffaire._ficData.risquesIC = window._risquesICData || []; }
     icCompleterFicData(terrainAffaire._ficData);
+    // Persiste l'EU au niveau du chantier (et non de la fiche) : saisi une
+    // fois, repris automatiquement sur les fiches IC des autres entreprises
+    // du meme chantier (03/11, demande d'Alain -- cf. icInitFormulaire).
+    if (terrainAffaire._ficData.euNom || terrainAffaire._ficData.euActif) {
+      terrainAffaire.chantier = terrainAffaire.chantier || {};
+      terrainAffaire.chantier.eu = {
+        nom: terrainAffaire._ficData.euNom, contact: terrainAffaire._ficData.euContact,
+        tel: terrainAffaire._ficData.euTel, activite: terrainAffaire._ficData.euActivite,
+        actif: terrainAffaire._ficData.euActif
+      };
+    }
   } else if (ref === 'VIS') {
     // Recuperer la premiere entreprise de la liste
     var firstEnt = document.querySelector('#vis-ent-list .vis-ent-nom');
