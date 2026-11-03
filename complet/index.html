@@ -6935,13 +6935,30 @@ function icDateFR(s) {
   var d = new Date(a, mo - 1, j);
   return isNaN(d.getTime()) ? null : d;
 }
+// icDateDebutPeriode : la "Periode intervention" (§2) est en texte libre,
+// souvent "01/07 au 30/08/2026" -- la date de DEBUT n'a alors pas d'annee
+// propre. icDateFR seule attraperait la date de FIN (seule a matcher le
+// format complet JJ/MM/AAAA), ce qui comparerait la mauvaise date. On
+// cherche d'abord un couple "debut au/- fin", en empruntant l'annee de la
+// fin pour le debut si besoin ; sinon on retombe sur icDateFR (une seule
+// date dans le champ).
+function icDateDebutPeriode(s) {
+  s = String(s || '');
+  var m = s.match(/(\d{1,2})[\/\.\-](\d{1,2})(?:[\/\.\-](\d{2,4}))?\s*(?:au|à|-|→)\s*(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{2,4})/i);
+  if (m) {
+    var j = +m[1], mo = +m[2], a = m[3] ? +m[3] : +m[6]; if (a < 100) a += 2000;
+    var d = new Date(a, mo - 1, j);
+    if (!isNaN(d.getTime())) return d;
+  }
+  return icDateFR(s);
+}
 function icVerifierPeriodeAmiante() {
   if (!terrainAffaire) return;
   var f = affaireFaits(terrainAffaire).amiante;
   var cb = document.getElementById('icg-amiante'), txt = document.getElementById('icg-amiante-t');
   if (!cb || !txt || !f.fin_desamiantage) return;
   var finDate = icDateFR(f.fin_desamiantage);
-  var debutEnt = icDateFR(getVal('fic-ent-periode'));
+  var debutEnt = icDateDebutPeriode(getVal('fic-ent-periode'));
   var baseTexte = [f.localisation, f.raat_date ? 'RAAT du ' + f.raat_date : '', f.bureau, f.ss4_obligatoire ? 'SS3/SS4 exigee' : ''].filter(Boolean).join(' — ');
   var noteHorsPeriode = 'Hors periode de desamiantage/demolition (travaux jusqu’au ' + f.fin_desamiantage + ') — entreprise non concernee.';
   var horsPeriode = !!(finDate && debutEnt && debutEnt.getTime() > finDate.getTime());
