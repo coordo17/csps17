@@ -7375,15 +7375,20 @@ function icVerifierCoactiviteEntreprises() {
     var chevauche = entDebut.getTime() <= autreFin.getTime() && entFin.getTime() >= autreDebut.getTime();
     if (!chevauche) return;
     autresEnChevauchement.push(e);
+    // Champ dedie rqobsimp- (pas le rqobs- general, partage avec 6A) : une
+    // entreprise doit pouvoir lire/contester le motif d'un risque IMPORTE
+    // sans que ça n'affecte ni ne confonde le motif EXPORTE du meme risque
+    // (03/11, remarque d'Alain -- le paragraphe unique rendait ça illisible
+    // des qu'un risque etait coche dans les deux sens).
     var noteImp = 'Coactivité avec ' + (e.nom || 'une autre entreprise') + ' (' + (e.lot || 'lot non précisé') + '), période en chevauchement — à vérifier pendant l’IC.';
     risquesDuLot(e.lot).forEach(function (id) {
       var chk = document.getElementById('rq-' + id);
       if (!chk) return;
       if (!chk.checked) { chk.checked = true; toggleRQ(id); }
       var imp = document.getElementById('imp-' + id);
-      if (imp && !imp.checked) imp.checked = true;
-      var obs = document.getElementById('rqobs-' + id);
-      if (obs && !obs.value) obs.value = noteImp;
+      if (imp && !imp.checked) { imp.checked = true; toggleImpObs(id); }
+      var obsImp = document.getElementById('rqobsimp-' + id);
+      if (obsImp && !obsImp.value) obsImp.value = noteImp;
     });
   });
   if (autresEnChevauchement.length) {
@@ -7394,9 +7399,9 @@ function icVerifierCoactiviteEntreprises() {
       if (!chk) return;
       if (!chk.checked) { chk.checked = true; toggleRQ(id); }
       var ex = document.getElementById('ex-' + id);
-      if (ex && !ex.checked) ex.checked = true;
-      var obs = document.getElementById('rqobs-' + id);
-      if (obs && !obs.value) obs.value = noteExp;
+      if (ex && !ex.checked) { ex.checked = true; toggleExpObs(id); }
+      var obsExp = document.getElementById('rqobsexp-' + id);
+      if (obsExp && !obsExp.value) obsExp.value = noteExp;
     });
   }
   countRQ();
@@ -7827,8 +7832,12 @@ function injecterICComplete(zip, d, isCat3) {
       // existantes) ; 6C utilise le catalogue dedie PGC_RISQUES_LIB_EXPORTE
       // (comment l'entreprise protege les autres), pas le meme texte.
       var mesExp = (PGC_RISQUES_LIB_EXPORTE[r.id] && PGC_RISQUES_LIB_EXPORTE[r.id].mesures) || mes;
-      if (r.imp) l7.b.push([label, mes, r.obs || '']);
-      if (r.ex) l7.c.push([label, mesExp, r.obs || '']);
+      // Chaque sens imprime sa PROPRE observation (rqobsimp/rqobsexp,
+      // 03/11) -- jamais la meme que l'autre sens. Repli sur r.obs (ancien
+      // champ unique) pour une fiche dont les donnees auraient ete
+      // enregistrees avant cette evolution.
+      if (r.imp) l7.b.push([label, mes, r.obsImp || r.obs || '']);
+      if (r.ex) l7.c.push([label, mesExp, r.obsExp || r.obs || '']);
       if (r.id === 'r24' || (!r.imp && !r.ex)) l7.a.push([label, mes, r.obs || '']);
     });
     var vide = ['Aucun risque relev\u00e9 lors de l\u2019IC', '', ''];
@@ -9602,10 +9611,20 @@ function initRisquesWidget() {
       : 'background:var(--bg-success);color:var(--text-success);';
     html += '<tr id="rqrow-' + r.id + '" style="' + (pre ? 'background:var(--bg-accent);' : '') + '">';
     html += '<td style="border:0.5px solid var(--border);padding:4px 8px;text-align:center;"><input type="checkbox" id="rq-' + r.id + '" ' + (pre ? 'checked' : '') + ' onchange="toggleRQ(\'' + r.id + '\')" style="width:15px;height:15px;"></td>';
-    html += '<td style="border:0.5px solid var(--border);padding:4px 8px;font-size:13px;" id="rqlbl-' + r.id + '">' + r.label + origine + '<input type="text" id="rqobs-' + r.id + '" placeholder="Observations entreprise / exploitant" style="display:' + (pre ? 'block' : 'none') + ';width:100%;margin-top:4px;padding:5px;font-size:12px;border:1px solid var(--border);border-radius:4px;"></td>';
+    html += '<td style="border:0.5px solid var(--border);padding:4px 8px;font-size:13px;" id="rqlbl-' + r.id + '">' + r.label + origine
+      + '<input type="text" id="rqobs-' + r.id + '" placeholder="Observations entreprise / exploitant" style="display:' + (pre ? 'block' : 'none') + ';width:100%;margin-top:4px;padding:5px;font-size:12px;border:1px solid var(--border);border-radius:4px;">'
+      // Deux champs distincts pour R.IMP et R.EX (03/11, demande d'Alain : un
+      // meme risque coche "importe" ET "exporte" se retrouvait avec une seule
+      // observation partagee -- impossible pour une entreprise de verifier
+      // ou de decocher un sens sans perdre/confondre l'explication de
+      // l'autre). Affiches uniquement quand la case correspondante est
+      // cochee -- voir toggleImpObs/toggleExpObs.
+      + '<input type="text" id="rqobsimp-' + r.id + '" placeholder="Observations — risque IMPORTE (subi par l’entreprise)" style="display:none;width:100%;margin-top:4px;padding:5px;font-size:12px;border:1px solid var(--border);border-radius:4px;background:#eef6ff;">'
+      + '<input type="text" id="rqobsexp-' + r.id + '" placeholder="Observations — risque EXPORTE (vers les autres)" style="display:none;width:100%;margin-top:4px;padding:5px;font-size:12px;border:1px solid var(--border);border-radius:4px;background:#fff4e5;">'
+      + '</td>';
     html += '<td style="border:0.5px solid var(--border);padding:4px 8px;"><span style="font-size:10px;padding:1px 5px;border-radius:4px;' + badgeStyle + '">' + r.ref + '</span></td>';
-    html += '<td style="border:0.5px solid var(--border);padding:4px 8px;text-align:center;"><input type="checkbox" id="imp-' + r.id + '" ' + (!pre ? 'disabled' : '') + ' onchange="countRQ()" style="width:15px;height:15px;' + (!pre ? 'opacity:0.25;' : '') + '"></td>';
-    html += '<td style="border:0.5px solid var(--border);padding:4px 8px;text-align:center;"><input type="checkbox" id="ex-' + r.id + '" ' + (!pre ? 'disabled' : '') + ' onchange="countRQ()" style="width:15px;height:15px;' + (!pre ? 'opacity:0.25;' : '') + '"></td>';
+    html += '<td style="border:0.5px solid var(--border);padding:4px 8px;text-align:center;"><input type="checkbox" id="imp-' + r.id + '" ' + (!pre ? 'disabled' : '') + ' onchange="toggleImpObs(\'' + r.id + '\')" style="width:15px;height:15px;' + (!pre ? 'opacity:0.25;' : '') + '"></td>';
+    html += '<td style="border:0.5px solid var(--border);padding:4px 8px;text-align:center;"><input type="checkbox" id="ex-' + r.id + '" ' + (!pre ? 'disabled' : '') + ' onchange="toggleExpObs(\'' + r.id + '\')" style="width:15px;height:15px;' + (!pre ? 'opacity:0.25;' : '') + '"></td>';
     html += '</tr>';
   });
   tbody.innerHTML = html;
@@ -9622,7 +9641,25 @@ function toggleRQ(id) {
   ex.disabled  = !on; ex.style.opacity  = on ? '1' : '0.25';
   if (!on) { imp.checked = false; ex.checked = false; }
   var obsRq = document.getElementById('rqobs-' + id); if (obsRq) obsRq.style.display = on ? 'block' : 'none';
+  var obsImp = document.getElementById('rqobsimp-' + id); if (obsImp) obsImp.style.display = (on && imp.checked) ? 'block' : 'none';
+  var obsExp = document.getElementById('rqobsexp-' + id); if (obsExp) obsExp.style.display = (on && ex.checked) ? 'block' : 'none';
   row.style.background = on ? 'var(--bg-accent)' : '';
+  countRQ();
+}
+// toggleImpObs/toggleExpObs : montre/cache le champ d'observation dedie a
+// R.IMP (resp. R.EX) quand on coche/decoche la case correspondante -- ne
+// touche jamais a l'observation de l'autre sens, pour qu'on puisse decocher
+// un sens sans perdre ni confondre l'explication de l'autre (03/11).
+function toggleImpObs(id) {
+  var imp = document.getElementById('imp-' + id);
+  var obsImp = document.getElementById('rqobsimp-' + id);
+  if (obsImp) obsImp.style.display = imp.checked ? 'block' : 'none';
+  countRQ();
+}
+function toggleExpObs(id) {
+  var ex = document.getElementById('ex-' + id);
+  var obsExp = document.getElementById('rqobsexp-' + id);
+  if (obsExp) obsExp.style.display = ex.checked ? 'block' : 'none';
   countRQ();
 }
 
@@ -9639,7 +9676,7 @@ function countRQ() {
       var ex  = document.getElementById('ex-' + id).checked;
       if (imp) ci++;
       if (ex) ce++;
-      data.push({ id: id, imp: imp, ex: ex, obs: getVal('rqobs-' + id) });
+      data.push({ id: id, imp: imp, ex: ex, obs: getVal('rqobs-' + id), obsImp: getVal('rqobsimp-' + id), obsExp: getVal('rqobsexp-' + id) });
     }
   });
   var elR = document.getElementById('cnt-rq');
@@ -9669,10 +9706,10 @@ function icAppliquerRisquesEU() {
     if (chk && !chk.checked) { chk.checked = true; toggleRQ(id); }
   });
   IC_RISQUES_EU_IMP.forEach(function (id) {
-    var imp = document.getElementById('imp-' + id); if (imp) imp.checked = true;
+    var imp = document.getElementById('imp-' + id); if (imp && !imp.checked) { imp.checked = true; toggleImpObs(id); }
   });
   IC_RISQUES_EU_EX.forEach(function (id) {
-    var ex = document.getElementById('ex-' + id); if (ex) ex.checked = true;
+    var ex = document.getElementById('ex-' + id); if (ex && !ex.checked) { ex.checked = true; toggleExpObs(id); }
   });
   countRQ();
 }
