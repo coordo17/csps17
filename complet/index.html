@@ -5976,7 +5976,10 @@ var IC_METIER_MOTS = {
 'cloture_portail': ['cloture','portail','grillage rigide'],
 'montage_rayonnage': ['rayonnage','cantilever','rack','gondole','autoportant','palettier','redstock'],
 'enduiseur_facadier': ['enduiseur','facadier','enduit facade','ravalement','crepis'],
-'tailleur_pierre': ['tailleur de pierre','taille de pierre','pierre de taille','marbrerie']
+'tailleur_pierre': ['tailleur de pierre','taille de pierre','pierre de taille','marbrerie'],
+// Ajoute le 03/11 (demande d'Alain) : lot non couvert jusqu'ici, ni ici ni
+// dans l'ancienne table de pre-cochage du §6.
+'base_vie': ['base vie','base-vie','installation de chantier','cantonnement','algeco','bungalow','sanitaires de chantier','vestiaires de chantier']
 };
 var IC_METIERS_RISQUES = {
 'gros_oeuvre': {
@@ -6745,7 +6748,12 @@ risk: 'Saturnisme -- CMR',
 g: 3,
 mes: 'Vérifier l\'existence et l\'adéquation d\'un repérage plomb au périmètre des travaux avant intervention. Protection respiratoire et hygiène à charge de l\'entreprise, précisées dans son PPSPS.'
 }]
-}
+},
+// Entree minimale (03/11) : pas de fiches-risques detaillees redigees pour
+// ce lot (contrairement aux autres, reprises du PGC Harmo) -- evite juste
+// un plantage de ic7dProposer() si "base vie" est reconnu comme lot. Le
+// §6 beneficie quand meme du pre-cochage (voir METIERS_RISQUES).
+'base_vie': { label: 'Installation de chantier -- Base vie', traits: [], epi: [], extincteurs: [], materiel: [], risques: [] }
 };
 // ============================================================================
 // INTERVENANTS : sous-traitants et prestataires rattaches a leur entreprise
@@ -9128,18 +9136,56 @@ function terrainRemplirEntreprise(idx) {
 
 // ── CANVAS SIGNATURES ────────────────────────────────────────────
 // === Croisement Lot / Corps de metier -> risques typiques (global, reutilise par initRisquesWidget et recroiserRisquesLot) ===
-var METIERS_RISQUES = []; // ancienne table retiree le 30/09 : les propositions viennent des fiches metier d'Harmo (IC_METIERS_RISQUES)
+// Reactivee le 03/11 (demande d'Alain) : coche directement les risques
+// typiques du lot dans le tableau reglementaire du §6, des la selection de
+// l'entreprise -- comme avant le retrait du 30/09 (qui avait laisse le
+// pre-cochage uniquement aux propositions "a confirmer" du §6D). Alain
+// garde evidemment la main pour decocher si un risque ne s'applique pas.
+// Mots-cles repris de IC_METIER_MOTS (meme reconnaissance de lot que le
+// §6D) pour eviter deux listes a maintenir en parallele ; seule la liste
+// de risques associee est propre au §6. Premiere version a affiner par
+// Alain au fil de l'usage -- le choix des risques par lot est un jugement
+// metier, pas une regle ecrite noir sur blanc.
+var METIERS_RISQUES_IDS = {
+  gros_oeuvre: ['r1', 'r15', 'r16', 'r18', 'r19', 'r22'],
+  charpente_couverture: ['r1', 'r16', 'r18', 'r19'],
+  'électricité': ['r6', 'r17', 'r23'],
+  plomberie_cvc: ['r3', 'r17', 'r23'],
+  peinture: ['r3', 'r20', 'r21'],
+  menuiserie_metallerie: ['r16', 'r17', 'r23'],
+  terrassement_vrd: ['r2', 'r8', 'r19', 'r22'],
+  'démolition_désamiantage': ['r4', 'r11', 'r16', 'r20'],
+  'étanchéité_isolation': ['r1', 'r17', 'r20'],
+  second_oeuvre: ['r18', 'r20', 'r23'],
+  'revêtement_pvc': ['r3', 'r20'],
+  plafonds_suspendus: ['r1', 'r18'],
+  echafaudeur: ['r1', 'r16'],
+  grutier_levage: ['r13', 'r14', 'r22'],
+  paysagiste_espaces_verts: ['r18', 'r19', 'r22'],
+  enseigne_signaletique: ['r1', 'r6', 'r23'],
+  cloture_portail: ['r15', 'r18', 'r22', 'r23'],
+  montage_rayonnage: ['r13', 'r18', 'r22'],
+  enduiseur_facadier: ['r1', 'r3', 'r20'],
+  tailleur_pierre: ['r19', 'r20', 'r23'],
+  base_vie: ['r6', 'r18', 'r22']
+};
+var METIERS_RISQUES = Object.keys(IC_METIER_MOTS).map(function (k) {
+  return { mots: IC_METIER_MOTS[k], risques: METIERS_RISQUES_IDS[k] || [] };
+});
 
 function normaliserTexte(s) {
   return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
 function risquesDuLot(lotTexte) {
-  var lotNorm = normaliserTexte(lotTexte);
+  // icNormTxt (pas normaliserTexte) : gere le "œ" de "Gros œuvre", sinon ce
+  // lot tres courant ne matche jamais (bug trouve le 03/11 en reactivant
+  // cette fonction).
+  var lotNorm = icNormTxt(lotTexte);
   if (!lotNorm) return [];
   var trouve = [];
   METIERS_RISQUES.forEach(function(m) {
-    var matchMot = m.mots.some(function(mot) { return lotNorm.indexOf(normaliserTexte(mot)) !== -1; });
+    var matchMot = m.mots.some(function(mot) { return lotNorm.indexOf(icNormTxt(mot)) !== -1; });
     if (matchMot) {
       m.risques.forEach(function(rid) { if (trouve.indexOf(rid) === -1) trouve.push(rid); });
     }
@@ -9228,7 +9274,7 @@ function initRisquesWidget() {
       return;
     }
     var dePGC = pgc[r.id] ? true : false;
-    var deMetier = false; // risques typiques du lot : proposes en 7D (risques propres)
+    var deMetier = risquesMetier.indexOf(r.id) !== -1; // risques typiques du lot (reactive le 03/11)
     var pre = dePGC || deMetier;
     var origine = '';
     if (dePGC && deMetier) origine = '<span title="Detecte PGC + typique du lot" style="font-size:8px;font-weight:700;padding:0 4px;border-radius:3px;background:var(--bg-warning);color:var(--text-warning);margin-left:4px;">PGC+LOT</span>';
