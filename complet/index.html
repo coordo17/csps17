@@ -2558,10 +2558,39 @@ function enregistrerFaitsInspection(affaire, fichierNom) {
 // Alain au lieu d'etre devines. Ecrit dans affaire.faits.amiante, qui
 // alimente deja le PGC et la fiche IC (§12 observations).
 // ============================================================================
+// icCalculerFinDesamiantage : repere dans les Intervenants l'entreprise de
+// demolition/desamiantage (par mot-cle sur le lot/type) et calcule sa date
+// de fin probable = date approx. d'intervention + duree prevue, uniquement
+// quand la duree est ecrite dans un format simple ("3 semaines", "2 mois",
+// "15 jours"). Sinon renvoie null -- pas de calcul deterministe possible,
+// on laisse Alain saisir lui-meme (pas d'IA, pas de devinette).
+function icCalculerFinDesamiantage(affaire) {
+  var liste = (affaire && affaire.entreprises) || [];
+  for (var i = 0; i < liste.length; i++) {
+    var e = liste[i];
+    var motsCle = normaliserTexte((e.lot || '') + ' ' + (e.type || ''));
+    if (!/demolition|desamiant|amiante/.test(motsCle)) continue;
+    if (!e.dateInterv) continue;
+    var m = String(e.duree || '').match(/(\d+)\s*(jour|semaine|mois)/i);
+    if (!m) continue;
+    var n = parseInt(m[1], 10);
+    var joursParUnite = { jour: 1, semaine: 7, mois: 30 }[m[2].toLowerCase()];
+    var debut = new Date(e.dateInterv + 'T00:00:00');
+    if (isNaN(debut.getTime())) continue;
+    var fin = new Date(debut.getTime() + n * joursParUnite * 86400000);
+    return formatDateFR(fin.toISOString().split('T')[0]);
+  }
+  return null;
+}
 function ouvrirFaitsAmiante(fichierNom) {
   var affaire = currentAffaireObj();
   if (!affaire) { showToast('Ouvrez une affaire avant de saisir ces faits', 'error'); return; }
   var f = affaireFaits(affaire).amiante;
+  var finSuggeree = '';
+  if (!f.fin_desamiantage) {
+    finSuggeree = icCalculerFinDesamiantage(affaire) || '';
+    if (finSuggeree) f = Object.assign({}, f, { fin_desamiantage: finSuggeree });
+  }
   var html = '<p style="margin-bottom:10px;font-size:13px;color:var(--text-light);">'
     + (fichierNom ? 'Document depose : <strong>' + icEscAttr(fichierNom) + '</strong>. ' : '')
     + 'Ces faits alimentent automatiquement le PGC, la grille de la fiche IC (§7/§8) et les observations du CSPS. Laissez vide si non concerne.</p>'
@@ -2577,7 +2606,8 @@ function ouvrirFaitsAmiante(fichierNom) {
     + '<input type="checkbox" id="faits-am-ss4"' + (f.ss4_obligatoire ? ' checked' : '') + '> Entreprise certifiee SS3/SS4 exigee</label></div>'
     + '<div class="field" style="margin-top:10px;"><label>Fin prevue du retrait amiante / demolition (JJ/MM/AAAA)</label>'
     + '<input type="text" id="faits-am-fin" value="' + icEscAttr(f.fin_desamiantage) + '" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;" placeholder="Ex: 15/07/2026">'
-    + '<p style="font-size:12px;color:var(--text-light);margin-top:4px;">Si rempli : sur la fiche IC d\'une entreprise dont la periode d\'intervention (§2) demarre apres cette date, la ligne « Amiante » du §7 se decoche automatiquement avec une observation (l\'entreprise n\'est pas concernee par le desamiantage). Laissez vide pour desactiver ce controle.</p></div>';
+    + (finSuggeree ? '<p style="font-size:12px;color:#B45309;margin-top:4px;">Date calculee automatiquement a partir de la date d\'intervention + duree prevue de l\'entreprise de demolition/desamiantage declaree dans les Intervenants. A verifier avant d\'enregistrer.</p>' : '')
+    + '<p style="font-size:12px;color:var(--text-light);margin-top:4px;">Si rempli : sur la fiche IC d\'une entreprise dont la periode d\'intervention (§2) demarre apres cette date, la ligne « Amiante » du §7 et du §6 se decoche automatiquement avec une observation (l\'entreprise n\'est pas concernee par le desamiantage). Laissez vide pour desactiver ce controle.</p></div>';
   openDocModal('Faits amiante' + (f.source ? ' — source : ' + icEscAttr(f.source) : ''), html, 'Enregistrer', function () {
     enregistrerFaitsAmiante(affaire, fichierNom);
   });
