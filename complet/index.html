@@ -5053,13 +5053,16 @@ function injecterPhotos(zip, photos, legendes) {
     xmlStr = xmlStr.slice(0, tblStart) + tbl + xmlStr.slice(tblEnd);
   }
 
-  // === PHOTOS 5+ : tableau supplementaire apres </w:body> ===
-  if (photos.length > 4) {
+  // === PHOTOS restantes : tableau supplementaire avant les signatures (ou en fin de document) ===
+  // Si le modele n'a pas de case "Photo 1" (ex. signalement DGI), TOUTES les photos
+  // passent par ce tableau generique plutot que d'etre silencieusement perdues.
+  var debutExtras = (idxAncre !== -1) ? 4 : 0;
+  if (photos.length > debutExtras) {
     var extrasXml = '<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="1F4E79"/>'
       + '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="20"/></w:rPr>'
-      + '<w:t>Photos compl\u00e9mentaires</w:t></w:r></w:p>';
+      + '<w:t>' + (debutExtras === 0 ? 'Photos' : 'Photos compl\u00e9mentaires') + '</w:t></w:r></w:p>';
 
-    for (var p = 4; p < photos.length; p += 2) {
+    for (var p = debutExtras; p < photos.length; p += 2) {
       var rid1x = 200 + p;
       addImage(rid1x, photos[p]);
       var leg1 = legendes[p] || ('Photo ' + (p+1));
@@ -5093,8 +5096,12 @@ function injecterPhotos(zip, photos, legendes) {
     }
 
     // Injecter les photos extras AVANT la section signatures (pas apres </w:body>)
-    var ancreSignatures = '7. DIFFUSION ET SIGNATURES';
-    var idxSig = xmlStr.indexOf(ancreSignatures);
+    var ancresSignatures = ['7. DIFFUSION ET SIGNATURES', 'DIFFUSION ET SIGNATURES', 'NOTIFICATION ET SIGNATURES', 'SIGNATURES'];
+    var idxSig = -1;
+    for (var asx = 0; asx < ancresSignatures.length; asx++) {
+      idxSig = xmlStr.indexOf(ancresSignatures[asx]);
+      if (idxSig !== -1) break;
+    }
     if (idxSig !== -1) {
       // Remonter au debut du <w:p> parent
       var pSig = xmlStr.lastIndexOf('<w:p ', idxSig);
@@ -8975,6 +8982,10 @@ function genFormulaireDGI() {
   html2 += fieldRow('Mesure complémentaire 1', 'dgi-mes1', 'text', 'Si nécessaire', '');
   html2 += fieldRow('Mesure complémentaire 2', 'dgi-mes2', 'text', 'Si nécessaire', '');
   html2 += fieldRow('Conditions de reprise', 'dgi-reprise', 'textarea', 'Ex: garde-corps posé et vérifié par le CSPS', '');
+  html2 += '<div class="field" style="margin-bottom:10px;"><label>Photos (argumenter l\'arret)</label>';
+  html2 += '<input type="file" id="dgi-photos" accept="image/*" multiple capture="environment" onchange="dgiPhotosChange(this)" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px;">';
+  html2 += '<div id="dgi-photos-preview" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>';
+  html2 += '</div>';
   html2 += sectionEnd();
   html2 += sectionHeader('2', 'Entreprise concernee', '&#127970;');
   html2 += fieldRow('Entreprise', 'dgi-ent', 'text', 'Raison sociale', '');
@@ -8984,6 +8995,23 @@ function genFormulaireDGI() {
     + '</select></div>';
   html2 += sectionEnd();
   return html2;
+}
+
+function dgiPhotosChange(input) {
+  var preview = document.getElementById('dgi-photos-preview');
+  if (!preview) return;
+  preview.innerHTML = '';
+  Array.from(input.files || []).forEach(function(file) {
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      var img = document.createElement('img');
+      img.src = ev.target.result;
+      img.dataset.b64 = ev.target.result;
+      img.style.cssText = 'width:80px;height:80px;object-fit:cover;border-radius:4px;border:1px solid var(--border);';
+      preview.appendChild(img);
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 function optionsDestinatairesIC() {
@@ -10484,6 +10512,18 @@ async function genererDocTerrain() {
       }
     });
     terrainAffaire._participants = participants;
+  } else if (ref === 'DGI') {
+    // Photos jointes au signalement DGI : servent a argumenter l'arret de
+    // tache (aucune IA ici, juste la pièce jointe au document).
+    var dgiPhotos = [], dgiLegendes = [];
+    var dgiPreview = document.getElementById('dgi-photos-preview');
+    if (dgiPreview) {
+      dgiPreview.querySelectorAll('img').forEach(function(img) {
+        if (img.src && img.src.startsWith('data:')) { dgiPhotos.push(img.src); dgiLegendes.push(''); }
+      });
+    }
+    terrainAffaire._photos = dgiPhotos;
+    terrainAffaire._photosLegendes = dgiLegendes;
   }
 
   showToast('Generation ' + (DOC_TITRES[ref] || ref) + ' en cours...');
