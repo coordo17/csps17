@@ -64,14 +64,22 @@ app.post('/api/claude', async (req, res) => {
     return res.status(500).json({ error: 'Cle API Groq non configuree' });
   }
   try {
-    const MODELES_OK = ['openai/gpt-oss-20b', 'qwen/qwen3.6-27b'];
-    const modele = MODELES_OK.indexOf(req.body.model) !== -1 ? req.body.model : 'qwen/qwen3.6-27b';
+    // Modeles Groq actuels (nov. 2026) -- qwen/qwen3.6-27b n'existe plus (404).
+    // Seuls les modeles Llama 4 font de la vision chez Groq.
+    const MODELES_OK = ['meta-llama/llama-4-scout-17b-16e-instruct', 'meta-llama/llama-4-maverick-17b-128e-instruct', 'openai/gpt-oss-20b'];
+    const MODELES_VISION = ['meta-llama/llama-4-scout-17b-16e-instruct', 'meta-llama/llama-4-maverick-17b-128e-instruct'];
+    const modeleDemande = req.body.model;
+    const estVisionReq = (req.body.messages || []).some(function (m) { return m && typeof m.content !== 'string'; });
+    var modele = MODELES_OK.indexOf(modeleDemande) !== -1 ? modeleDemande : 'meta-llama/llama-4-scout-17b-16e-instruct';
+    if (estVisionReq && MODELES_VISION.indexOf(modele) === -1) modele = 'meta-llama/llama-4-scout-17b-16e-instruct';
     const body = {
       model: modele,
       max_tokens: req.body.max_tokens || 4096,
       messages: req.body.messages || [],
     };
-    body.reasoning_effort = req.body.reasoning_effort || 'none';
+    // reasoning_effort ne s'applique qu'aux modeles qui le supportent (ex. qwen) ;
+    // Groq refuse ce champ sur les modeles Llama 4.
+    if (req.body.reasoning_effort && modele.indexOf('qwen') !== -1) body.reasoning_effort = req.body.reasoning_effort;
     if (req.body.reasoning_format) body.reasoning_format = req.body.reasoning_format;
     const STYLE_CSPS = "Directive de style CSPS17, a appliquer a tout texte que tu rediges, y compris les champs texte d'un JSON (n'altere jamais la STRUCTURE d'un JSON demande, seulement la qualite du texte a l'interieur) : "
       + "1) Francais correct, sans faute d'accord ni coquille (jamais \"d'personnels\" : ecris \"de personnels\"). "
