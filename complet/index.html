@@ -7471,6 +7471,13 @@ function icPreRemplirGrilleDepuisFaits() {
     setSelect('icg-voirie-s', 'Fourni');
     setTexte('icg-voirie-t', f.contraintes.arrete_voirie);
   }
+  // Section 7 "Silice / HAP / sols pollues" (CMR) : pas de fiche de faits
+  // dediee, mais le risque est quasi systematique (sciage, demolition
+  // beton, terrassement) -- on propose dans "Mesures" la meme phrase
+  // reglementaire que les fiches-risques du PGC, pour que la fiche IC
+  // montre explicitement que l'entreprise sait qu'elle doit le traiter
+  // dans son PPSPS (5/11, demande d'Alain). Reste modifiable a l'ecran.
+  setTexte('icg-silice-t', 'Valeur limite réglementaire d’exposition à la silice cristalline : 0,1 mg/m³ pour le quartz (R.4412-149). Moyens de réduction de l’empoussièrement et protection respiratoire à charge de l’entreprise selon son évaluation des risques, précisés dans son PPSPS.');
 }
 
 function icSet(id, v) { var el = document.getElementById(id); if (el) el.value = v || ''; }
