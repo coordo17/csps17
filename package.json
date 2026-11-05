@@ -1,0 +1,15 @@
+{
+  "name": "csps17-api",
+  "version": "2.0.0",
+  "description": "CSPS17 — proxy IA minimal (description photo CR de visite / DGI). Reste de l'appli 100% client (GitHub Pages).",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
