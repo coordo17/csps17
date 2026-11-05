@@ -884,6 +884,9 @@
               <div class="field"><label>Telephone</label><input type="tel" id="cspsc-tel" placeholder=""></div>
               <div class="field"><label>Email</label><input type="email" id="cspsc-mail" placeholder=""></div>
             </div>
+            <button type="button" class="btn btn-outline btn-sm" onclick="contratChoisirFichier()">&#128220; Importer depuis le contrat (fichier)</button>
+            <input type="file" id="contrat-import-input" accept=".pdf,.docx,.txt" style="display:none;" onchange="contratFichierChoisi(event)">
+            <p style="font-size:11px;color:var(--text-light);margin-top:4px;">Repère un co-traitant CSPS (nom/tél/mail) différent de vous dans le contrat déposé, par motifs de texte (aucune IA). À vérifier avant d'enregistrer.</p>
           </div>
         </div>
 
@@ -1534,6 +1537,55 @@ async function entrepriseFichierChoisi(event) {
       if (el) { el.value = champs[f]; n++; }
     });
     showToast(n + ' champ(s) repéré(s) dans ' + file.name + ' — à vérifier, rien n\'est jugé à votre place.', 'success');
+  } catch (err) {
+    showToast('Erreur lecture : ' + err.message, 'error');
+  }
+}
+
+// ============================================================================
+// Import du co-traitant CSPS depuis le contrat de coordination (05/11,
+// demande d'Alain -- cas rare, priorite basse). L'ancienne analyse IA
+// identifiait un autre coordonnateur SPS (conception) que lui-meme.
+// Remplace par un reperage par motifs (regex, pas d'IA) : nom pres de
+// "coordonnateur SPS", explicitement exclu si ca semble etre Alain/
+// CSPS17 lui-meme (son propre contrat).
+// ============================================================================
+function extraireCoTraitantCSPS(texte) {
+  var motifs = [/coordonnateur\s+(?:sps\s+)?(?:en\s+)?(?:conception|r[ée]alisation)?\s*[:\-]?\s*([^\n]{3,80})/i, /co[\-\s]?traitant\s*[:\-]?\s*([^\n]{3,80})/i];
+  var nom = '';
+  for (var i = 0; i < motifs.length; i++) {
+    var m = texte.match(motifs[i]);
+    if (m && m[1]) {
+      var cand = m[1].trim().replace(/\s+/g, ' ').slice(0, 90);
+      if (cand && !/alain|suzanne|csps17/i.test(cand)) { nom = cand; break; }
+    }
+  }
+  var email = (texte.match(/[\w.+-]+@[\w-]+\.[\w.-]+/) || [])[0] || '';
+  var tel = (texte.match(/(?:0|\+33\s?)[1-9](?:[\s.\-]?\d{2}){4}/) || [])[0] || '';
+  return { nom: nom, tel: tel, mail: email };
+}
+function contratChoisirFichier() {
+  var input = document.getElementById('contrat-import-input');
+  if (input) input.click();
+}
+async function contratFichierChoisi(event) {
+  var file = event.target.files && event.target.files[0];
+  event.target.value = '';
+  if (file) await importerContratDepuisFichier(file);
+}
+async function importerContratDepuisFichier(file) {
+  showToast('Lecture de ' + file.name + '...', 'success');
+  try {
+    var texte = await extraireTexteFichier(file);
+    if (!texte || texte.replace(/\s/g, '').length < 20) {
+      throw new Error('Texte illisible (document scanné sans OCR exploitable, ou fichier vide).');
+    }
+    var infos = extraireCoTraitantCSPS(texte);
+    var n = 0;
+    if (infos.nom) { var elN = document.getElementById('cspsc-nom'); if (elN && !elN.value) { elN.value = infos.nom; n++; } }
+    if (infos.tel) { var elT = document.getElementById('cspsc-tel'); if (elT && !elT.value) { elT.value = infos.tel; n++; } }
+    if (infos.mail) { var elM = document.getElementById('cspsc-mail'); if (elM && !elM.value) { elM.value = infos.mail; n++; } }
+    showToast(n ? n + ' champ(s) repéré(s) dans ' + file.name + ' (CSPS Conception) — à vérifier.' : 'Aucun co-traitant CSPS distinct repéré dans ' + file.name + '.', n ? 'success' : 'error');
   } catch (err) {
     showToast('Erreur lecture : ' + err.message, 'error');
   }
@@ -3357,6 +3409,11 @@ async function deposerPieceDossier(affaire, file, type, bulk) {
       else if (type === 'CBT') ouvrirFaitsCBTDepuisFichier(file);
       // Plans/PIC (05/11) : meme lecture deterministe que le CBT.
       else if (type === 'PLANS') ouvrirFaitsPlansDepuisFichier(file);
+      // Contrat de coordination SPS (05/11) : repere un eventuel co-traitant
+      // CSPS (conception), remplit directement les champs Chantier si
+      // trouves (pas de modale -- champs deja a l'ecran, pas une "fiche
+      // de faits" du terrain).
+      else if (type === 'CONTRAT') importerContratDepuisFichier(file);
     }
     return 'ok';
   } catch (err) {
