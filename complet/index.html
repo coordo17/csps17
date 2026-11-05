@@ -908,8 +908,11 @@
               <button class="btn btn-outline btn-sm" onclick="addEntreprise('prestataire')">+ Prestataire de service</button>
               <button type="button" class="btn btn-outline btn-sm" onclick="planningChoisirFichier()">&#128197; Analyser un planning (PDF)</button>
               <input type="file" id="planning-import-input" accept=".pdf" style="display:none;" onchange="planningFichierChoisi(event)">
+              <button type="button" class="btn btn-outline btn-sm" onclick="entrepriseChoisirFichier()">&#128231; Importer une entreprise (fichier)</button>
+              <input type="file" id="entreprise-import-input" accept=".pdf,.docx,.txt,.eml" style="display:none;" onchange="entrepriseFichierChoisi(event)">
             </div>
             <p style="font-size:11px;color:var(--text-light);margin-top:6px;">Lit le tableau d'un planning PDF (type export MS Project) et propose une Date d'intervention + Duree par entreprise, par rapprochement de mots-cles avec son lot. Aucune IA — lecture du texte du PDF uniquement. Vous validez/corrigez chaque ligne avant application.</p>
+            <p style="font-size:11px;color:var(--text-light);margin-top:4px;">Import entreprise (mail/pièce .pdf, .docx, .txt, .eml) : repère nom, lot, contact, effectif, tél., mail et SIRET par motifs de texte (aucune IA) et ouvre une nouvelle carte à vérifier. Le SIRET repéré permet ensuite de remplir raison sociale/adresse officielles via « Vérifier au registre officiel ».</p>
           </div>
         </div>
       </div>
@@ -1475,6 +1478,65 @@ function planningAppliquerResultats() {
     if (ci && debutEl && debutEl.value) n++;
   });
   showToast(n + ' entreprise(s) mise(s) à jour — pensez à Enregistrer l’affaire', 'success');
+}
+
+// ============================================================================
+// Import entreprise depuis un fichier (mail/pdf/docx/txt) -- 05/11, demande
+// d'Alain : remettre en deterministe l'ancien import IA (qui appelait un
+// LLM pour extraire nom/lot/tel/mail/siret/effectif/contact depuis un texte
+// libre). Ici : lecture du texte (extraireTexteFichier, meme fonction que
+// le CBT/PPSPS, pas d'IA) + reperage par motifs (regex) des champs qui ont
+// une forme reconnaissable (email, telephone, SIRET, lignes "Entreprise :",
+// "Lot :", "Contact :", "Effectif :"). Nom/adresse restent approximatifs
+// par motif -- mais le SIRET repere, une fois verifie, permet de les
+// recuperer de source officielle via "Verifier au registre officiel"
+// (deja existant, /api/entreprise, INSEE/RNE). Ouvre une nouvelle carte
+// entreprise pre-remplie, TOUJOURS a relire avant d'enregistrer l'affaire.
+// ============================================================================
+function extraireChampsEntreprise(texte) {
+  function champ(motifs) { return rechercherChampPPSPS(texte, motifs); }
+  var email = (texte.match(/[\w.+-]+@[\w-]+\.[\w.-]+/) || [])[0] || '';
+  var tel = (texte.match(/(?:0|\+33\s?)[1-9](?:[\s.\-]?\d{2}){4}/) || [])[0] || '';
+  var siretM = texte.match(/\b(\d{3}[\s.]?\d{3}[\s.]?\d{3}[\s.]?\d{5})\b/);
+  var siret = siretM ? siretM[1].replace(/[\s.]/g, '') : '';
+  return {
+    nom: champ([/(?:entreprise|raison sociale|soci[ée]t[ée])\s*[:\-]\s*([^\n]{3,80})/i]),
+    lot: champ([/(?:lot|corps d['’]etat|corps de metier)\s*[:\-]\s*([^\n]{3,80})/i]),
+    contact: champ([/(?:contact|interlocuteur|responsable chantier)\s*[:\-]\s*([^\n]{3,60})/i]),
+    effectif: champ([/(?:effectif|personnel)[^\n\d]{0,20}(\d{1,3})\s*(?:personnes?|compagnons?|salari[ée]s?)?/i]),
+    mail: email,
+    tel: tel,
+    siret: siret
+  };
+}
+function entrepriseChoisirFichier() {
+  var input = document.getElementById('entreprise-import-input');
+  if (input) input.click();
+}
+async function entrepriseFichierChoisi(event) {
+  var file = event.target.files && event.target.files[0];
+  event.target.value = '';
+  if (!file) return;
+  showToast('Lecture de ' + file.name + '...', 'success');
+  try {
+    var texte = await extraireTexteFichier(file);
+    if (!texte || texte.replace(/\s/g, '').length < 20) {
+      throw new Error('Texte illisible (document scanné sans OCR exploitable, ou fichier vide).');
+    }
+    var champs = extraireChampsEntreprise(texte);
+    addEntreprise('principale');
+    var cards = document.querySelectorAll('#entreprise-list .entreprise-card');
+    var last = cards[cards.length - 1];
+    var n = 0;
+    ['nom', 'lot', 'contact', 'effectif', 'mail', 'tel', 'siret'].forEach(function (f) {
+      if (!champs[f]) return;
+      var el = last.querySelector('.ent-' + f);
+      if (el) { el.value = champs[f]; n++; }
+    });
+    showToast(n + ' champ(s) repéré(s) dans ' + file.name + ' — à vérifier, rien n\'est jugé à votre place.', 'success');
+  } catch (err) {
+    showToast('Erreur lecture : ' + err.message, 'error');
+  }
 }
 
 function toggleEntCard(id) {
