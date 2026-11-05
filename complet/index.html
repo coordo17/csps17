@@ -7478,14 +7478,12 @@ function icPreRemplirGrilleDepuisFaits() {
   // montre explicitement que l'entreprise sait qu'elle doit le traiter
   // dans son PPSPS (5/11, demande d'Alain). Reste modifiable a l'ecran.
   setTexte('icg-silice-t', 'Valeur limite réglementaire d’exposition à la silice cristalline : 0,1 mg/m³ pour le quartz (R.4412-149). Moyens de réduction de l’empoussièrement et protection respiratoire à charge de l’entreprise selon son évaluation des risques, précisés dans son PPSPS.');
-  // Section 4A "Bennes / tri dechets" : clause identique dans tous les CBT
-  // relus (Gros Oeuvre, Charpente/bardage, VRD, Dallage, § III -- Nettoyage
-  // du chantier) -- chaque entreprise evacue ses propres dechets a ses
-  // frais, au fur et a mesure. Vrai quel que soit le chantier/lot : propose
-  // par defaut (05/11, demande d'Alain). La case "En place / vu" reste a
-  // cocher par le CSPS sur site -- on ne pre-coche jamais une verification
-  // de terrain, seul le texte d'Observations est suggere.
-  setTexte('icg-bennes-t', "L'entreprise évacue à ses frais ses déchets de chantier au fur et à mesure de l'avancement des travaux (clause CBT standard -- tri a verifier sur site).");
+  // Section 4A "Bennes / tri dechets" : pas de regle generale malgre la
+  // clause CBT identique partout -- Alain precise que ca depend du chantier
+  // (bennes parfois mises a disposition et payees au compte prorata, sinon
+  // chaque entreprise evacue les siennes). Retire le 05/11 : rien de fiable
+  // a proposer par defaut tant que cette info n'est pas saisie quelque part
+  // pour l'affaire (pas de champ "compte prorata" actuellement).
   // Section 4A "Base vie / sanitaires" : quand l'installation de chantier
   // commune a deja ete relevee (PIC/plan d'installation depose et analyse
   // -- agregerElementsPGC), on reprend ce texte plutot que de laisser un
