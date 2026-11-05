@@ -3030,16 +3030,60 @@ function enregistrerFaitsCBT(affaire, fichierNom) {
 // Faits co-activites (31/10) : meme logique, pour le planning. Une ligne =
 // une co-activite (meme format "aere" que les observations §12). Ecrit dans
 // affaire.faits.coactivites.
+// "Alertes critiques du planning" (05/11, demande d'Alain : remettre en
+// deterministe ce que l'ancienne analyse IA produisait en alertes_rouges/
+// phases_dangereuses) : au depot d'un planning, on repere plusieurs
+// passages probables par mots-cles danger/incompatibilite/simultaneite et
+// on les propose, pour qu'Alain les relise/corrige avant d'enregistrer --
+// jamais injectes directement (meme logique que le CBT et l'import PPSPS).
 // ============================================================================
-function ouvrirFaitsPlanning(fichierNom) {
+var PLANNING_ALERTE_MOTS = ['simultan', 'incompatib', 'interdit', 'chevauchement', 'coactivit', 'co-activit', 'attention', 'risque de chute', 'zone commune', 'non compatible', 'ne pas superposer', 'danger'];
+function repererPassagesMultiples(texte, motsCles, maxResultats) {
+  var texteMin = texte.toLowerCase();
+  var resultats = [], vus = {};
+  motsCles.forEach(function (mc) {
+    var mcMin = mc.toLowerCase(), pos = texteMin.indexOf(mcMin);
+    while (pos !== -1 && resultats.length < (maxResultats || 8)) {
+      var debut = Math.max(0, pos - 50), fin = Math.min(texte.length, pos + mcMin.length + 150);
+      var extrait = texte.slice(debut, fin).replace(/\s+/g, ' ').trim();
+      if (debut > 0) extrait = '…' + extrait;
+      if (fin < texte.length) extrait = extrait + '…';
+      if (!vus[extrait]) { vus[extrait] = true; resultats.push(extrait); }
+      pos = texteMin.indexOf(mcMin, pos + mcMin.length);
+    }
+  });
+  return resultats;
+}
+// Appelee au depot d'un planning : lit le PDF (pdf.js, deterministe, pas
+// d'IA) et propose les passages reperes dans le champ "Alertes" -- jamais
+// ecrit directement dans l'affaire.
+async function ouvrirFaitsPlanningDepuisFichier(file) {
+  var affaire = currentAffaireObj();
+  if (!affaire) { showToast('Ouvrez une affaire avant de deposer un planning', 'error'); return; }
+  var propositions = [];
+  try {
+    var texte = await extraireTexteFichier(file);
+    if (texte && texte.replace(/\s/g, '').length >= 30) {
+      propositions = repererPassagesMultiples(texte, PLANNING_ALERTE_MOTS, 8);
+    }
+  } catch (err) { /* document illisible : fiche ouverte vide, saisie manuelle possible */ }
+  ouvrirFaitsPlanning(file.name, propositions);
+}
+function ouvrirFaitsPlanning(fichierNom, propositions) {
   var affaire = currentAffaireObj();
   if (!affaire) { showToast('Ouvrez une affaire avant de saisir ces faits', 'error'); return; }
   var f = affaireFaits(affaire);
   var texte = (f.coactivites || []).map(function (c) { return c.description; }).filter(Boolean).join('\n');
+  var alertesExistantes = (f.alertesPlanning || []).join('\n');
+  var prop = propositions || [];
+  var alertesVal = alertesExistantes || prop.join('\n');
   var html = '<p style="margin-bottom:10px;font-size:13px;color:var(--text-light);">'
     + (fichierNom ? 'Document depose : <strong>' + icEscAttr(fichierNom) + '</strong>. ' : '')
     + 'Une co-activite par ligne (entreprises, periode, nature). Alimente le PGC (phasage / co-activite). Laissez vide si non concerne.</p>'
-    + '<textarea id="faits-plan-coact" rows="6" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Lot gros-oeuvre / Lot charpente — semaines 12-14 — travaux simultanes en zone B">' + icEscAttr(texte) + '</textarea>';
+    + '<textarea id="faits-plan-coact" rows="6" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Lot gros-oeuvre / Lot charpente — semaines 12-14 — travaux simultanes en zone B">' + icEscAttr(texte) + '</textarea>'
+    + '<div style="font-weight:700;color:#B91C1C;margin:14px 0 6px;">&#9888; Alertes critiques du planning (une par ligne)</div>'
+    + (prop.length && !alertesExistantes ? '<p style="font-size:12px;color:var(--text-light);margin-bottom:6px;"><strong>Passages repérés automatiquement (à vérifier, rien n\'est jugé à votre place) :</strong> relisez et corrigez avant d\'enregistrer.</p>' : '')
+    + '<textarea id="faits-plan-alertes" rows="5" style="width:100%;padding:8px;border:1px solid #CC0000;border-radius:6px;font-family:inherit;" placeholder="Ex: Travaux de toiture et terrassement en meme temps en zone B -- chute d\'objet possible">' + icEscAttr(alertesVal) + '</textarea>';
   openDocModal('Planning / co-activités', html, 'Enregistrer', function () {
     enregistrerFaitsPlanning(affaire, fichierNom);
   });
@@ -3049,6 +3093,7 @@ function enregistrerFaitsPlanning(affaire, fichierNom) {
   var src = (fichierNom ? fichierNom + ' — ' : '') + 'saisi le ' + new Date().toLocaleDateString('fr-FR');
   var lignes = document.getElementById('faits-plan-coact').value.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
   f.coactivites = lignes.map(function (l) { return { entreprises: '', periode: '', description: l, source: src }; });
+  f.alertesPlanning = document.getElementById('faits-plan-alertes').value.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
   persistAffaires();
   showToast('Planning / co-activites enregistres', 'success');
 }
@@ -3183,7 +3228,7 @@ async function deposerPieceDossier(affaire, file, type, bulk) {
         else ouvrirFaitsAmiante(file.name);
       }
       else if (type === 'CONTRAINTES') ouvrirFaitsContraintes(file.name);
-      else if (type === 'PLAN') ouvrirFaitsPlanning(file.name);
+      else if (type === 'PLAN') ouvrirFaitsPlanningDepuisFichier(file);
       else if (type === 'ICR') ouvrirFaitsInspection(file.name);
       else if (type === 'CRMOA') ouvrirFaitsCR(file.name);
       // CBT (05/11) : seul type dont le contenu est lu (pdf.js, deterministe,
@@ -3610,6 +3655,14 @@ function faitsVierges() {
     inspectionPrealable: [],
     contraintes: { synthese: '', arrete_voirie: '', source: '' },
     coactivites: [],
+    // Alertes critiques du planning (05/11, demande d'Alain : remettre en
+    // deterministe ce que l'analyse IA du planning produisait --
+    // alertes_rouges/phases_dangereuses). Une alerte par ligne (meme
+    // principe que les co-activites), reperee automatiquement au depot
+    // d'un planning (mots-cles danger/incompatibilite/simultaneite) et
+    // TOUJOURS relue par Alain avant enregistrement. Alimente le PGC
+    // (phasage/coactivite) et les observations du CSPS (§12).
+    alertesPlanning: [],
     reunions: [],
     // CBT (05/11, demande d'Alain) : infos de chantier -- valables pour
     // toutes les entreprises -- lues dans les CBT deposes (cf. ouvrirFaitsCBT).
@@ -3653,6 +3706,9 @@ function faitsMigrer(affaire) {
     if (a.type_rapport === 'planning' && a.coactivites && a.coactivites.length && !f.coactivites.length) {
       f.coactivites = a.coactivites.map(function (c) { return { entreprises: c.corps_etat || '', periode: c.periode || '', description: c.risque || '', source: 'migration' }; });
     }
+    if (a.type_rapport === 'planning' && a.alertes_rouges && a.alertes_rouges.length && !f.alertesPlanning.length) {
+      f.alertesPlanning = a.alertes_rouges.filter(Boolean);
+    }
     if (a.type_rapport === 'plans' && !f.cbt.base_vie) {
       var bvParts = (a.elements || []).filter(function (el) {
         var ty = ((el && el.type) || '').toLowerCase();
@@ -3679,6 +3735,7 @@ function affaireFaits(affaire) {
   if (!affaire.faits) faitsMigrer(affaire);
   // Affaires deja migrees avant l'ajout du CBT (05/11) : pas de cle "cbt".
   if (!affaire.faits.cbt) affaire.faits.cbt = faitsVierges().cbt;
+  if (!affaire.faits.alertesPlanning) affaire.faits.alertesPlanning = [];
   return affaire.faits;
 }
 
@@ -8291,6 +8348,12 @@ function genFormulaireFIC() {
   if (faitsTerrain.cbt.dechets) obsAuto.push('Gestion des dechets : ' + faitsTerrain.cbt.dechets);
   else if (terrainAffaire.dechetsGestion) obsAuto.push('Gestion des dechets : ' + terrainAffaire.dechetsGestion);
   if (faitsTerrain.contraintes.synthese) obsAuto.push('Contraintes du site : ' + faitsTerrain.contraintes.synthese);
+  // Alertes critiques du planning (05/11) : point critique a ne pas rater
+  // (co-activites incompatibles/simultanees) -- restitue en observations,
+  // comme l'ancienne analyse IA le faisait (alertes_rouges).
+  if (faitsTerrain.alertesPlanning && faitsTerrain.alertesPlanning.length) {
+    obsAuto.push('Points critiques du planning : ' + faitsTerrain.alertesPlanning.join(' ; '));
+  }
   if (faitsTerrain.reunions && faitsTerrain.reunions.length) {
     var derniereReunion = faitsTerrain.reunions[faitsTerrain.reunions.length - 1];
     if (derniereReunion.decisions || derniereReunion.nouvelles_entreprises) {
