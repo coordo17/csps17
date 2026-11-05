@@ -7483,7 +7483,12 @@ function icPreRemplirGrilleDepuisFaits() {
   // (bennes parfois mises a disposition et payees au compte prorata, sinon
   // chaque entreprise evacue les siennes). Retire le 05/11 : rien de fiable
   // a proposer par defaut tant que cette info n'est pas saisie quelque part
-  // pour l'affaire (pas de champ "compte prorata" actuellement).
+  // pour l'affaire (pas de champ "compte prorata" actuellement). En revanche,
+  // une fois que cette reponse a ete saisie UNE FOIS pour cette affaire
+  // (premiere IC, via icCompleterFicData -> terrainAffaire.dechetsGestion),
+  // on la reprend pour les IC suivantes de la MEME affaire -- c'est une
+  // info de chantier, identique pour toutes les entreprises qui y passent.
+  if (terrainAffaire.dechetsGestion) setTexte('icg-bennes-t', terrainAffaire.dechetsGestion);
   // Section 4A "Base vie / sanitaires" : quand l'installation de chantier
   // commune a deja ete relevee (PIC/plan d'installation depose et analyse
   // -- agregerElementsPGC), on reprend ce texte plutot que de laisser un
@@ -7582,6 +7587,13 @@ function icCompleterFicData(d) {
   d.donneurOrdre = donneur ? donneur.nom : ''; d.donneurPresent = getCheck('ic-do-present');
   d.prestataires = getVal('ic-prestataires');
   d.grille = icCollecterGrille();
+  // "Bennes / tri dechets" (4A) est une info de chantier, pas propre a
+  // l'entreprise : une fois saisie par Alain pour cette affaire (a partir
+  // du PGC/CBT qu'il a lus), on la fige sur terrainAffaire pour la
+  // reproposer -- jamais l'imposer -- aux IC suivantes de la MEME affaire
+  // (05/11, demande d'Alain : "c'est suivant les chantiers" -- jamais de
+  // defaut inter-affaires, seulement une reprise au sein du meme chantier).
+  if (d.grille.bennes && d.grille.bennes.t) terrainAffaire.dechetsGestion = d.grille.bennes.t;
   d.risquesPropres = ic7dCollecter();
   d.presents = icCollecterPresents();
   d.pointsPPSPS = getVal('ic-points-ppsps');
@@ -8151,6 +8163,17 @@ function genFormulaireFIC() {
   if (faitsTerrain.plomb.presence) {
     obsAuto.push('Plomb detecte' + (faitsTerrain.plomb.localisation ? ' : ' + faitsTerrain.plomb.localisation : '') + '.');
   }
+  // Base vie et gestion des dechets : deux infos de chantier (valables pour
+  // toute entreprise qui y intervient) plus utiles ici qu'un fait ponctuel
+  // (amiante) qui ne concerne pas forcement le lot de l'entreprise en cours
+  // (05/11, demande d'Alain -- ex. Batisol). Base vie vient du PGC/CBT deja
+  // analyses (agregerElementsPGC) ; dechets vient de ce qui a ete saisi en
+  // 4A pour cette affaire (terrainAffaire.dechetsGestion, cf.
+  // icCompleterFicData) -- jamais un defaut invente, seulement ce qui est
+  // reellement connu pour CE chantier.
+  var aggObs = (typeof agregerElementsPGC === 'function') ? agregerElementsPGC(terrainAffaire) : null;
+  if (aggObs && aggObs.base_vie) obsAuto.push('Base vie : ' + aggObs.base_vie);
+  if (terrainAffaire.dechetsGestion) obsAuto.push('Gestion des dechets : ' + terrainAffaire.dechetsGestion);
   if (faitsTerrain.contraintes.synthese) obsAuto.push('Contraintes du site : ' + faitsTerrain.contraintes.synthese);
   if (faitsTerrain.reunions && faitsTerrain.reunions.length) {
     var derniereReunion = faitsTerrain.reunions[faitsTerrain.reunions.length - 1];
