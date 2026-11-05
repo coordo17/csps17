@@ -7779,6 +7779,12 @@ function injecterICComplete(zip, d, isCat3) {
     });
     // Grille 4, 5, 6, 8, 9, 10
     var g = d.grille || {};
+    // Restructuration IC du 05/11 (demande d'Alain, verif OPPBTP/R.4532-13) :
+    // l'IC doit se limiter a la verification de terrain ; les mesures
+    // detaillees (texte reglementaire) des risques CMR sont desormais
+    // imprimees en annexe (table "7bis"), pas dans le corps du §7 ou seul
+    // "Present (Oui/Non)" reste -- un constat terrain, pas une analyse.
+    var tMesCmr = icTable(doc, 'Mesures (à reporter au PPSPS');
     IC_GRILLE.forEach(function (sec) {
       var tbl = icTable(doc, sec.ancre);
       sec.items.forEach(function (it) {
@@ -7797,10 +7803,17 @@ function injecterICComplete(zip, d, isCat3) {
           var c6 = icLigne(doc, tbl, 'Autre :', v.lab ? [icCoche(v.c), v.t] : []);
           if (c6 && v.lab) icCellText(doc, c6, 'Autre : ' + v.lab);
         }
-        else if (kind === 'cmr') icLigne(doc, tbl, lab, [v.c ? 'Oui' : 'Non', v.t]);
+        else if (kind === 'cmr') {
+          icLigne(doc, tbl, lab, [v.c ? 'Oui' : 'Non']);
+          if (v.t) icLigne(doc, tMesCmr, lab, [v.t]);
+        }
         else if (kind === 'cmrA') {
-          var c8 = icLigne(doc, tbl, 'Autre :', v.lab ? [v.c ? 'Oui' : 'Non', v.t] : []);
+          var c8 = icLigne(doc, tbl, 'Autre :', v.lab ? [v.c ? 'Oui' : 'Non'] : []);
           if (c8 && v.lab) icCellText(doc, c8, 'Autre : ' + v.lab);
+          if (v.t) {
+            var c8b = icLigne(doc, tMesCmr, 'Autre :', v.lab ? [v.t] : []);
+            if (c8b && v.lab) icCellText(doc, c8b, 'Autre : ' + v.lab);
+          }
         }
         else if (kind === 'perm') icLigne(doc, tbl, lab, [v.t, v.s || '\u2014']);
       });
