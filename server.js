@@ -115,14 +115,20 @@ app.post('/api/claude', async (req, res) => {
       proxyRes.on('end', () => {
         try {
           const groqData = JSON.parse(data);
+          var texte = (groqData.choices && groqData.choices[0] && groqData.choices[0].message && groqData.choices[0].message.content) || '';
+          if (proxyRes.statusCode >= 400) {
+            // Remonter le vrai message Groq (diagnostic) au lieu de le masquer.
+            var msgGroq = (groqData.error && (groqData.error.message || groqData.error)) || JSON.stringify(groqData);
+            return res.status(proxyRes.statusCode).json({ error: 'Groq ' + proxyRes.statusCode + ' (modele ' + modele + ') : ' + msgGroq });
+          }
           const anthropicFormat = {
-            content: [{ type: 'text', text: (groqData.choices && groqData.choices[0] && groqData.choices[0].message && groqData.choices[0].message.content) || '' }],
+            content: [{ type: 'text', text: texte }],
             model: groqData.model,
             usage: groqData.usage,
           };
           res.status(proxyRes.statusCode).json(anthropicFormat);
         } catch (e) {
-          res.status(500).json({ error: 'Erreur parsing reponse Groq' });
+          res.status(500).json({ error: 'Erreur parsing reponse Groq : ' + e.message + ' / brut: ' + data.slice(0, 300) });
         }
       });
     });
