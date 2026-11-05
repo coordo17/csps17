@@ -54,7 +54,9 @@
       if (chemin === '/api/entreprise') {
         return _f('https://recherche-entreprises.api.gouv.fr/search?page=1&per_page=5&q=' + encodeURIComponent(qs.get('q') || ''));
       }
-      if (chemin === '/api/claude' || chemin === '/api/ocr-images')
+      if (chemin === '/api/claude')
+        return _f('https://csps17.onrender.com/api/claude', o);
+      if (chemin === '/api/ocr-images')
         return json({ error: "Fonction d'intelligence artificielle retirée de CSPS17 : saisie manuelle." }, 503);
       return json({ error: 'Fonction indisponible sans serveur : ' + chemin }, 404);
     } catch (e) { return json({ error: e.message }, 500); }
