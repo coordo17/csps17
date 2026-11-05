@@ -8792,7 +8792,7 @@ async function visDecrirePhoto(id, btn) {
     var prompt = "REPONDS IMPERATIVEMENT EN FRANCAIS, jamais dans une autre langue. Tu es un coordonnateur SPS en visite de chantier. Decris cette photo comme une OBSERVATION pour le CR de visite : nature du constat/probleme, risque concerne, localisation si visible. 2 a 4 phrases, factuel, vocabulaire SPS, sans politesse. Si la photo ne montre pas un chantier, dis-le en une phrase.";
     var r = await fetch('/api/claude', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'meta-llama/llama-4-scout-17b-16e-instruct', max_tokens: 600, messages: [{ role: 'user', content: [{ type: 'image_url', image_url: { url: dataUrl } }, { type: 'text', text: prompt }] }] })
+      body: JSON.stringify({ model: 'qwen/qwen3.8-27b', reasoning_effort: 'none', max_tokens: 600, messages: [{ role: 'user', content: [{ type: 'image_url', image_url: { url: dataUrl } }, { type: 'text', text: prompt }] }] })
     });
     var j = await r.json();
     if (!r.ok) throw new Error(j.error || ('Serveur ' + r.status));

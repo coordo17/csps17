@@ -64,14 +64,16 @@ app.post('/api/claude', async (req, res) => {
     return res.status(500).json({ error: 'Cle API Groq non configuree' });
   }
   try {
-    // Modeles Groq actuels (nov. 2026) -- qwen/qwen3.6-27b n'existe plus (404).
-    // Seuls les modeles Llama 4 font de la vision chez Groq.
-    const MODELES_OK = ['meta-llama/llama-4-scout-17b-16e-instruct', 'meta-llama/llama-4-maverick-17b-128e-instruct', 'openai/gpt-oss-20b'];
-    const MODELES_VISION = ['meta-llama/llama-4-scout-17b-16e-instruct', 'meta-llama/llama-4-maverick-17b-128e-instruct'];
+    // Modeles Groq actuels (nov. 2026, verifie sur console.groq.com/docs/deprecations) :
+    // qwen/qwen3.6-27b retire le 14/09/26, remplace par qwen/qwen3.8-27b (seul
+    // modele multimodal actif chez Groq -- Llama 4 Scout et Maverick sont
+    // retires depuis respectivement le 17/07/26 et le 09/03/26).
+    const MODELES_OK = ['qwen/qwen3.8-27b', 'openai/gpt-oss-20b'];
+    const MODELES_VISION = ['qwen/qwen3.8-27b'];
     const modeleDemande = req.body.model;
     const estVisionReq = (req.body.messages || []).some(function (m) { return m && typeof m.content !== 'string'; });
-    var modele = MODELES_OK.indexOf(modeleDemande) !== -1 ? modeleDemande : 'meta-llama/llama-4-scout-17b-16e-instruct';
-    if (estVisionReq && MODELES_VISION.indexOf(modele) === -1) modele = 'meta-llama/llama-4-scout-17b-16e-instruct';
+    var modele = MODELES_OK.indexOf(modeleDemande) !== -1 ? modeleDemande : 'qwen/qwen3.8-27b';
+    if (estVisionReq && MODELES_VISION.indexOf(modele) === -1) modele = 'qwen/qwen3.8-27b';
     const body = {
       model: modele,
       max_tokens: req.body.max_tokens || 4096,
