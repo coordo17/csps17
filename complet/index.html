@@ -961,6 +961,7 @@
           <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsContraintes()">Réseaux / contraintes du site</button>
           <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsPlanning()">Planning / co-activités</button>
           <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsCR()">CR de réunion</button>
+          <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsCBT()">Déchets / Base vie (CBT)</button>
           <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="document.getElementById('import-vrac-input').click()">&#128193; Importer un dossier</button>
           <input type="file" id="import-vrac-input" multiple style="display:none;" onchange="importerDossierVrac(event)">
           <button type="button" class="btn btn-primary btn-sm" style="margin-left:8px;" onclick="relireChantier()">&#128269; Relire le chantier</button>
@@ -2533,7 +2534,11 @@ var TYPE_MOTS_CLES_VRAC = [
   ['CONTRAINTES', ['arrete de voirie', 'arrete voirie', 'contrainte']],
   ['PPSPS', ['ppsps']],
   ['CRMOA', ['compte rendu', 'cr reunion', 'cr_reunion', 'reunion de chantier', 'cr n°', 'cr n ']],
-  ['PGC', ['pgc']]
+  ['PGC', ['pgc']],
+  // CBT (05/11, demande d'Alain) : cahier des besoins techniques (un par
+  // lot/entreprise), seul type dont le contenu est lu (voir ouvrirFaitsCBT) --
+  // tous les autres types ci-dessus ne sont reconnus que par leur nom.
+  ['CBT', ['cbt', 'cahier des besoins', 'cahier des charges techniques']]
 ];
 function normFichierClassement(s) {
   return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -2641,12 +2646,17 @@ function relireChantier() {
     var crDejaSaisi = (faits.reunions || []).some(function (r) { return r.source && crFichier && r.source.indexOf(crFichier) === 0; });
     if (!crDejaSaisi) manques.push({ label: 'CR de r\u00e9union', fichier: crFichier, fn: ouvrirFaitsCR });
   }
+  // CBT (05/11) : un CBT depose sans aucune fiche dechets/base-vie saisie
+  // pour l'affaire -- on ne verifie que le dernier depose (info de chantier,
+  // pas propre a un lot, donc un seul CBT suffit a la remplir).
+  var cbtDoc = dernierDoc('CBT');
+  if (cbtDoc && !faits.cbt.source) manques.push({ label: 'D\u00e9chets / Base vie (CBT d\u00e9pos\u00e9)', fichier: cbtDoc.fichierNom || cbtDoc.objet, fn: ouvrirFaitsCBT });
 
   window._relireManques = manques;
   var html;
   if (!manques.length) {
-    html = '<p>Rien \u00e0 signaler : les documents d\u00e9pos\u00e9s dont on peut v\u00e9rifier la fiche de faits (amiante, r\u00e9seaux/contraintes, planning, inspection pr\u00e9alable, CR de r\u00e9union) sont tous renseign\u00e9s.</p>'
-      + '<p style="font-size:12px;color:var(--text-light);margin-top:8px;">Cette relecture ne lit pas le contenu des documents (pas d\u2019IA) : elle compare juste ce qui est d\u00e9pos\u00e9 \u00e0 ce qui a \u00e9t\u00e9 saisi, pour ces 5 types.</p>';
+    html = '<p>Rien \u00e0 signaler : les documents d\u00e9pos\u00e9s dont on peut v\u00e9rifier la fiche de faits (amiante, r\u00e9seaux/contraintes, planning, inspection pr\u00e9alable, CR de r\u00e9union, CBT) sont tous renseign\u00e9s.</p>'
+      + '<p style="font-size:12px;color:var(--text-light);margin-top:8px;">Cette relecture ne lit pas le contenu des documents (sauf le CBT, lu de fa\u00e7on d\u00e9terministe -- pas d\u2019IA) : elle compare juste ce qui est d\u00e9pos\u00e9 \u00e0 ce qui a \u00e9t\u00e9 saisi.</p>';
   } else {
     html = '<p style="margin-bottom:10px;font-size:13px;color:var(--text-light);">Documents d\u00e9pos\u00e9s sans fiche de faits saisie :</p>'
       + manques.map(function (m, i) {
@@ -2934,6 +2944,89 @@ function enregistrerFaitsContraintes(affaire, fichierNom) {
 }
 
 // ============================================================================
+// Faits CBT (05/11, demande d'Alain : "ça me parait essentiel d'avoir le
+// plus d'elements du chantier pour preremplir tout les formulaires"). Les
+// CBT (cahier des besoins techniques, un par lot) contiennent presque
+// toujours une clause "nettoyage/dechets de chantier" et, pour le lot gros
+// oeuvre, une description des installations de chantier (base vie). C'est
+// une info DE CHANTIER (la meme pour toutes les entreprises qui y
+// interviennent), pas propre a l'entreprise -- contrairement a l'amiante ou
+// au plomb, aucune regle generale n'existe (certains chantiers ont des
+// bennes communes payees au compte prorata, d'autres non -- cf. correction
+// d'Alain du 05/11) : on ne devine donc JAMAIS, on propose seulement ce qui
+// a ete repere dans le texte du document, pour qu'Alain verifie et corrige
+// avant d'enregistrer -- meme logique que l'import deterministe du PPSPS
+// (reperePourMotsCles / appliquerImportPPSPSDeterministe) : rien n'est jamais
+// injecte sans relecture humaine.
+// ============================================================================
+var CBT_DECHETS_MOTS = ['nettoyage du chantier', 'evacuation des dechets', 'évacuation des déchets', 'dechets de chantier', 'déchets de chantier', 'tri des dechets', 'tri des déchets', 'gestion des dechets', 'gestion des déchets', 'compte prorata'];
+var CBT_BASEVIE_MOTS = ['installations de chantier', 'installation de chantier', 'base vie', 'base-vie', 'vestiaires', 'sanitaires de chantier', 'refectoire', 'réfectoire'];
+function repererClauseCBT(texte, motsCles) {
+  var texteMin = texte.toLowerCase();
+  for (var i = 0; i < motsCles.length; i++) {
+    var pos = texteMin.indexOf(motsCles[i].toLowerCase());
+    if (pos === -1) continue;
+    var debut = Math.max(0, pos - 40), fin = Math.min(texte.length, pos + 320);
+    var extrait = texte.slice(debut, fin).replace(/\s+/g, ' ').trim();
+    if (debut > 0) extrait = '…' + extrait;
+    if (fin < texte.length) extrait = extrait + '…';
+    return extrait;
+  }
+  return null;
+}
+// Appelee au depot d'un CBT : lit le PDF (pdf.js, cote client, pas d'IA),
+// repere les passages probables, et ouvre la fiche de faits avec ces
+// propositions pre-remplies -- jamais ecrit directement dans l'affaire.
+async function ouvrirFaitsCBTDepuisFichier(file) {
+  var affaire = currentAffaireObj();
+  if (!affaire) { showToast('Ouvrez une affaire avant de deposer un CBT', 'error'); return; }
+  var propositions = {};
+  try {
+    var texte = await extraireTexteFichier(file);
+    if (texte && texte.replace(/\s/g, '').length >= 30) {
+      propositions.dechets = repererClauseCBT(texte, CBT_DECHETS_MOTS);
+      propositions.base_vie = repererClauseCBT(texte, CBT_BASEVIE_MOTS);
+    }
+  } catch (err) {
+    // Document scanne/illisible : on ouvre quand meme la fiche, vide --
+    // Alain peut toujours la remplir a la main en lisant le CBT lui-meme.
+  }
+  ouvrirFaitsCBT(file.name, propositions);
+}
+function ouvrirFaitsCBT(fichierNom, propositions) {
+  var affaire = currentAffaireObj();
+  if (!affaire) { showToast('Ouvrez une affaire avant de saisir ces faits', 'error'); return; }
+  var f = affaireFaits(affaire).cbt;
+  var prop = propositions || {};
+  // Une proposition reperee automatiquement ne remplace jamais un texte deja
+  // valide et enregistre -- seulement un champ encore vide.
+  var dechetsVal = f.dechets || prop.dechets || '';
+  var baseVieVal = f.base_vie || prop.base_vie || '';
+  var html = '<p style="margin-bottom:10px;font-size:13px;color:var(--text-light);">'
+    + (fichierNom ? 'Document depose : <strong>' + icEscAttr(fichierNom) + '</strong>. ' : '')
+    + 'Info de chantier (valable pour toutes les entreprises) -- alimente la grille de la fiche IC (§4A) et les observations du CSPS (§12). '
+    + (prop.dechets || prop.base_vie ? '<strong>Passage repere automatiquement dans le document (a verifier, rien n\'est jugé à votre place) :</strong> relisez et corrigez avant d\'enregistrer. ' : '')
+    + 'Laissez vide si non concerne.</p>'
+    + '<div class="field" style="margin-bottom:10px;"><label>Gestion des déchets (qui évacue : chaque entreprise, ou bennes communes au compte prorata ?)</label>'
+    + '<textarea id="faits-cbt-dechets" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Chaque entreprise évacue à ses frais ses propres déchets au fur et à mesure.">' + icEscAttr(dechetsVal) + '</textarea></div>'
+    + '<div class="field"><label>Base vie / installations de chantier</label>'
+    + '<textarea id="faits-cbt-basevie" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Vestiaires, sanitaires et réfectoire mis en place par le lot gros oeuvre dès le démarrage.">' + icEscAttr(baseVieVal) + '</textarea></div>';
+  openDocModal('Faits CBT (déchets / base vie)' + (f.source ? ' — source : ' + icEscAttr(f.source) : ''), html, 'Enregistrer', function () {
+    enregistrerFaitsCBT(affaire, fichierNom);
+  });
+}
+function enregistrerFaitsCBT(affaire, fichierNom) {
+  var f = affaireFaits(affaire);
+  f.cbt = {
+    dechets: document.getElementById('faits-cbt-dechets').value.trim(),
+    base_vie: document.getElementById('faits-cbt-basevie').value.trim(),
+    source: (fichierNom ? fichierNom + ' — ' : '') + 'saisi le ' + new Date().toLocaleDateString('fr-FR')
+  };
+  persistAffaires();
+  showToast('Faits CBT enregistres', 'success');
+}
+
+// ============================================================================
 // Faits co-activites (31/10) : meme logique, pour le planning. Une ligne =
 // une co-activite (meme format "aere" que les observations §12). Ecrit dans
 // affaire.faits.coactivites.
@@ -3054,6 +3147,7 @@ async function deposerPieceDossier(affaire, file, type, bulk) {
       : type === 'PLANS' ? 'Plans (element PGC)'
       : type === 'PPSPS' ? 'Reception PPSPS (harmonisation)'
       : type === 'CRMOA' ? 'CR de reunion / mise a jour MOA'
+      : type === 'CBT' ? 'Cahier des besoins techniques (CBT)'
       : 'Reception rapport / diagnostic';
     var created = ajouterEntreeRJC(affaire, {
       date: new Date().toISOString().split('T')[0],
@@ -3092,6 +3186,10 @@ async function deposerPieceDossier(affaire, file, type, bulk) {
       else if (type === 'PLAN') ouvrirFaitsPlanning(file.name);
       else if (type === 'ICR') ouvrirFaitsInspection(file.name);
       else if (type === 'CRMOA') ouvrirFaitsCR(file.name);
+      // CBT (05/11) : seul type dont le contenu est lu (pdf.js, deterministe,
+      // pas d'IA) pour PROPOSER dechets/base vie -- jamais rien enregistre
+      // sans relecture d'Alain dans la fiche qui s'ouvre.
+      else if (type === 'CBT') ouvrirFaitsCBTDepuisFichier(file);
     }
     return 'ok';
   } catch (err) {
@@ -3512,7 +3610,14 @@ function faitsVierges() {
     inspectionPrealable: [],
     contraintes: { synthese: '', arrete_voirie: '', source: '' },
     coactivites: [],
-    reunions: []
+    reunions: [],
+    // CBT (05/11, demande d'Alain) : infos de chantier -- valables pour
+    // toutes les entreprises -- lues dans les CBT deposes (cf. ouvrirFaitsCBT).
+    // "dechets" et "base_vie" sont des propositions reperees dans le texte,
+    // TOUJOURS relues et validees/corrigees par Alain avant enregistrement
+    // (jamais injectees sans verification -- meme logique que l'import
+    // deterministe du PPSPS).
+    cbt: { dechets: '', base_vie: '', source: '' }
   };
 }
 function faitsMigrer(affaire) {
@@ -3548,6 +3653,13 @@ function faitsMigrer(affaire) {
     if (a.type_rapport === 'planning' && a.coactivites && a.coactivites.length && !f.coactivites.length) {
       f.coactivites = a.coactivites.map(function (c) { return { entreprises: c.corps_etat || '', periode: c.periode || '', description: c.risque || '', source: 'migration' }; });
     }
+    if (a.type_rapport === 'plans' && !f.cbt.base_vie) {
+      var bvParts = (a.elements || []).filter(function (el) {
+        var ty = ((el && el.type) || '').toLowerCase();
+        return ty.indexOf('pic') >= 0 || ty.indexOf('installation') >= 0;
+      }).map(function (el) { return (el.type || 'PIC') + (el.observations ? ' : ' + el.observations : ''); });
+      if (bvParts.length) { f.cbt.base_vie = bvParts.join('\n'); f.cbt.source = 'migration (' + (ra.fichier || 'ancienne analyse') + ')'; }
+    }
     if (a.type_rapport === 'cr_reunion') {
       f.reunions.push({
         date: a.date_reunion || ra.date || '',
@@ -3565,6 +3677,8 @@ function faitsMigrer(affaire) {
 function affaireFaits(affaire) {
   if (!affaire) return faitsVierges();
   if (!affaire.faits) faitsMigrer(affaire);
+  // Affaires deja migrees avant l'ajout du CBT (05/11) : pas de cle "cbt".
+  if (!affaire.faits.cbt) affaire.faits.cbt = faitsVierges().cbt;
   return affaire.faits;
 }
 
@@ -7478,25 +7592,24 @@ function icPreRemplirGrilleDepuisFaits() {
   // montre explicitement que l'entreprise sait qu'elle doit le traiter
   // dans son PPSPS (5/11, demande d'Alain). Reste modifiable a l'ecran.
   setTexte('icg-silice-t', 'Valeur limite réglementaire d’exposition à la silice cristalline : 0,1 mg/m³ pour le quartz (R.4412-149). Moyens de réduction de l’empoussièrement et protection respiratoire à charge de l’entreprise selon son évaluation des risques, précisés dans son PPSPS.');
-  // Section 4A "Bennes / tri dechets" : pas de regle generale malgre la
-  // clause CBT identique partout -- Alain precise que ca depend du chantier
-  // (bennes parfois mises a disposition et payees au compte prorata, sinon
-  // chaque entreprise evacue les siennes). Retire le 05/11 : rien de fiable
-  // a proposer par defaut tant que cette info n'est pas saisie quelque part
-  // pour l'affaire (pas de champ "compte prorata" actuellement). En revanche,
-  // une fois que cette reponse a ete saisie UNE FOIS pour cette affaire
-  // (premiere IC, via icCompleterFicData -> terrainAffaire.dechetsGestion),
-  // on la reprend pour les IC suivantes de la MEME affaire -- c'est une
-  // info de chantier, identique pour toutes les entreprises qui y passent.
-  if (terrainAffaire.dechetsGestion) setTexte('icg-bennes-t', terrainAffaire.dechetsGestion);
-  // Section 4A "Base vie / sanitaires" : quand l'installation de chantier
-  // commune a deja ete relevee (PIC/plan d'installation depose et analyse
-  // -- agregerElementsPGC), on reprend ce texte plutot que de laisser un
-  // champ vide a resaisir a chaque entreprise du meme chantier (05/11,
-  // meme demande). Rien a proposer si aucun plan n'a ete analyse.
-  var aff4 = (typeof currentAffaireObj === 'function') ? currentAffaireObj() : null;
-  var agg4 = (typeof agregerElementsPGC === 'function') ? agregerElementsPGC(aff4) : null;
-  if (agg4 && agg4.base_vie) setTexte('icg-basevie-t', agg4.base_vie);
+  // Section 4A "Bennes / tri dechets" et "Base vie / sanitaires" : infos de
+  // chantier (pas propres a l'entreprise). Pas de regle generale -- Alain
+  // precise que la gestion des dechets depend du chantier (bennes parfois
+  // mises a disposition et payees au compte prorata, sinon chaque
+  // entreprise evacue les siennes) -- donc jamais de defaut invente. Source
+  // : la fiche de faits CBT (05/11), remplie par Alain -- eventuellement a
+  // partir d'un passage repere automatiquement dans le CBT, mais toujours
+  // relu et valide avant enregistrement (cf. ouvrirFaitsCBT). Repli sur les
+  // anciens emplacements pour les affaires anterieures a cet ajout.
+  if (f.cbt.dechets) setTexte('icg-bennes-t', f.cbt.dechets);
+  else if (terrainAffaire.dechetsGestion) setTexte('icg-bennes-t', terrainAffaire.dechetsGestion);
+  if (f.cbt.base_vie) {
+    setTexte('icg-basevie-t', f.cbt.base_vie);
+  } else {
+    var aff4 = (typeof currentAffaireObj === 'function') ? currentAffaireObj() : null;
+    var agg4 = (typeof agregerElementsPGC === 'function') ? agregerElementsPGC(aff4) : null;
+    if (agg4 && agg4.base_vie) setTexte('icg-basevie-t', agg4.base_vie);
+  }
 }
 
 function icSet(id, v) { var el = document.getElementById(id); if (el) el.value = v || ''; }
@@ -8166,14 +8279,17 @@ function genFormulaireFIC() {
   // Base vie et gestion des dechets : deux infos de chantier (valables pour
   // toute entreprise qui y intervient) plus utiles ici qu'un fait ponctuel
   // (amiante) qui ne concerne pas forcement le lot de l'entreprise en cours
-  // (05/11, demande d'Alain -- ex. Batisol). Base vie vient du PGC/CBT deja
-  // analyses (agregerElementsPGC) ; dechets vient de ce qui a ete saisi en
-  // 4A pour cette affaire (terrainAffaire.dechetsGestion, cf.
-  // icCompleterFicData) -- jamais un defaut invente, seulement ce qui est
-  // reellement connu pour CE chantier.
-  var aggObs = (typeof agregerElementsPGC === 'function') ? agregerElementsPGC(terrainAffaire) : null;
-  if (aggObs && aggObs.base_vie) obsAuto.push('Base vie : ' + aggObs.base_vie);
-  if (terrainAffaire.dechetsGestion) obsAuto.push('Gestion des dechets : ' + terrainAffaire.dechetsGestion);
+  // (05/11, demande d'Alain -- ex. Batisol). Source : la fiche de faits CBT
+  // (faitsTerrain.cbt, cf. ouvrirFaitsCBT) -- jamais un defaut invente,
+  // seulement ce qui a ete saisi/valide par Alain pour CE chantier. Repli
+  // sur les anciens emplacements pour les affaires anterieures a cet ajout.
+  if (faitsTerrain.cbt.base_vie) obsAuto.push('Base vie : ' + faitsTerrain.cbt.base_vie);
+  else {
+    var aggObs = (typeof agregerElementsPGC === 'function') ? agregerElementsPGC(terrainAffaire) : null;
+    if (aggObs && aggObs.base_vie) obsAuto.push('Base vie : ' + aggObs.base_vie);
+  }
+  if (faitsTerrain.cbt.dechets) obsAuto.push('Gestion des dechets : ' + faitsTerrain.cbt.dechets);
+  else if (terrainAffaire.dechetsGestion) obsAuto.push('Gestion des dechets : ' + terrainAffaire.dechetsGestion);
   if (faitsTerrain.contraintes.synthese) obsAuto.push('Contraintes du site : ' + faitsTerrain.contraintes.synthese);
   if (faitsTerrain.reunions && faitsTerrain.reunions.length) {
     var derniereReunion = faitsTerrain.reunions[faitsTerrain.reunions.length - 1];
