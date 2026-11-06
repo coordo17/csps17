@@ -991,6 +991,7 @@
           <input type="file" id="piece-input-PLANS" accept=".pdf,.docx" style="display:none;" multiple onchange="handlePieceUpload(event,'PLANS')">
           <input type="file" id="piece-input-PPSPS" accept=".pdf,.docx" style="display:none;" multiple onchange="handlePieceUpload(event,'PPSPS')">
           <input type="file" id="piece-input-CRMOA" accept=".pdf,.docx" style="display:none;" multiple onchange="handlePieceUpload(event,'CRMOA')">
+          <input type="file" id="piece-input-CBT" accept=".pdf,.docx" style="display:none;" multiple onchange="handlePieceUpload(event,'CBT')">
           <input type="file" id="insert-doc-input" accept=".pdf,.docx,.doc,.jpg,.jpeg,.png" style="display:none;" multiple onchange="handleInsertDoc(event)">
         </div>
         <div class="docs-grid" id="docs-grid"></div>
@@ -2763,6 +2764,10 @@ var PIECES_DOSSIER = [
   { ref: 'PLANS', title: 'Plans (masse, PIC, coupes)', icon: '&#128506;', note: 'Deposez les plans (PDF/DOCX) — extraction du texte + analyse IA (element du PGC)' },
   { ref: 'PPSPS', title: 'PPSPS entreprises (harmonisation)', icon: '&#128203;', note: 'Deposez le PPSPS de chaque entreprise — analyse d\'harmonisation au depot : coherence PGC, coactivite, risques importes/exportes (R.4532-48)' },
   { ref: 'CRMOA', title: 'CR de reunion / mise a jour MOA', icon: '&#128221;', note: 'Deposez le compte rendu de reunion (MOA ou coordination) — nouvelles entreprises et decisions a saisir juste apres (saisie manuelle)' },
+  // CBT (06/11, demande d'Alain) : le type existait deja partout (depot,
+  // detection en vrac, fiche de faits dechets/base-vie) mais sans carte dans
+  // la grille -- aucun bouton pour deposer un CBT a l'unite.
+  { ref: 'CBT', title: 'Cahier des besoins techniques (CBT)', icon: '&#128203;', note: 'Deposez le CBT de chaque lot/entreprise — lecture dechets/base-vie au depot (pas d\'IA)' },
 ];
 
 // Type de document d'une entree RJC : champ docRef (nouvelles entrees) ou
@@ -4368,7 +4373,7 @@ function renderDocsGrid() {
   }
   var SECTIONS = [
     { titre: 'Conception', couleur: '#1e40af', fond: '#eff6ff', pieces: ['CONTRAT', 'PGC', 'DIAG', 'CONTRAINTES', 'PLANS'], docs: ['DP', 'PGCR', 'PGC3R', 'DIF', 'PV-PC'] },
-    { titre: 'R\u00e9alisation', couleur: '#166534', fond: '#f0fdf4', pieces: ['ICR', 'PLAN', 'PPSPS', 'CRMOA'], docs: ['RJC', 'FIC', 'IC', 'PPP', 'HARMOP', 'VIS', 'OBS', 'DGI', 'RCO', 'RFM'] },
+    { titre: 'R\u00e9alisation', couleur: '#166534', fond: '#f0fdf4', pieces: ['ICR', 'PLAN', 'PPSPS', 'CBT', 'CRMOA'], docs: ['RJC', 'FIC', 'IC', 'PPP', 'HARMOP', 'VIS', 'OBS', 'DGI', 'RCO', 'RFM'] },
     { titre: 'CISSCT', couleur: '#7c2d12', fond: '#fff7ed', pieces: [], docs: ['CISSCT-RI', 'CISSCT-CONV', 'CISSCT-CR'] },
     { titre: 'DIUO', couleur: '#4c1d95', fond: '#f5f3ff', pieces: [], docs: ['DIUO', 'PV-DIUO'] }
   ];
