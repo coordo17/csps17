@@ -5867,8 +5867,17 @@ async function generateDoc(ref, previewMode) {
       finalZip = injecterIntervenantsRJC(finalZip, data);
     }
     // Injecter les photos dans le docx (avant nettoyage)
-    if (typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire._photos && terrainAffaire._photos.length > 0) {
+    // [06/11] Reserve au DGI (seul document concu pour recevoir ces photos,
+    // cf. modele 'Photo 1'/'Photo 2'...) : sans ce filtre sur ref, une photo
+    // deposee une fois sur un DGI restait sur terrainAffaire._photos et se
+    // reinjectait ensuite dans tous les documents suivants du meme chantier
+    // (ex. Fiche IC) puisque ce champ n'etait jamais vide apres usage.
+    if (ref === 'DGI' && typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire._photos && terrainAffaire._photos.length > 0) {
       finalZip = injecterPhotos(finalZip, terrainAffaire._photos, terrainAffaire._photosLegendes);
+      // Vider aussitot apres usage pour ne pas polluer les documents suivants.
+      terrainAffaire._photos = [];
+      terrainAffaire._photosLegendes = [];
+      try { if (typeof persistAffaires === 'function') persistAffaires(); } catch (ePersistPhotos) {}
     }
     // Nettoyer les lignes vides (apres injection photos)
     if (ref === 'VIS') finalZip = nettoyerDocx(finalZip, data);
