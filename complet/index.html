@@ -9858,16 +9858,30 @@ var METIERS_RISQUES_IDS = {
   // declenche donc directement sur le lot Gros œuvre, pas seulement sur un
   // lot "installations de chantier" separe (cf. base_vie ci-dessous, garde
   // pour les cas ou une autre entreprise s'en charge).
-  gros_oeuvre: ['r1', 'r6', 'r15', 'r16', 'r18', 'r19', 'r22'],
-  charpente_couverture: ['r1', 'r16', 'r18', 'r19'],
-  'électricité': ['r6', 'r17', 'r23'],
-  plomberie_cvc: ['r3', 'r17', 'r23'],
+  // 06/11 -- affine suivant l'exercice reel Auray (14 lots CBT, cf.
+  // claude/exercice_auray_risques_mesures.md) : chaque lot ne coche plus les
+  // memes risques, comme Fred le fait a la main (le GO n'est pas coche
+  // comme le plombier).
+  gros_oeuvre: ['r1', 'r2', 'r4', 'r6', 'r15', 'r16', 'r18', 'r19', 'r20', 'r22'],
+  // r13/r14 ajoutes (06/11) : levage de portees jusqu'a 13,66 ml, charpente
+  // metallique -- pas seulement de la hauteur statique (couverture/bardage).
+  charpente_couverture: ['r1', 'r13', 'r14', 'r16', 'r18', 'r19', 'r22'],
+  'électricité': ['r6', 'r17', 'r23', 'r24'],
+  // r18 ajoute (06/11) : manutention des groupes exterieurs de climatisation
+  // (lourds, souvent en fin de chantier) -- pas seulement la plomberie.
+  plomberie_cvc: ['r3', 'r17', 'r18', 'r23'],
   peinture: ['r3', 'r20', 'r21'],
-  menuiserie_metallerie: ['r16', 'r17', 'r23'],
-  terrassement_vrd: ['r2', 'r8', 'r19', 'r22'],
-  'démolition_désamiantage': ['r4', 'r11', 'r16', 'r20'],
+  // r18 ajoute (06/11) : manutention de vitrage (miroiterie).
+  menuiserie_metallerie: ['r16', 'r17', 'r18', 'r23'],
+  terrassement_vrd: ['r2', 'r8', 'r19', 'r22', 'r24'],
+  // r2/r22 ajoutes (06/11) : effondrement non maitrise + engins de
+  // demolition (pelle, BRH) a proximite de pietons, cf. audit Phase 1.
+  'démolition_désamiantage': ['r2', 'r4', 'r11', 'r16', 'r20', 'r22'],
   'étanchéité_isolation': ['r1', 'r17', 'r20'],
-  second_oeuvre: ['r18', 'r20', 'r23'],
+  // r3 ajoute (06/11) : produit de nettoyage acide (carrelage, type
+  // DETERDEK) identifie a l'audit Auray -- risque chimique propre a la
+  // finition, pas seulement poussiere/coupures.
+  second_oeuvre: ['r3', 'r18', 'r20', 'r23'],
   'revêtement_pvc': ['r3', 'r20'],
   plafonds_suspendus: ['r1', 'r18'],
   echafaudeur: ['r1', 'r16'],
