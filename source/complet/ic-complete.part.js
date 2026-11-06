@@ -158,95 +158,9 @@ function icPrestatairesHtml() {
     + '</div></div>';
 }
 
-// Grille des sections 4, 5, 7, 8, 9 : une ligne par ligne du modele Word.
-// Section "4. Informations prealables recues de l'EE" retiree le 31/10
-// (demande d'Alain, cf. commentaires modeles_ic.py) ; tout ce qui suivait
-// est renumerote d'un rang.
-var IC_GRILLE = [
-  { sec: '4A', titre: 'Installation g\u00e9n\u00e9rale', ancre: '4A \u2014 Installation', items: [
-    ['cloture', 'Emprise / cl\u00f4ture', 'oc'], ['basevie', 'Base vie / sanitaires', 'oc'], ['stock', 'Stockage mat\u00e9riaux', 'oc'],
-    ['bennes', 'Bennes / tri d\u00e9chets', 'oc'], ['station', 'Stationnement engins', 'oc']] },
-  { sec: '4B', titre: '\u00c9lectricit\u00e9 / Eau', ancre: '4A \u2014 Installation', items: [
-    ['coffret', 'Coffret \u00e9lec. normalis\u00e9 30mA', 'oc'], ['groupe', 'Groupe \u00e9lectrog\u00e8ne', 'oc'], ['eclair', '\u00c9clairage chantier', 'oc'],
-    ['eau', 'Raccordement eau potable', 'oc'], ['lav5b', 'Eau personnel / lavage roues', 'oc']] },
-  { sec: '4C', titre: 'Plan de circulation', ancre: '4C \u2014 Plan de circulation', items: [
-    ['plancirc', 'Plan de circ. \u00e9tabli / affich\u00e9', 'oc'], ['sep', 'S\u00e9paration engins / pi\u00e9tons', 'oc'], ['vitesse', 'Vitesse limit\u00e9e', 'vit'],
-    ['signaleur', 'Signaleur lors des man\u0153uvres', 'oc'], ['lavroues', 'Lavage roues avant sortie', 'oc']] },
-  { sec: '4D', titre: 'Fermeture du p\u00e9rim\u00e8tre', ancre: '4C \u2014 Plan de circulation', items: [
-    ['clot2', 'Cl\u00f4ture rigide BTP H=2m', 'rc'], ['balis', 'Balisage tranch\u00e9e (K2 + lests)', 'rc'], ['portail', 'Portail cadenas / acc\u00e8s s\u00e9cu.', 'rc'],
-    ['sigvoie', 'Signalisation voie publique', 'rc'], ['signoct', 'Signalisation nocturne', 'rc']] },
-  { sec: '5A', titre: 'R\u00e9seaux enterr\u00e9s (DT / DICT)', ancre: '5A \u2014 R\u00e9seaux enterr\u00e9s', items: [
-    ['aep', 'Eau (AEP) / Assainissement', 'dd'], ['gaz', 'Gaz', 'dd'], ['elecr', '\u00c9lectricit\u00e9 BT / HTA-HTB', 'dd'],
-    ['telec', 'T\u00e9l\u00e9com / Fibre / \u00c9clairage public', 'dd'], ['sup', 'Investigations compl\u00e9mentaires (SUP) requises', 'sup']] },
-  { sec: '5B', titre: 'R\u00e9seaux a\u00e9riens', ancre: '5B \u2014 R\u00e9seaux a\u00e9riens', items: [
-    ['hta', 'Lignes HTA/HTB a\u00e9riennes', 'co'], ['bt', 'Lignes BT a\u00e9riennes', 'co'], ['fib', 'Fibres / t\u00e9l\u00e9com a\u00e9riens', 'co'],
-    ['dist', 'Distances de s\u00e9curit\u00e9 / consignes exploitant', 'co']] },
-  { sec: '5C', titre: 'Environnement proche', ancre: '5B \u2014 R\u00e9seaux a\u00e9riens', items: [
-    ['voie', 'Voie publique / riverains', 'co'], ['erp', 'ERP / activit\u00e9 commerciale', 'co'], ['coursdeau', 'Cours d\u2019eau / zone inondable', 'co'],
-    ['autre6', 'Autre :', 'coA']] },
-  { sec: '7', titre: 'Risques sp\u00e9cifiques (CMR)', ancre: 'Silice / HAP', items: [
-    ['amiante', 'Amiante', 'cmr'], ['plomb', 'Plomb', 'cmr'], ['silice', 'Silice / HAP / sols pollu\u00e9s', 'cmr'],
-    ['bio', 'Risque biologique (site / \u00e9gouts)', 'cmr'], ['atex', 'ATEX (gaz / vapeurs)', 'cmr'], ['autre8', 'Autre :', 'cmrA']] },
-  { sec: '8', titre: 'Permis et autorisations', ancre: 'Silice / HAP', items: [
-    // Permis feu / Habilitation electrique / Verif. engins retires le 31/10
-    // (demande d'Alain, meme logique que pour la section 4 : ce sont des
-    // documents propres a l'EE, pas des pre-requis du site).
-    ['voirie', 'Arr\u00eat\u00e9 de voirie', 'perm'], ['dictc', 'DT/DICT compl\u00e8tes', 'perm'], ['ss4', 'Rapport SS4 amiante', 'perm']] },
-  { sec: '9', titre: 'EPI minimum obligatoires', ancre: 'Casque / Chaussures', items: [
-    ['casque', 'Casque / Chaussures S3', 'co'], ['gilet', 'Gilet HV cl.2 / Gants', 'co'], ['lunettes', 'Lunettes / Prot. auditive', 'co'],
-    ['respi', 'Prot. respiratoire (CMR)', 'co'], ['harnais', 'Harnais antichute (si protection collective impossible)', 'co']] },
-];
-// Section 11 du modele (vigilance meteo) : alimentee par le bloc meteo existant
-var IC_METEO = [
-  ['Mesures canicule/intemp\u00e9ries appliqu\u00e9es', 'meteoPgc'],
-  ['R\u00e9f\u00e9rent canicule', 'meteoReferent', 'nom'],
-  ['R\u00e9f\u00e9rent intemp\u00e9ries', 'meteoReferentHiver', 'nom']];
-
-var IC_TITRES_SEC = { '4': ['4', 'Organisation du site', '&#127959;'],
-  '5': ['5', 'R\u00e9seaux et environnement', '&#9889;'], '7': ['7', 'Risques sp\u00e9cifiques (CMR)', '&#128296;'],
-  '8': ['8', 'Permis et autorisations', '&#128220;'], '9': ['9', 'EPI minimum obligatoires', '&#9939;'] };
-
-function icInput(id, ph, w) {
-  return '<input type="text" id="' + id + '" placeholder="' + ph + '" style="flex:' + (w || 1) + ';min-width:0;padding:6px;border:1px solid var(--border);border-radius:5px;font-family:inherit;font-size:12px;">';
-}
-function icCase(id, lab) {
-  return '<label style="display:flex;align-items:center;gap:4px;font-size:12px;white-space:nowrap;"><input type="checkbox" id="' + id + '" style="width:18px;height:18px;">' + (lab || '') + '</label>';
-}
-function icLigneHtml(it) {
-  var k = 'icg-' + it[0], lab = it[1], kind = it[2];
-  var h = '<div style="padding:6px 0;border-bottom:1px solid var(--border);">';
-  h += '<div style="font-size:13px;margin-bottom:4px;">' + (kind === 'coA' || kind === 'cmrA' ? icInput(k + '-lab', 'Autre (pr\u00e9ciser)', 1) : lab) + '</div>';
-  h += '<div style="display:flex;gap:8px;align-items:center;">';
-  if (kind === 'recu') h += icCase(k, 'Re\u00e7u');
-  else if (kind === 'oc' || kind === 'co' || kind === 'coA') h += icCase(k, 'En place / vu') + icInput(k + '-t', 'Observations');
-  else if (kind === 'vit') h += '<input type="number" id="' + k + '-v" placeholder="km/h" style="width:80px;padding:6px;border:1px solid var(--border);border-radius:5px;">' + icCase(k, 'Affich\u00e9e') + icInput(k + '-t', 'Observations');
-  else if (kind === 'rc') h += icCase(k, 'En place') + icInput(k + '-t', 'Responsable');
-  else if (kind === 'dd') h += icCase(k, 'DT re\u00e7ue') + icCase(k + '-2', 'DICT envoy\u00e9e') + icInput(k + '-t', 'Observations');
-  else if (kind === 'sup') h += icCase(k, 'Requises') + icInput(k + '-t', 'Observations');
-  else if (kind === 'cmr' || kind === 'cmrA') h += icCase(k, 'Pr\u00e9sent') + icInput(k + '-t', 'Mesures');
-  else if (kind === 'perm') h += '<select id="' + k + '-s" style="padding:6px;border:1px solid var(--border);border-radius:5px;font-size:12px;"><option value="">Statut\u2026</option><option>Fourni</option><option>Requis</option><option>Sans objet</option></select>' + icInput(k + '-t', 'Observations');
-  return h + '</div></div>';
-}
-function icGrilleSection(num) {
-  var t = IC_TITRES_SEC[num];
-  var h = sectionHeader(t[0], t[1], t[2]);
-  IC_GRILLE.forEach(function (g) {
-    if (g.sec.replace(/[A-D]$/, '') !== num) return;
-    if (g.sec !== num) h += '<p style="font-size:12px;font-weight:600;color:var(--blue-dark);margin:10px 0 2px;">' + g.sec + ' \u2014 ' + g.titre + '</p>';
-    g.items.forEach(function (it) { h += icLigneHtml(it); });
-  });
-  return h + sectionEnd();
-}
-function icCollecterGrille() {
-  var r = {};
-  IC_GRILLE.forEach(function (g) {
-    g.items.forEach(function (it) {
-      var k = 'icg-' + it[0];
-      r[it[0]] = { c: getCheck(k), c2: getCheck(k + '-2'), t: getVal(k + '-t'), s: getVal(k + '-s'), v: getVal(k + '-v'), lab: getVal(k + '-lab') };
-    });
-  });
-  return r;
-}
+// [05/11->06/11] Grille sections 4A-4D/5A-5C/7/8/9 + 11 (meteo) retirees
+// (demande d'Alain : alignement sur le modele d'IC de Fred, nettoyage avant
+// reconstruction en structure I/II/III/IV).
 
 // 7D : risques propres a l'entreprise (R.4532-66 2°)
 var IC_ORIGINES = ['Mode op\u00e9ratoire', 'Mat\u00e9riels / installations', 'Produits', 'D\u00e9placements', 'Organisation du chantier'];
@@ -454,7 +368,6 @@ function icCompleterFicData(d) {
   var donneur = ent.type === 'sous-traitant' ? icEntParId(ent.parent) : null;
   d.donneurOrdre = donneur ? donneur.nom : ''; d.donneurPresent = getCheck('ic-do-present');
   d.prestataires = getVal('ic-prestataires');
-  d.grille = icCollecterGrille();
   d.risquesPropres = ic7dCollecter();
   d.presents = icCollecterPresents();
   d.pointsPPSPS = getVal('ic-points-ppsps');
@@ -609,41 +522,6 @@ function injecterICComplete(zip, d, isCat3) {
       return (d.pgcStatut === 'remis' ? '\u2611' : '\u2610') + ' Remis ce jour (lors de l\u2019ICP)   '
         + (d.pgcStatut === 'transmis' ? '\u2611' : '\u2610') + ' D\u00e9j\u00e0 transmis le : ' + (d.pgcDate ? formatDateFR(d.pgcDate) : '___________') + '   '
         + (d.pgcStatut === 'maj' ? '\u2611' : '\u2610') + ' Version mise \u00e0 jour n\u00b0 ' + (d.pgcVersion || '____');
-    });
-    // Grille 4, 5, 6, 8, 9, 10
-    var g = d.grille || {};
-    IC_GRILLE.forEach(function (sec) {
-      var tbl = icTable(doc, sec.ancre);
-      sec.items.forEach(function (it) {
-        var v = g[it[0]] || {}, kind = it[2], lab = it[1];
-        if (kind === 'recu') icLigne(doc, tbl, lab, [v.c ? '\u2713 re\u00e7u' : 'non re\u00e7u']);
-        else if (kind === 'oc') icLigne(doc, tbl, lab, [v.t, icCoche(v.c)]);
-        else if (kind === 'vit') {
-          var cell = icLigne(doc, tbl, 'Vitesse limitée', [v.t, icCoche(v.c)]);
-          if (cell) icCellText(doc, cell, 'Vitesse limit\u00e9e : ' + (v.v || '______') + ' km/h');
-        }
-        else if (kind === 'rc') icLigne(doc, tbl, lab, [v.t, icCoche(v.c)]);
-        else if (kind === 'dd') icLigne(doc, tbl, lab, [icCoche(v.c), icCoche(v.c2), v.t]);
-        else if (kind === 'sup') icLigne(doc, tbl, lab, [v.c ? 'Oui' : 'Non', '', v.t]);
-        else if (kind === 'co') icLigne(doc, tbl, lab, [icCoche(v.c), v.t]);
-        else if (kind === 'coA') {
-          var c6 = icLigne(doc, tbl, 'Autre :', v.lab ? [icCoche(v.c), v.t] : []);
-          if (c6 && v.lab) icCellText(doc, c6, 'Autre : ' + v.lab);
-        }
-        else if (kind === 'cmr') icLigne(doc, tbl, lab, [v.c ? 'Oui' : 'Non', v.t]);
-        else if (kind === 'cmrA') {
-          var c8 = icLigne(doc, tbl, 'Autre :', v.lab ? [v.c ? 'Oui' : 'Non', v.t] : []);
-          if (c8 && v.lab) icCellText(doc, c8, 'Autre : ' + v.lab);
-        }
-        else if (kind === 'perm') icLigne(doc, tbl, lab, [v.t, v.s || '\u2014']);
-      });
-    });
-    // 11 : vigilance meteo
-    var t11 = icTable(doc, 'Mesure météo');
-    IC_METEO.forEach(function (m) {
-      var val = d[m[1]];
-      if (m[2] === 'nom') icLigne(doc, t11, m[0], [val ? '\u2713' : '\u2014', val || '']);
-      else icLigne(doc, t11, m[0], [icCoche(val), '']);
     });
     // 7A / 7B / 7C : risques coches, mesures verifiees (PGC_RISQUES_LIB)
     var l7 = { a: [], b: [], c: [] };

@@ -884,9 +884,6 @@
               <div class="field"><label>Telephone</label><input type="tel" id="cspsc-tel" placeholder=""></div>
               <div class="field"><label>Email</label><input type="email" id="cspsc-mail" placeholder=""></div>
             </div>
-            <button type="button" class="btn btn-outline btn-sm" onclick="contratChoisirFichier()">&#128220; Importer depuis le contrat (fichier)</button>
-            <input type="file" id="contrat-import-input" accept=".pdf,.docx,.txt" style="display:none;" onchange="contratFichierChoisi(event)">
-            <p style="font-size:11px;color:var(--text-light);margin-top:4px;">Repère un co-traitant CSPS (nom/tél/mail) différent de vous dans le contrat déposé, par motifs de texte (aucune IA). À vérifier avant d'enregistrer.</p>
           </div>
         </div>
 
@@ -909,13 +906,7 @@
               <button class="btn btn-outline btn-sm" onclick="addEntreprise('principale')">+ Entreprise principale</button>
               <button class="btn btn-outline btn-sm" onclick="addEntreprise('sous-traitant')">+ Sous-traitant</button>
               <button class="btn btn-outline btn-sm" onclick="addEntreprise('prestataire')">+ Prestataire de service</button>
-              <button type="button" class="btn btn-outline btn-sm" onclick="planningChoisirFichier()">&#128197; Analyser un planning (PDF)</button>
-              <input type="file" id="planning-import-input" accept=".pdf" style="display:none;" onchange="planningFichierChoisi(event)">
-              <button type="button" class="btn btn-outline btn-sm" onclick="entrepriseChoisirFichier()">&#128231; Importer une entreprise (fichier)</button>
-              <input type="file" id="entreprise-import-input" accept=".pdf,.docx,.txt,.eml" style="display:none;" onchange="entrepriseFichierChoisi(event)">
             </div>
-            <p style="font-size:11px;color:var(--text-light);margin-top:6px;">Lit le tableau d'un planning PDF (type export MS Project) et propose une Date d'intervention + Duree par entreprise, par rapprochement de mots-cles avec son lot. Aucune IA — lecture du texte du PDF uniquement. Vous validez/corrigez chaque ligne avant application.</p>
-            <p style="font-size:11px;color:var(--text-light);margin-top:4px;">Import entreprise (mail/pièce .pdf, .docx, .txt, .eml) : repère nom, lot, contact, effectif, tél., mail et SIRET par motifs de texte (aucune IA) et ouvre une nouvelle carte à vérifier. Le SIRET repéré permet ensuite de remplir raison sociale/adresse officielles via « Vérifier au registre officiel ».</p>
           </div>
         </div>
       </div>
@@ -967,8 +958,6 @@
           <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsContraintes()">Réseaux / contraintes du site</button>
           <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsPlanning()">Planning / co-activités</button>
           <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsCR()">CR de réunion</button>
-          <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsCBT()">Déchets / Base vie (CBT)</button>
-          <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsPlans()">Accès / Clôture (Plans)</button>
           <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="document.getElementById('import-vrac-input').click()">&#128193; Importer un dossier</button>
           <input type="file" id="import-vrac-input" multiple style="display:none;" onchange="importerDossierVrac(event)">
           <button type="button" class="btn btn-primary btn-sm" style="margin-left:8px;" onclick="relireChantier()">&#128269; Relire le chantier</button>
@@ -1256,11 +1245,6 @@ function showNewAffaire() {
   ['rp-amiante','rp-plomb','rp-demolition','rp-terrassement','rp-reseaux','rp-hauteur'].forEach(function(id){
     document.getElementById(id).checked=false;
   });
-  // Travaux en hauteur >3m coche par defaut sur toute nouvelle affaire : sur
-  // une construction, la hauteur (toiture, elevation...) est quasi certaine ;
-  // l'absence de risque hauteur est le cas rare (ex: reseaux enterres).
-  // Alain decoche lui-meme dans ces cas-la (demande du 03/11).
-  document.getElementById('rp-hauteur').checked = true;
   document.getElementById('form-title').textContent='Nouvelle affaire';
   document.getElementById('form-subtitle').textContent='Renseignez les informations pour pre-remplir tous vos documents';
   document.getElementById('gen-progress').classList.remove('show');
@@ -1308,287 +1292,6 @@ function addEntreprise(type) {
   div.innerHTML = h;
   document.getElementById('entreprise-list').appendChild(div);
   if (typeof icCarteEntreprise === 'function') icCarteEntreprise(div, type);
-}
-
-// ============================================================================
-// Import planning (03/11, demande d'Alain : "comment faire pour que les
-// dates se mettent comme on a fait pour harmo ?"). Principe deterministe
-// (pas d'IA) : on lit le texte d'un planning PDF deja structure en tableau
-// (export MS Project -- colonnes Nom de la tache / Duree / Debut / Fin),
-// on repere la ligne de chaque lot d'entreprise par mot-cle, on en tire une
-// date de debut + duree, et Alain valide/corrige avant que ca ecrase quoi
-// que ce soit dans Intervenants. Ne fonctionne que sur un PDF avec une
-// couche texte exploitable (pas un planning scanne/image) -- dans ce cas
-// aucune ligne n'est trouvee et la saisie reste manuelle.
-// ============================================================================
-function planningNormaliser(s) {
-  return normaliserTexte(String(s || '').toLowerCase().replace(/œ/g, 'oe').replace(/æ/g, 'ae'))
-    .replace(/[^a-z0-9]+/g, ' ').trim();
-}
-// Reconstruit des "lignes" de tableau a partir des positions (x,y) des
-// morceaux de texte du PDF -- pdf.js ne donne que des fragments bruts, pas
-// de notion de ligne/colonne. On regroupe par Y proche puis on trie par X.
-async function planningLireLignesPDF(file) {
-  var ab = await file.arrayBuffer();
-  var pdf = await pdfjsLib.getDocument({ data: ab }).promise;
-  var maxPages = Math.min(pdf.numPages, 60);
-  var lignes = [];
-  for (var p = 1; p <= maxPages; p++) {
-    var page = await pdf.getPage(p);
-    var tc = await page.getTextContent();
-    var items = tc.items.map(function (it) {
-      return { str: it.str, x: it.transform[4], y: it.transform[5] };
-    }).filter(function (it) { return it.str && it.str.trim(); });
-    items.sort(function (a, b) { return (b.y - a.y) || (a.x - b.x); });
-    var courante = [], yCour = null;
-    items.forEach(function (it) {
-      if (yCour === null || Math.abs(it.y - yCour) <= 2) {
-        courante.push(it); if (yCour === null) yCour = it.y;
-      } else {
-        courante.sort(function (a, b) { return a.x - b.x; });
-        lignes.push(courante.map(function (i2) { return i2.str; }).join(' '));
-        courante = [it]; yCour = it.y;
-      }
-    });
-    if (courante.length) {
-      courante.sort(function (a, b) { return a.x - b.x; });
-      lignes.push(courante.map(function (i2) { return i2.str; }).join(' '));
-    }
-  }
-  return lignes;
-}
-// Cherche les deux premieres dates JJ/MM/AA(AA) dans une fenetre de
-// quelques lignes a partir de "depart" -- les plannings exportes etalent
-// souvent une meme ligne de tableau sur 2-3 lignes de texte (nom de tache
-// qui retombe a la ligne), les dates se retrouvant parfois juste en
-// dessous du nom plutot que sur la meme ligne.
-function planningExtraireDeuxDates(lignes, depart, fenetre) {
-  var dates = [];
-  for (var i = depart; i < Math.min(lignes.length, depart + fenetre) && dates.length < 2; i++) {
-    var re = /(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{2,4})/g, m;
-    while ((m = re.exec(lignes[i])) && dates.length < 2) {
-      var j = +m[1], mo = +m[2], a = +m[3]; if (a < 100) a += 2000;
-      var d = new Date(a, mo - 1, j);
-      if (!isNaN(d.getTime())) dates.push(d);
-    }
-  }
-  if (dates.length < 2) return null;
-  dates.sort(function (a, b) { return a - b; });
-  return { debut: dates[0], fin: dates[dates.length - 1] };
-}
-function planningListerEntreprisesDOM() {
-  return Array.prototype.slice.call(document.querySelectorAll('#entreprise-list .entreprise-card')).map(function (card) {
-    return {
-      nom: card.querySelector('.ent-nom') ? card.querySelector('.ent-nom').value : '',
-      lot: card.querySelector('.ent-lot') ? card.querySelector('.ent-lot').value : ''
-    };
-  });
-}
-// Pour chaque entreprise, on decoupe son lot en mots-cles ("VRD /
-// Demolition / Desamiantage" -> ["vrd","demolition","desamiantage"]) et on
-// cherche la ligne du planning qui contient un de ces mots-cles en mot
-// entier -- en priorite une ligne "phase" (le mot-cle demarre juste apres
-// le(s) numero(s) de ligne en debut de tableau, ex: "25 26 DALLAGE ..."),
-// qui donne la periode globale du lot, plutot qu'une sous-tache qui le
-// mentionne juste en passant (ex: "16 Reseaux sous dallage ..." match
-// aussi "dallage" mais n'est pas la periode du lot Dallage). A defaut de
-// ligne "phase", on garde la 1ere occurrence trouvee dans le document.
-function planningApparierEntreprises(entreprisesDOM, lignes) {
-  var lignesNorm = lignes.map(planningNormaliser);
-  return entreprisesDOM.map(function (e, idx) {
-    var mots = String(e.lot || '').split(/[\/,;]| et /i).map(planningNormaliser).filter(function (s) { return s.length > 2; });
-    for (var mi = 0; mi < mots.length; mi++) {
-      var mot = mots[mi];
-      var re = new RegExp('\\b' + mot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b');
-      var candidats = [];
-      for (var li = 0; li < lignesNorm.length; li++) { if (re.test(lignesNorm[li])) candidats.push(li); }
-      if (!candidats.length) continue;
-      var ligneChoisie = candidats.find(function (c) {
-        var reste = lignesNorm[c].replace(/^[\d\s]+/, '');
-        return reste === mot || reste.indexOf(mot + ' ') === 0;
-      });
-      if (ligneChoisie === undefined) ligneChoisie = candidats[0];
-      var periode = planningExtraireDeuxDates(lignes, ligneChoisie, 3);
-      if (periode) {
-        return {
-          idx: idx, nom: e.nom, lot: e.lot, motTrouve: mot, ligneTrouvee: lignes[ligneChoisie].trim().slice(0, 90),
-          debutISO: periode.debut.toISOString().split('T')[0], finISO: periode.fin.toISOString().split('T')[0]
-        };
-      }
-    }
-    return { idx: idx, nom: e.nom, lot: e.lot, motTrouve: null };
-  });
-}
-function planningChoisirFichier() {
-  var input = document.getElementById('planning-import-input');
-  if (input) input.click();
-}
-async function planningFichierChoisi(event) {
-  var file = event.target.files && event.target.files[0];
-  event.target.value = '';
-  if (!file) return;
-  if (!document.querySelectorAll('#entreprise-list .entreprise-card').length) {
-    showToast('Ajoutez d’abord vos entreprises dans Intervenants', 'error'); return;
-  }
-  showToast('Lecture du planning en cours...', 'success');
-  try {
-    var lignes = await planningLireLignesPDF(file);
-    var resultats = planningApparierEntreprises(planningListerEntreprisesDOM(), lignes);
-    planningAfficherResultats(file.name, resultats);
-  } catch (err) {
-    showToast('Lecture du planning impossible : ' + err.message, 'error');
-  }
-}
-function planningAfficherResultats(fichierNom, resultats) {
-  var html = '<p style="margin-bottom:10px;font-size:13px;color:var(--text-light);">'
-    + 'Périodes repérées dans <strong>' + icEscAttr(fichierNom) + '</strong> par rapprochement de mots-clés avec le lot de chaque entreprise (aucune IA — simple lecture du tableau du planning, pas toujours fiable sur un planning scanné ou très complexe). '
-    + 'Vérifiez/corrigez chaque ligne avant d’appliquer : cocher une ligne écrase la Date d’intervention et la Durée de cette entreprise dans Intervenants.</p>'
-    + '<div style="display:flex;flex-direction:column;gap:8px;">';
-  resultats.forEach(function (r, i) {
-    if (!r.motTrouve) {
-      html += '<div style="padding:8px 10px;background:var(--bg-accent);border-radius:6px;font-size:13px;">'
-        + '<strong>' + icEscAttr(r.nom || 'Entreprise ' + (i + 1)) + '</strong> (' + icEscAttr(r.lot || 'lot non précisé') + ') — aucune ligne du planning ne correspond. À saisir manuellement.</div>';
-      return;
-    }
-    var jours = Math.max(1, Math.round((new Date(r.finISO) - new Date(r.debutISO)) / 86400000));
-    html += '<div style="padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;">'
-      + '<label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" class="plan-res-cb" data-idx="' + r.idx + '" checked>'
-      + '<strong>' + icEscAttr(r.nom || 'Entreprise ' + (i + 1)) + '</strong> (' + icEscAttr(r.lot || '') + ')</label>'
-      + '<div style="margin-top:4px;color:var(--text-light);">Trouvé via « ' + icEscAttr(r.motTrouve) + ' » — ligne : « ' + icEscAttr(r.ligneTrouvee) + ' »</div>'
-      + '<div class="form-row" style="margin-top:6px;">'
-      + '<div class="field"><label>Date début</label><input type="date" class="plan-res-debut" data-idx="' + r.idx + '" value="' + r.debutISO + '" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;"></div>'
-      + '<div class="field"><label>Durée</label><input type="text" class="plan-res-duree" data-idx="' + r.idx + '" value="' + jours + ' jours" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;"></div>'
-      + '</div></div>';
-  });
-  html += '</div>';
-  openDocModal('Import planning — périodes proposées', html, 'Appliquer les lignes cochées', function () {
-    planningAppliquerResultats();
-  });
-}
-function planningAppliquerResultats() {
-  var cards = document.querySelectorAll('#entreprise-list .entreprise-card');
-  var n = 0;
-  document.querySelectorAll('.plan-res-cb').forEach(function (cb) {
-    if (!cb.checked) return;
-    var idx = parseInt(cb.getAttribute('data-idx'), 10);
-    var card = cards[idx];
-    if (!card) return;
-    var debutEl = document.querySelector('.plan-res-debut[data-idx="' + idx + '"]');
-    var dureeEl = document.querySelector('.plan-res-duree[data-idx="' + idx + '"]');
-    var ci = card.querySelector('.ent-dateInterv'), cd = card.querySelector('.ent-duree');
-    if (ci && debutEl && debutEl.value) ci.value = debutEl.value;
-    if (cd && dureeEl) cd.value = dureeEl.value;
-    if (ci && debutEl && debutEl.value) n++;
-  });
-  showToast(n + ' entreprise(s) mise(s) à jour — pensez à Enregistrer l’affaire', 'success');
-}
-
-// ============================================================================
-// Import entreprise depuis un fichier (mail/pdf/docx/txt) -- 05/11, demande
-// d'Alain : remettre en deterministe l'ancien import IA (qui appelait un
-// LLM pour extraire nom/lot/tel/mail/siret/effectif/contact depuis un texte
-// libre). Ici : lecture du texte (extraireTexteFichier, meme fonction que
-// le CBT/PPSPS, pas d'IA) + reperage par motifs (regex) des champs qui ont
-// une forme reconnaissable (email, telephone, SIRET, lignes "Entreprise :",
-// "Lot :", "Contact :", "Effectif :"). Nom/adresse restent approximatifs
-// par motif -- mais le SIRET repere, une fois verifie, permet de les
-// recuperer de source officielle via "Verifier au registre officiel"
-// (deja existant, /api/entreprise, INSEE/RNE). Ouvre une nouvelle carte
-// entreprise pre-remplie, TOUJOURS a relire avant d'enregistrer l'affaire.
-// ============================================================================
-function extraireChampsEntreprise(texte) {
-  function champ(motifs) { return rechercherChampPPSPS(texte, motifs); }
-  var email = (texte.match(/[\w.+-]+@[\w-]+\.[\w.-]+/) || [])[0] || '';
-  var tel = (texte.match(/(?:0|\+33\s?)[1-9](?:[\s.\-]?\d{2}){4}/) || [])[0] || '';
-  var siretM = texte.match(/\b(\d{3}[\s.]?\d{3}[\s.]?\d{3}[\s.]?\d{5})\b/);
-  var siret = siretM ? siretM[1].replace(/[\s.]/g, '') : '';
-  return {
-    nom: champ([/(?:entreprise|raison sociale|soci[ée]t[ée])\s*[:\-]\s*([^\n]{3,80})/i]),
-    lot: champ([/(?:lot|corps d['’]etat|corps de metier)\s*[:\-]\s*([^\n]{3,80})/i]),
-    contact: champ([/(?:contact|interlocuteur|responsable chantier)\s*[:\-]\s*([^\n]{3,60})/i]),
-    effectif: champ([/(?:effectif|personnel)[^\n\d]{0,20}(\d{1,3})\s*(?:personnes?|compagnons?|salari[ée]s?)?/i]),
-    mail: email,
-    tel: tel,
-    siret: siret
-  };
-}
-function entrepriseChoisirFichier() {
-  var input = document.getElementById('entreprise-import-input');
-  if (input) input.click();
-}
-async function entrepriseFichierChoisi(event) {
-  var file = event.target.files && event.target.files[0];
-  event.target.value = '';
-  if (!file) return;
-  showToast('Lecture de ' + file.name + '...', 'success');
-  try {
-    var texte = await extraireTexteFichier(file);
-    if (!texte || texte.replace(/\s/g, '').length < 20) {
-      throw new Error('Texte illisible (document scanné sans OCR exploitable, ou fichier vide).');
-    }
-    var champs = extraireChampsEntreprise(texte);
-    addEntreprise('principale');
-    var cards = document.querySelectorAll('#entreprise-list .entreprise-card');
-    var last = cards[cards.length - 1];
-    var n = 0;
-    ['nom', 'lot', 'contact', 'effectif', 'mail', 'tel', 'siret'].forEach(function (f) {
-      if (!champs[f]) return;
-      var el = last.querySelector('.ent-' + f);
-      if (el) { el.value = champs[f]; n++; }
-    });
-    showToast(n + ' champ(s) repéré(s) dans ' + file.name + ' — à vérifier, rien n\'est jugé à votre place.', 'success');
-  } catch (err) {
-    showToast('Erreur lecture : ' + err.message, 'error');
-  }
-}
-
-// ============================================================================
-// Import du co-traitant CSPS depuis le contrat de coordination (05/11,
-// demande d'Alain -- cas rare, priorite basse). L'ancienne analyse IA
-// identifiait un autre coordonnateur SPS (conception) que lui-meme.
-// Remplace par un reperage par motifs (regex, pas d'IA) : nom pres de
-// "coordonnateur SPS", explicitement exclu si ca semble etre Alain/
-// CSPS17 lui-meme (son propre contrat).
-// ============================================================================
-function extraireCoTraitantCSPS(texte) {
-  var motifs = [/coordonnateur\s+(?:sps\s+)?(?:en\s+)?(?:conception|r[ée]alisation)?\s*[:\-]?\s*([^\n]{3,80})/i, /co[\-\s]?traitant\s*[:\-]?\s*([^\n]{3,80})/i];
-  var nom = '';
-  for (var i = 0; i < motifs.length; i++) {
-    var m = texte.match(motifs[i]);
-    if (m && m[1]) {
-      var cand = m[1].trim().replace(/\s+/g, ' ').slice(0, 90);
-      if (cand && !/alain|suzanne|csps17/i.test(cand)) { nom = cand; break; }
-    }
-  }
-  var email = (texte.match(/[\w.+-]+@[\w-]+\.[\w.-]+/) || [])[0] || '';
-  var tel = (texte.match(/(?:0|\+33\s?)[1-9](?:[\s.\-]?\d{2}){4}/) || [])[0] || '';
-  return { nom: nom, tel: tel, mail: email };
-}
-function contratChoisirFichier() {
-  var input = document.getElementById('contrat-import-input');
-  if (input) input.click();
-}
-async function contratFichierChoisi(event) {
-  var file = event.target.files && event.target.files[0];
-  event.target.value = '';
-  if (file) await importerContratDepuisFichier(file);
-}
-async function importerContratDepuisFichier(file) {
-  showToast('Lecture de ' + file.name + '...', 'success');
-  try {
-    var texte = await extraireTexteFichier(file);
-    if (!texte || texte.replace(/\s/g, '').length < 20) {
-      throw new Error('Texte illisible (document scanné sans OCR exploitable, ou fichier vide).');
-    }
-    var infos = extraireCoTraitantCSPS(texte);
-    var n = 0;
-    if (infos.nom) { var elN = document.getElementById('cspsc-nom'); if (elN && !elN.value) { elN.value = infos.nom; n++; } }
-    if (infos.tel) { var elT = document.getElementById('cspsc-tel'); if (elT && !elT.value) { elT.value = infos.tel; n++; } }
-    if (infos.mail) { var elM = document.getElementById('cspsc-mail'); if (elM && !elM.value) { elM.value = infos.mail; n++; } }
-    showToast(n ? n + ' champ(s) repéré(s) dans ' + file.name + ' (CSPS Conception) — à vérifier.' : 'Aucun co-traitant CSPS distinct repéré dans ' + file.name + '.', n ? 'success' : 'error');
-  } catch (err) {
-    showToast('Erreur lecture : ' + err.message, 'error');
-  }
 }
 
 function toggleEntCard(id) {
@@ -2649,11 +2352,7 @@ var TYPE_MOTS_CLES_VRAC = [
   ['CONTRAINTES', ['arrete de voirie', 'arrete voirie', 'contrainte']],
   ['PPSPS', ['ppsps']],
   ['CRMOA', ['compte rendu', 'cr reunion', 'cr_reunion', 'reunion de chantier', 'cr n°', 'cr n ']],
-  ['PGC', ['pgc']],
-  // CBT (05/11, demande d'Alain) : cahier des besoins techniques (un par
-  // lot/entreprise), seul type dont le contenu est lu (voir ouvrirFaitsCBT) --
-  // tous les autres types ci-dessus ne sont reconnus que par leur nom.
-  ['CBT', ['cbt', 'cahier des besoins', 'cahier des charges techniques']]
+  ['PGC', ['pgc']]
 ];
 function normFichierClassement(s) {
   return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -2761,20 +2460,12 @@ function relireChantier() {
     var crDejaSaisi = (faits.reunions || []).some(function (r) { return r.source && crFichier && r.source.indexOf(crFichier) === 0; });
     if (!crDejaSaisi) manques.push({ label: 'CR de r\u00e9union', fichier: crFichier, fn: ouvrirFaitsCR });
   }
-  // CBT (05/11) : un CBT depose sans aucune fiche dechets/base-vie saisie
-  // pour l'affaire -- on ne verifie que le dernier depose (info de chantier,
-  // pas propre a un lot, donc un seul CBT suffit a la remplir).
-  var cbtDoc = dernierDoc('CBT');
-  if (cbtDoc && !faits.cbt.source) manques.push({ label: 'D\u00e9chets / Base vie (CBT d\u00e9pos\u00e9)', fichier: cbtDoc.fichierNom || cbtDoc.objet, fn: ouvrirFaitsCBT });
-  // Plans/PIC (05/11) : meme logique que le CBT.
-  var plansDoc = dernierDoc('PLANS');
-  if (plansDoc && !faits.plans.source) manques.push({ label: 'Acc\u00e8s / Cl\u00f4ture (plan d\u00e9pos\u00e9)', fichier: plansDoc.fichierNom || plansDoc.objet, fn: ouvrirFaitsPlans });
 
   window._relireManques = manques;
   var html;
   if (!manques.length) {
-    html = '<p>Rien \u00e0 signaler : les documents d\u00e9pos\u00e9s dont on peut v\u00e9rifier la fiche de faits (amiante, r\u00e9seaux/contraintes, planning, inspection pr\u00e9alable, CR de r\u00e9union, CBT, plans) sont tous renseign\u00e9s.</p>'
-      + '<p style="font-size:12px;color:var(--text-light);margin-top:8px;">Cette relecture ne lit pas le contenu des documents (sauf CBT et plans, lus de fa\u00e7on d\u00e9terministe -- pas d\u2019IA) : elle compare juste ce qui est d\u00e9pos\u00e9 \u00e0 ce qui a \u00e9t\u00e9 saisi.</p>';
+    html = '<p>Rien \u00e0 signaler : les documents d\u00e9pos\u00e9s dont on peut v\u00e9rifier la fiche de faits (amiante, r\u00e9seaux/contraintes, planning, inspection pr\u00e9alable, CR de r\u00e9union) sont tous renseign\u00e9s.</p>'
+      + '<p style="font-size:12px;color:var(--text-light);margin-top:8px;">Cette relecture ne lit pas le contenu des documents (pas d\u2019IA) : elle compare juste ce qui est d\u00e9pos\u00e9 \u00e0 ce qui a \u00e9t\u00e9 saisi, pour ces 5 types.</p>';
   } else {
     html = '<p style="margin-bottom:10px;font-size:13px;color:var(--text-light);">Documents d\u00e9pos\u00e9s sans fiche de faits saisie :</p>'
       + manques.map(function (m, i) {
@@ -2867,64 +2558,10 @@ function enregistrerFaitsInspection(affaire, fichierNom) {
 // Alain au lieu d'etre devines. Ecrit dans affaire.faits.amiante, qui
 // alimente deja le PGC et la fiche IC (§12 observations).
 // ============================================================================
-// icAjouterDuree : date ISO (ent.dateInterv) + duree libre (ent.duree) ->
-// date de fin, uniquement quand la duree est ecrite dans un format simple
-// ("3 semaines", "2 mois", "15 jours"). Sinon renvoie null -- pas de calcul
-// deterministe possible (pas d'IA, pas de devinette sur un texte ambigu).
-// Partagee par icCalculerFinDesamiantage et icFormaterPeriodeEntreprise.
-function icAjouterDuree(dateISO, dureeTexte) {
-  if (!dateISO) return null;
-  var m = String(dureeTexte || '').match(/(\d+)\s*(jour|semaine|mois)/i);
-  if (!m) return null;
-  var n = parseInt(m[1], 10);
-  var joursParUnite = { jour: 1, semaine: 7, mois: 30 }[m[2].toLowerCase()];
-  var debut = new Date(dateISO + 'T00:00:00');
-  if (isNaN(debut.getTime())) return null;
-  return new Date(debut.getTime() + n * joursParUnite * 86400000);
-}
-// icFormaterPeriodeEntreprise : pre-remplit le §2 "Periode intervention"
-// d'une fiche IC a partir des dates saisies UNE FOIS dans les Intervenants
-// (Date approx. d'intervention + Duree prevue) -- meme principe que
-// l'automatisation Harmo (une donnee saisie une fois, reutilisee partout),
-// mais en deterministe/manuel plutot que par extraction IA (demande
-// d'Alain du 03/11). Renvoie '' si la date de debut n'est pas renseignee.
-function icFormaterPeriodeEntreprise(e) {
-  if (!e || !e.dateInterv) return '';
-  var debut = formatDateFR(e.dateInterv);
-  var fin = icAjouterDuree(e.dateInterv, e.duree);
-  return fin ? (debut + ' au ' + formatDateFR(fin.toISOString().split('T')[0])) : debut;
-}
-// icCalculerFinDesamiantage : repere dans les Intervenants l'entreprise de
-// demolition/desamiantage (par mot-cle sur le lot/type) et calcule sa date
-// de fin probable = date approx. d'intervention + duree prevue, uniquement
-// quand la duree est ecrite dans un format simple ("3 semaines", "2 mois",
-// "15 jours"). Sinon renvoie null -- pas de calcul deterministe possible,
-// on laisse Alain saisir lui-meme (pas d'IA, pas de devinette).
-function icTrouverEntrepriseDemolition(affaire) {
-  var liste = (affaire && affaire.entreprises) || [];
-  for (var i = 0; i < liste.length; i++) {
-    var e = liste[i];
-    var motsCle = normaliserTexte((e.lot || '') + ' ' + (e.type || ''));
-    if (/demolition|desamiant|amiante/.test(motsCle)) return e;
-  }
-  return null;
-}
-function icCalculerFinDesamiantage(affaire) {
-  var e = icTrouverEntrepriseDemolition(affaire);
-  if (!e) return null;
-  var fin = icAjouterDuree(e.dateInterv, e.duree);
-  if (!fin) return null;
-  return formatDateFR(fin.toISOString().split('T')[0]);
-}
 function ouvrirFaitsAmiante(fichierNom) {
   var affaire = currentAffaireObj();
   if (!affaire) { showToast('Ouvrez une affaire avant de saisir ces faits', 'error'); return; }
   var f = affaireFaits(affaire).amiante;
-  var finSuggeree = '';
-  if (!f.fin_desamiantage) {
-    finSuggeree = icCalculerFinDesamiantage(affaire) || '';
-    if (finSuggeree) f = Object.assign({}, f, { fin_desamiantage: finSuggeree });
-  }
   var html = '<p style="margin-bottom:10px;font-size:13px;color:var(--text-light);">'
     + (fichierNom ? 'Document depose : <strong>' + icEscAttr(fichierNom) + '</strong>. ' : '')
     + 'Ces faits alimentent automatiquement le PGC, la grille de la fiche IC (§7/§8) et les observations du CSPS. Laissez vide si non concerne.</p>'
@@ -2940,8 +2577,7 @@ function ouvrirFaitsAmiante(fichierNom) {
     + '<input type="checkbox" id="faits-am-ss4"' + (f.ss4_obligatoire ? ' checked' : '') + '> Entreprise certifiee SS3/SS4 exigee</label></div>'
     + '<div class="field" style="margin-top:10px;"><label>Fin prevue du retrait amiante / demolition (JJ/MM/AAAA)</label>'
     + '<input type="text" id="faits-am-fin" value="' + icEscAttr(f.fin_desamiantage) + '" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;" placeholder="Ex: 15/07/2026">'
-    + (finSuggeree ? '<p style="font-size:12px;color:#B45309;margin-top:4px;">Date calculee automatiquement a partir de la date d\'intervention + duree prevue de l\'entreprise de demolition/desamiantage declaree dans les Intervenants. A verifier avant d\'enregistrer.</p>' : '')
-    + '<p style="font-size:12px;color:var(--text-light);margin-top:4px;">Si rempli : sur la fiche IC d\'une entreprise dont la periode d\'intervention (§2) demarre apres cette date, la ligne « Amiante » du §7 et du §6 se decoche automatiquement avec une observation (l\'entreprise n\'est pas concernee par le desamiantage). Laissez vide pour desactiver ce controle.</p></div>';
+    + '<p style="font-size:12px;color:var(--text-light);margin-top:4px;">Si rempli : sur la fiche IC d\'une entreprise dont la periode d\'intervention (§2) demarre apres cette date, la ligne « Amiante » du §7 se decoche automatiquement avec une observation (l\'entreprise n\'est pas concernee par le desamiantage). Laissez vide pour desactiver ce controle.</p></div>';
   openDocModal('Faits amiante' + (f.source ? ' — source : ' + icEscAttr(f.source) : ''), html, 'Enregistrer', function () {
     enregistrerFaitsAmiante(affaire, fichierNom);
   });
@@ -2963,13 +2599,6 @@ function enregistrerFaitsAmiante(affaire, fichierNom) {
     var cb = document.getElementById('rp-amiante'); if (cb) cb.checked = ff.amiante.presence;
   }
   persistAffaires();
-  // Si la fiche IC de cette affaire est deja ouverte (ex: Faits amiante
-  // ouverte depuis le bouton Details pendant que l'IC est affichee), on
-  // reapplique tout de suite le controle periode/amiante -- sinon il
-  // fallait fermer/rouvrir la fiche IC pour que la nouvelle date "Fin
-  // prevue" soit prise en compte (constat d'Alain le 03/11).
-  if (typeof icVerifierPeriodeAmiante === 'function') icVerifierPeriodeAmiante();
-  if (typeof icVerifierCoactiviteDemolition === 'function') icVerifierCoactiviteDemolition();
   showToast('Faits amiante enregistres', 'success');
 }
 
@@ -3062,200 +2691,19 @@ function enregistrerFaitsContraintes(affaire, fichierNom) {
 }
 
 // ============================================================================
-// Faits CBT (05/11, demande d'Alain : "ça me parait essentiel d'avoir le
-// plus d'elements du chantier pour preremplir tout les formulaires"). Les
-// CBT (cahier des besoins techniques, un par lot) contiennent presque
-// toujours une clause "nettoyage/dechets de chantier" et, pour le lot gros
-// oeuvre, une description des installations de chantier (base vie). C'est
-// une info DE CHANTIER (la meme pour toutes les entreprises qui y
-// interviennent), pas propre a l'entreprise -- contrairement a l'amiante ou
-// au plomb, aucune regle generale n'existe (certains chantiers ont des
-// bennes communes payees au compte prorata, d'autres non -- cf. correction
-// d'Alain du 05/11) : on ne devine donc JAMAIS, on propose seulement ce qui
-// a ete repere dans le texte du document, pour qu'Alain verifie et corrige
-// avant d'enregistrer -- meme logique que l'import deterministe du PPSPS
-// (reperePourMotsCles / appliquerImportPPSPSDeterministe) : rien n'est jamais
-// injecte sans relecture humaine.
-// ============================================================================
-var CBT_DECHETS_MOTS = ['nettoyage du chantier', 'evacuation des dechets', 'évacuation des déchets', 'dechets de chantier', 'déchets de chantier', 'tri des dechets', 'tri des déchets', 'gestion des dechets', 'gestion des déchets', 'compte prorata'];
-var CBT_BASEVIE_MOTS = ['installations de chantier', 'installation de chantier', 'base vie', 'base-vie', 'vestiaires', 'sanitaires de chantier', 'refectoire', 'réfectoire'];
-function repererClauseCBT(texte, motsCles) {
-  var texteMin = texte.toLowerCase();
-  for (var i = 0; i < motsCles.length; i++) {
-    var pos = texteMin.indexOf(motsCles[i].toLowerCase());
-    if (pos === -1) continue;
-    var debut = Math.max(0, pos - 40), fin = Math.min(texte.length, pos + 320);
-    var extrait = texte.slice(debut, fin).replace(/\s+/g, ' ').trim();
-    if (debut > 0) extrait = '…' + extrait;
-    if (fin < texte.length) extrait = extrait + '…';
-    return extrait;
-  }
-  return null;
-}
-// Appelee au depot d'un CBT : lit le PDF (pdf.js, cote client, pas d'IA),
-// repere les passages probables, et ouvre la fiche de faits avec ces
-// propositions pre-remplies -- jamais ecrit directement dans l'affaire.
-async function ouvrirFaitsCBTDepuisFichier(file) {
-  var affaire = currentAffaireObj();
-  if (!affaire) { showToast('Ouvrez une affaire avant de deposer un CBT', 'error'); return; }
-  var propositions = {};
-  try {
-    var texte = await extraireTexteFichier(file);
-    if (texte && texte.replace(/\s/g, '').length >= 30) {
-      propositions.dechets = repererClauseCBT(texte, CBT_DECHETS_MOTS);
-      propositions.base_vie = repererClauseCBT(texte, CBT_BASEVIE_MOTS);
-    }
-  } catch (err) {
-    // Document scanne/illisible : on ouvre quand meme la fiche, vide --
-    // Alain peut toujours la remplir a la main en lisant le CBT lui-meme.
-  }
-  ouvrirFaitsCBT(file.name, propositions);
-}
-function ouvrirFaitsCBT(fichierNom, propositions) {
-  var affaire = currentAffaireObj();
-  if (!affaire) { showToast('Ouvrez une affaire avant de saisir ces faits', 'error'); return; }
-  var f = affaireFaits(affaire).cbt;
-  var prop = propositions || {};
-  // Une proposition reperee automatiquement ne remplace jamais un texte deja
-  // valide et enregistre -- seulement un champ encore vide.
-  var dechetsVal = f.dechets || prop.dechets || '';
-  var baseVieVal = f.base_vie || prop.base_vie || '';
-  var html = '<p style="margin-bottom:10px;font-size:13px;color:var(--text-light);">'
-    + (fichierNom ? 'Document depose : <strong>' + icEscAttr(fichierNom) + '</strong>. ' : '')
-    + 'Info de chantier (valable pour toutes les entreprises) -- alimente la grille de la fiche IC (§4A) et les observations du CSPS (§12). '
-    + (prop.dechets || prop.base_vie ? '<strong>Passage repere automatiquement dans le document (a verifier, rien n\'est jugé à votre place) :</strong> relisez et corrigez avant d\'enregistrer. ' : '')
-    + 'Laissez vide si non concerne.</p>'
-    + '<div class="field" style="margin-bottom:10px;"><label>Gestion des déchets (qui évacue : chaque entreprise, ou bennes communes au compte prorata ?)</label>'
-    + '<textarea id="faits-cbt-dechets" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Chaque entreprise évacue à ses frais ses propres déchets au fur et à mesure.">' + icEscAttr(dechetsVal) + '</textarea></div>'
-    + '<div class="field"><label>Base vie / installations de chantier</label>'
-    + '<textarea id="faits-cbt-basevie" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Vestiaires, sanitaires et réfectoire mis en place par le lot gros oeuvre dès le démarrage.">' + icEscAttr(baseVieVal) + '</textarea></div>';
-  openDocModal('Faits CBT (déchets / base vie)' + (f.source ? ' — source : ' + icEscAttr(f.source) : ''), html, 'Enregistrer', function () {
-    enregistrerFaitsCBT(affaire, fichierNom);
-  });
-}
-function enregistrerFaitsCBT(affaire, fichierNom) {
-  var f = affaireFaits(affaire);
-  f.cbt = {
-    dechets: document.getElementById('faits-cbt-dechets').value.trim(),
-    base_vie: document.getElementById('faits-cbt-basevie').value.trim(),
-    source: (fichierNom ? fichierNom + ' — ' : '') + 'saisi le ' + new Date().toLocaleDateString('fr-FR')
-  };
-  persistAffaires();
-  showToast('Faits CBT enregistres', 'success');
-}
-
-// ============================================================================
-// Faits Plans/PIC (05/11, demande d'Alain) : meme principe que le CBT, pour
-// le plan de masse / plan d'installation de chantier (PIC) depose (type
-// PLANS). Remplace l'ancienne analyse IA qui produisait "elements[]" et
-// "contraintes_implantation" -- ici seulement acces et cloture, reperes de
-// facon deterministe dans le texte du PDF et TOUJOURS relus/corriges par
-// Alain avant enregistrement.
-// ============================================================================
-var PLANS_ACCES_MOTS = ['acces chantier', 'acces au chantier', 'acces engins', 'acces poids lourds', 'entree chantier', 'acces principal', 'voie d\'acces'];
-var PLANS_CLOTURE_MOTS = ['cloture', 'clôture', 'palissade', 'grillage', 'heras', 'portail'];
-async function ouvrirFaitsPlansDepuisFichier(file) {
-  var affaire = currentAffaireObj();
-  if (!affaire) { showToast('Ouvrez une affaire avant de deposer un plan', 'error'); return; }
-  var propositions = {};
-  try {
-    var texte = await extraireTexteFichier(file);
-    if (texte && texte.replace(/\s/g, '').length >= 30) {
-      propositions.acces = repererClauseCBT(texte, PLANS_ACCES_MOTS);
-      propositions.cloture = repererClauseCBT(texte, PLANS_CLOTURE_MOTS);
-    }
-  } catch (err) { /* document illisible : fiche ouverte vide */ }
-  ouvrirFaitsPlans(file.name, propositions);
-}
-function ouvrirFaitsPlans(fichierNom, propositions) {
-  var affaire = currentAffaireObj();
-  if (!affaire) { showToast('Ouvrez une affaire avant de saisir ces faits', 'error'); return; }
-  var f = affaireFaits(affaire).plans;
-  var prop = propositions || {};
-  var accesVal = f.acces || prop.acces || '';
-  var clotureVal = f.cloture || prop.cloture || '';
-  var html = '<p style="margin-bottom:10px;font-size:13px;color:var(--text-light);">'
-    + (fichierNom ? 'Document depose : <strong>' + icEscAttr(fichierNom) + '</strong>. ' : '')
-    + 'Info de chantier (plan de masse / PIC) -- alimente la grille de la fiche IC (§4A) et les observations du CSPS (§12). '
-    + (prop.acces || prop.cloture ? '<strong>Passage repéré automatiquement (à vérifier, rien n\'est jugé à votre place) :</strong> relisez et corrigez avant d\'enregistrer. ' : '')
-    + 'Laissez vide si non concerne.</p>'
-    + '<div class="field" style="margin-bottom:10px;"><label>Accès chantier (engins, poids lourds, voie d\'accès)</label>'
-    + '<textarea id="faits-plans-acces" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Accès unique par la voie communale, coté nord, largeur 4m.">' + icEscAttr(accesVal) + '</textarea></div>'
-    + '<div class="field"><label>Clôture / périmètre du chantier</label>'
-    + '<textarea id="faits-plans-cloture" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Clôture HERAS sur tout le périmètre, portail cadenassé.">' + icEscAttr(clotureVal) + '</textarea></div>';
-  openDocModal('Faits Plans/PIC (accès / clôture)' + (f.source ? ' — source : ' + icEscAttr(f.source) : ''), html, 'Enregistrer', function () {
-    enregistrerFaitsPlans(affaire, fichierNom);
-  });
-}
-function enregistrerFaitsPlans(affaire, fichierNom) {
-  var f = affaireFaits(affaire);
-  f.plans = {
-    acces: document.getElementById('faits-plans-acces').value.trim(),
-    cloture: document.getElementById('faits-plans-cloture').value.trim(),
-    source: (fichierNom ? fichierNom + ' — ' : '') + 'saisi le ' + new Date().toLocaleDateString('fr-FR')
-  };
-  persistAffaires();
-  showToast('Faits Plans/PIC enregistres', 'success');
-}
-
-// ============================================================================
 // Faits co-activites (31/10) : meme logique, pour le planning. Une ligne =
 // une co-activite (meme format "aere" que les observations §12). Ecrit dans
 // affaire.faits.coactivites.
-// "Alertes critiques du planning" (05/11, demande d'Alain : remettre en
-// deterministe ce que l'ancienne analyse IA produisait en alertes_rouges/
-// phases_dangereuses) : au depot d'un planning, on repere plusieurs
-// passages probables par mots-cles danger/incompatibilite/simultaneite et
-// on les propose, pour qu'Alain les relise/corrige avant d'enregistrer --
-// jamais injectes directement (meme logique que le CBT et l'import PPSPS).
 // ============================================================================
-var PLANNING_ALERTE_MOTS = ['simultan', 'incompatib', 'interdit', 'chevauchement', 'coactivit', 'co-activit', 'attention', 'risque de chute', 'zone commune', 'non compatible', 'ne pas superposer', 'danger'];
-function repererPassagesMultiples(texte, motsCles, maxResultats) {
-  var texteMin = texte.toLowerCase();
-  var resultats = [], vus = {};
-  motsCles.forEach(function (mc) {
-    var mcMin = mc.toLowerCase(), pos = texteMin.indexOf(mcMin);
-    while (pos !== -1 && resultats.length < (maxResultats || 8)) {
-      var debut = Math.max(0, pos - 50), fin = Math.min(texte.length, pos + mcMin.length + 150);
-      var extrait = texte.slice(debut, fin).replace(/\s+/g, ' ').trim();
-      if (debut > 0) extrait = '…' + extrait;
-      if (fin < texte.length) extrait = extrait + '…';
-      if (!vus[extrait]) { vus[extrait] = true; resultats.push(extrait); }
-      pos = texteMin.indexOf(mcMin, pos + mcMin.length);
-    }
-  });
-  return resultats;
-}
-// Appelee au depot d'un planning : lit le PDF (pdf.js, deterministe, pas
-// d'IA) et propose les passages reperes dans le champ "Alertes" -- jamais
-// ecrit directement dans l'affaire.
-async function ouvrirFaitsPlanningDepuisFichier(file) {
-  var affaire = currentAffaireObj();
-  if (!affaire) { showToast('Ouvrez une affaire avant de deposer un planning', 'error'); return; }
-  var propositions = [];
-  try {
-    var texte = await extraireTexteFichier(file);
-    if (texte && texte.replace(/\s/g, '').length >= 30) {
-      propositions = repererPassagesMultiples(texte, PLANNING_ALERTE_MOTS, 8);
-    }
-  } catch (err) { /* document illisible : fiche ouverte vide, saisie manuelle possible */ }
-  ouvrirFaitsPlanning(file.name, propositions);
-}
-function ouvrirFaitsPlanning(fichierNom, propositions) {
+function ouvrirFaitsPlanning(fichierNom) {
   var affaire = currentAffaireObj();
   if (!affaire) { showToast('Ouvrez une affaire avant de saisir ces faits', 'error'); return; }
   var f = affaireFaits(affaire);
   var texte = (f.coactivites || []).map(function (c) { return c.description; }).filter(Boolean).join('\n');
-  var alertesExistantes = (f.alertesPlanning || []).join('\n');
-  var prop = propositions || [];
-  var alertesVal = alertesExistantes || prop.join('\n');
   var html = '<p style="margin-bottom:10px;font-size:13px;color:var(--text-light);">'
     + (fichierNom ? 'Document depose : <strong>' + icEscAttr(fichierNom) + '</strong>. ' : '')
     + 'Une co-activite par ligne (entreprises, periode, nature). Alimente le PGC (phasage / co-activite). Laissez vide si non concerne.</p>'
-    + '<textarea id="faits-plan-coact" rows="6" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Lot gros-oeuvre / Lot charpente — semaines 12-14 — travaux simultanes en zone B">' + icEscAttr(texte) + '</textarea>'
-    + '<div style="font-weight:700;color:#B91C1C;margin:14px 0 6px;">&#9888; Alertes critiques du planning (une par ligne)</div>'
-    + (prop.length && !alertesExistantes ? '<p style="font-size:12px;color:var(--text-light);margin-bottom:6px;"><strong>Passages repérés automatiquement (à vérifier, rien n\'est jugé à votre place) :</strong> relisez et corrigez avant d\'enregistrer.</p>' : '')
-    + '<textarea id="faits-plan-alertes" rows="5" style="width:100%;padding:8px;border:1px solid #CC0000;border-radius:6px;font-family:inherit;" placeholder="Ex: Travaux de toiture et terrassement en meme temps en zone B -- chute d\'objet possible">' + icEscAttr(alertesVal) + '</textarea>';
+    + '<textarea id="faits-plan-coact" rows="6" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Lot gros-oeuvre / Lot charpente — semaines 12-14 — travaux simultanes en zone B">' + icEscAttr(texte) + '</textarea>';
   openDocModal('Planning / co-activités', html, 'Enregistrer', function () {
     enregistrerFaitsPlanning(affaire, fichierNom);
   });
@@ -3265,7 +2713,6 @@ function enregistrerFaitsPlanning(affaire, fichierNom) {
   var src = (fichierNom ? fichierNom + ' — ' : '') + 'saisi le ' + new Date().toLocaleDateString('fr-FR');
   var lignes = document.getElementById('faits-plan-coact').value.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
   f.coactivites = lignes.map(function (l) { return { entreprises: '', periode: '', description: l, source: src }; });
-  f.alertesPlanning = document.getElementById('faits-plan-alertes').value.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
   persistAffaires();
   showToast('Planning / co-activites enregistres', 'success');
 }
@@ -3364,7 +2811,6 @@ async function deposerPieceDossier(affaire, file, type, bulk) {
       : type === 'PLANS' ? 'Plans (element PGC)'
       : type === 'PPSPS' ? 'Reception PPSPS (harmonisation)'
       : type === 'CRMOA' ? 'CR de reunion / mise a jour MOA'
-      : type === 'CBT' ? 'Cahier des besoins techniques (CBT)'
       : 'Reception rapport / diagnostic';
     var created = ajouterEntreeRJC(affaire, {
       date: new Date().toISOString().split('T')[0],
@@ -3400,20 +2846,9 @@ async function deposerPieceDossier(affaire, file, type, bulk) {
         else ouvrirFaitsAmiante(file.name);
       }
       else if (type === 'CONTRAINTES') ouvrirFaitsContraintes(file.name);
-      else if (type === 'PLAN') ouvrirFaitsPlanningDepuisFichier(file);
+      else if (type === 'PLAN') ouvrirFaitsPlanning(file.name);
       else if (type === 'ICR') ouvrirFaitsInspection(file.name);
       else if (type === 'CRMOA') ouvrirFaitsCR(file.name);
-      // CBT (05/11) : seul type dont le contenu est lu (pdf.js, deterministe,
-      // pas d'IA) pour PROPOSER dechets/base vie -- jamais rien enregistre
-      // sans relecture d'Alain dans la fiche qui s'ouvre.
-      else if (type === 'CBT') ouvrirFaitsCBTDepuisFichier(file);
-      // Plans/PIC (05/11) : meme lecture deterministe que le CBT.
-      else if (type === 'PLANS') ouvrirFaitsPlansDepuisFichier(file);
-      // Contrat de coordination SPS (05/11) : repere un eventuel co-traitant
-      // CSPS (conception), remplit directement les champs Chantier si
-      // trouves (pas de modale -- champs deja a l'ecran, pas une "fiche
-      // de faits" du terrain).
-      else if (type === 'CONTRAT') importerContratDepuisFichier(file);
     }
     return 'ok';
   } catch (err) {
@@ -3834,25 +3269,7 @@ function faitsVierges() {
     inspectionPrealable: [],
     contraintes: { synthese: '', arrete_voirie: '', source: '' },
     coactivites: [],
-    // Alertes critiques du planning (05/11, demande d'Alain : remettre en
-    // deterministe ce que l'analyse IA du planning produisait --
-    // alertes_rouges/phases_dangereuses). Une alerte par ligne (meme
-    // principe que les co-activites), reperee automatiquement au depot
-    // d'un planning (mots-cles danger/incompatibilite/simultaneite) et
-    // TOUJOURS relue par Alain avant enregistrement. Alimente le PGC
-    // (phasage/coactivite) et les observations du CSPS (§12).
-    alertesPlanning: [],
-    reunions: [],
-    // CBT (05/11, demande d'Alain) : infos de chantier -- valables pour
-    // toutes les entreprises -- lues dans les CBT deposes (cf. ouvrirFaitsCBT).
-    // "dechets" et "base_vie" sont des propositions reperees dans le texte,
-    // TOUJOURS relues et validees/corrigees par Alain avant enregistrement
-    // (jamais injectees sans verification -- meme logique que l'import
-    // deterministe du PPSPS).
-    cbt: { dechets: '', base_vie: '', source: '' },
-    // Plans/PIC (05/11) : acces et cloture, reperes dans le plan de masse
-    // / PIC depose (cf. ouvrirFaitsPlans) -- meme principe que le CBT.
-    plans: { acces: '', cloture: '', source: '' }
+    reunions: []
   };
 }
 function faitsMigrer(affaire) {
@@ -3888,19 +3305,6 @@ function faitsMigrer(affaire) {
     if (a.type_rapport === 'planning' && a.coactivites && a.coactivites.length && !f.coactivites.length) {
       f.coactivites = a.coactivites.map(function (c) { return { entreprises: c.corps_etat || '', periode: c.periode || '', description: c.risque || '', source: 'migration' }; });
     }
-    if (a.type_rapport === 'planning' && a.alertes_rouges && a.alertes_rouges.length && !f.alertesPlanning.length) {
-      f.alertesPlanning = a.alertes_rouges.filter(Boolean);
-    }
-    if (a.type_rapport === 'plans' && !f.cbt.base_vie) {
-      var bvParts = (a.elements || []).filter(function (el) {
-        var ty = ((el && el.type) || '').toLowerCase();
-        return ty.indexOf('pic') >= 0 || ty.indexOf('installation') >= 0;
-      }).map(function (el) { return (el.type || 'PIC') + (el.observations ? ' : ' + el.observations : ''); });
-      if (bvParts.length) { f.cbt.base_vie = bvParts.join('\n'); f.cbt.source = 'migration (' + (ra.fichier || 'ancienne analyse') + ')'; }
-    }
-    if (a.type_rapport === 'plans' && !f.plans.acces && a.contraintes_implantation) {
-      f.plans = { acces: a.contraintes_implantation, cloture: '', source: 'migration (' + (ra.fichier || 'ancienne analyse') + ')' };
-    }
     if (a.type_rapport === 'cr_reunion') {
       f.reunions.push({
         date: a.date_reunion || ra.date || '',
@@ -3918,10 +3322,6 @@ function faitsMigrer(affaire) {
 function affaireFaits(affaire) {
   if (!affaire) return faitsVierges();
   if (!affaire.faits) faitsMigrer(affaire);
-  // Affaires deja migrees avant l'ajout du CBT (05/11) : pas de cle "cbt".
-  if (!affaire.faits.cbt) affaire.faits.cbt = faitsVierges().cbt;
-  if (!affaire.faits.alertesPlanning) affaire.faits.alertesPlanning = [];
-  if (!affaire.faits.plans) affaire.faits.plans = faitsVierges().plans;
   return affaire.faits;
 }
 
@@ -4594,24 +3994,8 @@ function injecterFIC(zip, ficData) {
   xmlStr = remplirCellule(xmlStr, 'Point de rassemblement / accès pompiers', d.secRDV || '');
 
   // === SECTION 13 - Observations CSPS ===
-  // Point 5 de la liste convenue avec Alain (03/11) : "Notification (avant
-  // reprise)" et "DANGER GRAVE IMMINENT" n'avaient aucun champ de saisie --
-  // toujours vides, meme pour un vrai evenement grave. Trois champs
-  // distincts desormais (plutot qu'un selecteur de niveau partageant un seul
-  // texte), remplis chacun dans sa propre case. Le DGI est prefixe fort a
-  // l'impression pour qu'il ne se noie jamais pres d'une observation anodine
-  // (le moteur actuel ne permet pas de mettre le texte en rouge).
   if (d.obsCSPS) {
     xmlStr = remplirCellule(xmlStr, 'Observation (sans urgence)', d.obsCSPS);
-  }
-  if (d.obsNotif) {
-    xmlStr = remplirCellule(xmlStr, 'Notification (avant', '⚠ NOTIFICATION — ' + d.obsNotif);
-  }
-  if (d.obsDGI) {
-    xmlStr = remplirCellule(xmlStr, 'DANGER GRAVE', '🔴 DANGER GRAVE IMMINENT — ARRET IMMEDIAT — ' + d.obsDGI);
-  }
-  if (d.obsDelai) {
-    xmlStr = remplirCellule(xmlStr, 'Délai levée', d.obsDelai);
   }
   xmlStr = remplirCellule(xmlStr, 'Fréquence visites CSPS', d.freqVisites || '');
   xmlStr = remplirCellule(xmlStr, 'Réunions coordination', d.freqReunions || '');
@@ -5053,16 +4437,13 @@ function injecterPhotos(zip, photos, legendes) {
     xmlStr = xmlStr.slice(0, tblStart) + tbl + xmlStr.slice(tblEnd);
   }
 
-  // === PHOTOS restantes : tableau supplementaire avant les signatures (ou en fin de document) ===
-  // Si le modele n'a pas de case "Photo 1" (ex. signalement DGI), TOUTES les photos
-  // passent par ce tableau generique plutot que d'etre silencieusement perdues.
-  var debutExtras = (idxAncre !== -1) ? 4 : 0;
-  if (photos.length > debutExtras) {
+  // === PHOTOS 5+ : tableau supplementaire apres </w:body> ===
+  if (photos.length > 4) {
     var extrasXml = '<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="1F4E79"/>'
       + '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="20"/></w:rPr>'
-      + '<w:t>' + (debutExtras === 0 ? 'Photos' : 'Photos compl\u00e9mentaires') + '</w:t></w:r></w:p>';
+      + '<w:t>Photos compl\u00e9mentaires</w:t></w:r></w:p>';
 
-    for (var p = debutExtras; p < photos.length; p += 2) {
+    for (var p = 4; p < photos.length; p += 2) {
       var rid1x = 200 + p;
       addImage(rid1x, photos[p]);
       var leg1 = legendes[p] || ('Photo ' + (p+1));
@@ -5096,12 +4477,8 @@ function injecterPhotos(zip, photos, legendes) {
     }
 
     // Injecter les photos extras AVANT la section signatures (pas apres </w:body>)
-    var ancresSignatures = ['7. DIFFUSION ET SIGNATURES', 'DIFFUSION ET SIGNATURES', 'NOTIFICATION ET SIGNATURES', 'SIGNATURES'];
-    var idxSig = -1;
-    for (var asx = 0; asx < ancresSignatures.length; asx++) {
-      idxSig = xmlStr.indexOf(ancresSignatures[asx]);
-      if (idxSig !== -1) break;
-    }
+    var ancreSignatures = '7. DIFFUSION ET SIGNATURES';
+    var idxSig = xmlStr.indexOf(ancreSignatures);
     if (idxSig !== -1) {
       // Remonter au debut du <w:p> parent
       var pSig = xmlStr.lastIndexOf('<w:p ', idxSig);
@@ -5549,49 +4926,6 @@ var PGC_RISQUES_LIB = {
   r25: { label: 'Canicule', mesures: "Mesures de sauvegarde du personnel conformément au décret n°2025-482 du 27 mai 2025. Eau fraîche en permanence. Arrêt des travaux aux heures les plus chaudes si alerte rouge." },
   r26: { label: 'Autres risques propres à l\'opération', mesures: "Balisage hermétique des zones de travaux vis-à-vis des autres corps d'état. Précisions à apporter par chaque entreprise dans son PPSPS." },
   r27: { label: 'Intempéries', mesures: 'Arrêt des travaux en hauteur ou de levage si vent > 50-60 km/h ou vigilance orange/rouge. Suivi Météo-France. Report des travaux extérieurs en cas de verglas, neige, fortes pluies.' },
-};
-
-// PGC_RISQUES_LIB_EXPORTE : mesures distinctes pour le §6C "Risques exportes"
-// -- l'OPPBTP distingue clairement risques importes (mesures = comment
-// L'ENTREPRISE se protege d'un risque venant d'un tiers) et risques exportes
-// (mesures = comment L'ENTREPRISE protege LES AUTRES d'un risque qu'elle
-// genere elle-meme) : ce ne sont jamais les memes consignes, meme quand le
-// risque technique porte le meme nom (ex. "Bruit" importe = porter une
-// protection auditive ; "Bruit" exporte = regrouper ses propres horaires
-// bruyants et prevenir les autres). Remarque d'Alain du 03/11, confirmee
-// sur preventionbtp.fr (3 categories distinctes du PPSPS, mesures a
-// distinguer). Memes 27 risques que PGC_RISQUES_LIB, cote "je protege les
-// autres" plutot que "je me protege" -- base sur le meme niveau de
-// generalite (coordination de chantier) que le reste du catalogue, pas du
-// chiffre invente.
-var PGC_RISQUES_LIB_EXPORTE = {
-  r1:  { mesures: "Zone de survol balisée et interdite aux autres corps d'état pendant les travaux en hauteur. Sac porte-outils attaché, filet de recueil sous la zone si nécessaire. Signal sonore avant toute manutention en hauteur." },
-  r2:  { mesures: "Fouille balisée (K2, filets, panneaux) interdisant l'accès aux autres corps d'état. Aucun stockage ni circulation d'engins tiers à proximité du bord. Remblai ou protection dès la fin de l'intervention." },
-  r3:  { mesures: "Zone de manipulation/stockage des produits balisée et interdite aux autres intervenants. FDS affichées en entrée de zone. Information des entreprises voisines avant toute application émettant des vapeurs." },
-  r4:  { mesures: "Aucune coactivité pendant le retrait (zone confinée, accès interdit aux autres corps d'état). Information du CSPS et des entreprises voisines avant et après intervention. Évacuation sans délai des déchets amiantés hors zone commune." },
-  r5:  { mesures: "Périmètre balisé et interdit aux personnes non habilitées. Signalisation réglementaire visible depuis les zones voisines. Information des entreprises voisines des horaires d'exposition." },
-  r6:  { mesures: "Câbles provisoires fixés en hauteur, hors des zones de passage des autres corps d'état. Signalisation des zones sous tension ou consignées. Information des entreprises voisines avant toute phase de consignation/réalimentation." },
-  r7:  { mesures: "Zone à proximité de l'eau balisée et interdite aux intervenants non équipés. Dispositif de récupération visible et accessible depuis les zones voisines." },
-  r8:  { mesures: "Accès à l'espace confiné interdit et signalé aux autres corps d'état. Information du CSPS avant toute intervention." },
-  r9:  { mesures: "Périmètre nautique balisé. Information des autres intervenants des horaires d'intervention." },
-  r10: { mesures: "Zone d'intervention balisée et interdite. Information des entreprises voisines des horaires d'intervention." },
-  r11: { mesures: "Zone de démolition définie, délimitée et rendue inaccessible aux autres corps d'état — aucune superposition de tâches. Protection des constructions et zones voisines contre heurts et projections. Terrain laissé exempt de tout élément à risque pour les lots suivants." },
-  r12: { mesures: "Périmètre de sécurité et évacuation des autres intervenants avant tir. Signalisation réglementaire. Information préalable de toutes les entreprises du chantier." },
-  r13: { mesures: "Zone de levage/montage balisée et interdite aux autres corps d'état pendant la manœuvre. Signal sonore avant levage." },
-  r14: { mesures: "Zone d'évolution barriérée interdite aux autres corps d'état, pas de survol de zones occupées hors emprise autorisée. Coordination radio avant toute manœuvre." },
-  r15: { mesures: "Aucun stockage de matériel/déchets dans les zones de circulation communes. Nettoyage du poste de travail en fin de journée pour ne pas gêner les autres intervenants." },
-  r16: { mesures: "Écrans ou neutralisation des zones pouvant être impactées par les projections ou chutes de matériaux issus de l'activité de l'entreprise. Zone à risque affichée pour les autres corps d'état." },
-  r17: { mesures: "Permis de feu déclaré au MOE/CSPS. Information des entreprises voisines avant travaux par point chaud. Extincteur adapté visible, zone surveillée pendant et après l'opération." },
-  r18: { mesures: "Zones de manutention/stockage de charges signalées et dégagées pour ne pas gêner la circulation des autres corps d'état." },
-  r19: { mesures: "Horaires des travaux bruyants regroupés et communiqués au CSPS et aux autres entreprises avant la phase bruyante. Capots insonorisants ou écrans acoustiques si possible." },
-  r20: { mesures: "Aspiration à la source, arrosage ou bâche de confinement pour limiter la diffusion vers les zones occupées par d'autres corps d'état. Information du CSPS avant toute opération poussiéreuse importante." },
-  r21: { mesures: "Zone de stockage/application signalée et interdite aux autres intervenants pendant la manipulation ou le séchage. Information préalable en cas d'émission de vapeurs (COV)." },
-  r22: { mesures: "Guideur de manœuvre désigné pour les livraisons/manœuvres à proximité d'autres corps d'état. Plan de circulation affiché et respecté. Vitesse limitée en zone commune." },
-  r23: { mesures: "Outils et équipements rangés hors des zones de passage commun. Aucun déchet coupant laissé en zone de circulation partagée." },
-  r24: { mesures: "Planning de coactivité établi et affiché. Zones de travaux balisées hermétiquement vis-à-vis des autres corps d'état." },
-  r25: { mesures: "Information des autres entreprises en cas d'arrêt de travaux programmé pour alerte canicule, pour coordination du planning commun." },
-  r26: { mesures: "Balisage hermétique des zones de travaux vis-à-vis des autres corps d'état. Précisions à apporter par l'entreprise dans son PPSPS." },
-  r27: { mesures: "Information des autres entreprises en cas de report de travaux extérieurs pour coordination du planning commun." },
 };
 
 // ── PASSE B : agregation des elements deposes (diagnostics + plannings +
@@ -6404,10 +5738,7 @@ var IC_METIER_MOTS = {
 'cloture_portail': ['cloture','portail','grillage rigide'],
 'montage_rayonnage': ['rayonnage','cantilever','rack','gondole','autoportant','palettier','redstock'],
 'enduiseur_facadier': ['enduiseur','facadier','enduit facade','ravalement','crepis'],
-'tailleur_pierre': ['tailleur de pierre','taille de pierre','pierre de taille','marbrerie'],
-// Ajoute le 03/11 (demande d'Alain) : lot non couvert jusqu'ici, ni ici ni
-// dans l'ancienne table de pre-cochage du §6.
-'base_vie': ['base vie','base-vie','installation de chantier','installations de chantier','cantonnement','algeco','bungalow','sanitaires de chantier','vestiaires de chantier','salle de repas','salle repas','coffret de prises','coffret de comptage']
+'tailleur_pierre': ['tailleur de pierre','taille de pierre','pierre de taille','marbrerie']
 };
 var IC_METIERS_RISQUES = {
 'gros_oeuvre': {
@@ -7176,12 +6507,7 @@ risk: 'Saturnisme -- CMR',
 g: 3,
 mes: 'Vérifier l\'existence et l\'adéquation d\'un repérage plomb au périmètre des travaux avant intervention. Protection respiratoire et hygiène à charge de l\'entreprise, précisées dans son PPSPS.'
 }]
-},
-// Entree minimale (03/11) : pas de fiches-risques detaillees redigees pour
-// ce lot (contrairement aux autres, reprises du PGC Harmo) -- evite juste
-// un plantage de ic7dProposer() si "base vie" est reconnu comme lot. Le
-// §6 beneficie quand meme du pre-cochage (voir METIERS_RISQUES).
-'base_vie': { label: 'Installation de chantier -- Base vie', traits: [], epi: [], extincteurs: [], materiel: [], risques: [] }
+}
 };
 // ============================================================================
 // INTERVENANTS : sous-traitants et prestataires rattaches a leur entreprise
@@ -7461,7 +6787,6 @@ function ic7dAjouter(label, coche, proposition, g, rappel) {
   icRpCount++;
   var d = document.createElement('div');
   d.className = 'ic7d-row'; if (proposition) d.setAttribute('data-prop', '1');
-  if (g) d.setAttribute('data-g', g);
   d.style.cssText = 'padding:6px 0;border-bottom:1px solid var(--border);' + (proposition ? 'background:#f8fafc;' : '');
   d.innerHTML = '<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;">'
     + '<input type="checkbox" class="ic7d-ok" title="Confirm\u00e9 avec l\u2019entreprise"' + (coche ? ' checked' : '') + ' style="width:18px;height:18px;">'
@@ -7490,20 +6815,16 @@ function ic7dProposer(depuisBouton) {
     var lib = icTexteHarmo(r.sit) + ' : ' + icTexteHarmo(r.risk);
     if (deja.indexOf(lib) !== -1) return;
     deja.push(lib);
-    // Coche par defaut depuis le 03/11 (demande d'Alain) : la fiche s'imprime
-    // directement en 6D ; le CSPS decoche ce qui ne s'applique pas pendant
-    // l'IC reelle, plutot que de partir d'une section vide qui donne a
-    // l'entreprise un argument pour ne rien detailler dans son PPSPS.
-    ic7dAjouter(lib, true, true, r.g, icTexteHarmo(r.mes)); n++;
+    ic7dAjouter(lib, false, true, r.g, icTexteHarmo(r.mes)); n++;
   });
   var noms = icMetiersDuLot(lot).map(function (k) { return icTexteHarmo(IC_METIERS_RISQUES[k].label); });
-  if (depuisBouton) showToast(n ? n + ' fiche(s) propos\u00e9e(s) en 7D (' + noms.join(', ') + ') \u2014 d\u00e9cochez ce qui ne s\u2019applique pas' : 'Aucun m\u00e9tier reconnu pour ce lot : ajoutez les risques \u00e0 la main', n ? 'success' : 'error');
+  if (depuisBouton) showToast(n ? n + ' fiche(s) propos\u00e9e(s) en 7D (' + noms.join(', ') + ') \u2014 \u00e0 confirmer' : 'Aucun m\u00e9tier reconnu pour ce lot : ajoutez les risques \u00e0 la main', n ? 'success' : 'error');
 }
 function ic7dCollecter() {
   return Array.prototype.slice.call(document.querySelectorAll('#ic7d-liste .ic7d-row')).filter(function (r) {
     return r.querySelector('.ic7d-ok').checked && r.querySelector('.ic7d-lab').value.trim();
   }).map(function (r) {
-    return { label: r.querySelector('.ic7d-lab').value.trim(), origine: r.querySelector('.ic7d-orig').value, mesure: r.querySelector('.ic7d-mes').value.trim(), gravite: parseInt(r.getAttribute('data-g'), 10) || 0 };
+    return { label: r.querySelector('.ic7d-lab').value.trim(), origine: r.querySelector('.ic7d-orig').value, mesure: r.querySelector('.ic7d-mes').value.trim() };
   });
 }
 
@@ -7567,17 +6888,6 @@ function icInitFormulaire() {
     if (sel && idx >= 0) sel.value = String(idx);
     icApresChoixEntreprise(ent);
   }
-  // EU (établissement en activité) : saisie une fois pour l'affaire (ex.
-  // Chausson Materiaux), reprise sur chaque fiche IC des entreprises qui
-  // interviennent sur ce meme chantier (03/11, demande d'Alain).
-  var eu = terrainAffaire && terrainAffaire.chantier && terrainAffaire.chantier.eu;
-  if (eu) {
-    icSet('fic-eu-nom', eu.nom); icSet('fic-eu-contact', eu.contact);
-    icSet('fic-eu-tel', eu.tel); icSet('fic-eu-activite', eu.activite);
-    var chkEu = document.getElementById('fic-eu-actif');
-    if (chkEu) chkEu.checked = !!eu.actif;
-  }
-  icAppliquerRisquesEU();
   icPreRemplirGrilleDepuisFaits();
   // Decoche automatiquement "Amiante" au §7 si la periode d'intervention de
   // l'entreprise (§2) demarre apres la fin du desamiantage/demolition
@@ -7585,10 +6895,8 @@ function icInitFormulaire() {
   // saisies a la main plutot qu'extraites par IA). Se redeclenche a chaque
   // modification de la periode.
   var champPeriode = document.getElementById('fic-ent-periode');
-  if (champPeriode) { champPeriode.oninput = function () { icVerifierPeriodeAmiante(); icVerifierCoactiviteDemolition(); icVerifierCoactiviteEntreprises(); }; }
+  if (champPeriode) { champPeriode.oninput = icVerifierPeriodeAmiante; }
   icVerifierPeriodeAmiante();
-  icVerifierCoactiviteDemolition();
-  icVerifierCoactiviteEntreprises();
 }
 function icDateFR(s) {
   var m = String(s || '').match(/(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{2,4})/);
@@ -7597,52 +6905,16 @@ function icDateFR(s) {
   var d = new Date(a, mo - 1, j);
   return isNaN(d.getTime()) ? null : d;
 }
-// icDateDebutPeriode : la "Periode intervention" (§2) est en texte libre,
-// souvent "01/07 au 30/08/2026" -- la date de DEBUT n'a alors pas d'annee
-// propre. icDateFR seule attraperait la date de FIN (seule a matcher le
-// format complet JJ/MM/AAAA), ce qui comparerait la mauvaise date. On
-// cherche d'abord un couple "debut au/- fin", en empruntant l'annee de la
-// fin pour le debut si besoin ; sinon on retombe sur icDateFR (une seule
-// date dans le champ).
-function icDateDebutPeriode(s) {
-  s = String(s || '');
-  var m = s.match(/(\d{1,2})[\/\.\-](\d{1,2})(?:[\/\.\-](\d{2,4}))?\s*(?:au|à|-|→)\s*(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{2,4})/i);
-  if (m) {
-    var j = +m[1], mo = +m[2], a = m[3] ? +m[3] : +m[6]; if (a < 100) a += 2000;
-    var d = new Date(a, mo - 1, j);
-    if (!isNaN(d.getTime())) return d;
-  }
-  return icDateFR(s);
-}
-// icDateFinPeriode : symetrique d'icDateDebutPeriode mais pour la date de FIN
-// de periode ("15/11/2026 au 18/11/2026" -> 18/11/2026). Bug trouve le 03/11
-// en testant icVerifierCoactiviteEntreprises : jusqu'ici, tout code qui
-// voulait "la fin de periode" appelait icDateFR(champ), qui ne fait que
-// matcher la PREMIERE date trouvee dans le texte (donc le debut, jamais la
-// fin, sur un champ "X au Y") -- corrige ici, et repris dans
-// icVerifierCoactiviteDemolition (meme bug latent, moins visible car il ne
-// comparait qu'une seule date de part et d'autre).
-function icDateFinPeriode(s) {
-  s = String(s || '');
-  var m = s.match(/(\d{1,2})[\/\.\-](\d{1,2})(?:[\/\.\-](\d{2,4}))?\s*(?:au|à|-|→)\s*(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{2,4})/i);
-  if (m) {
-    var j = +m[4], mo = +m[5], a = +m[6]; if (a < 100) a += 2000;
-    var d = new Date(a, mo - 1, j);
-    if (!isNaN(d.getTime())) return d;
-  }
-  return icDateFR(s);
-}
 function icVerifierPeriodeAmiante() {
   if (!terrainAffaire) return;
   var f = affaireFaits(terrainAffaire).amiante;
   var cb = document.getElementById('icg-amiante'), txt = document.getElementById('icg-amiante-t');
   if (!cb || !txt || !f.fin_desamiantage) return;
   var finDate = icDateFR(f.fin_desamiantage);
-  var debutEnt = icDateDebutPeriode(getVal('fic-ent-periode'));
+  var debutEnt = icDateFR(getVal('fic-ent-periode'));
   var baseTexte = [f.localisation, f.raat_date ? 'RAAT du ' + f.raat_date : '', f.bureau, f.ss4_obligatoire ? 'SS3/SS4 exigee' : ''].filter(Boolean).join(' — ');
   var noteHorsPeriode = 'Hors periode de desamiantage/demolition (travaux jusqu’au ' + f.fin_desamiantage + ') — entreprise non concernee.';
-  var horsPeriode = !!(finDate && debutEnt && debutEnt.getTime() > finDate.getTime());
-  if (horsPeriode) {
+  if (finDate && debutEnt && debutEnt.getTime() > finDate.getTime()) {
     cb.checked = false;
     txt.value = noteHorsPeriode;
   } else if (txt.value === noteHorsPeriode) {
@@ -7652,123 +6924,6 @@ function icVerifierPeriodeAmiante() {
     cb.checked = !!(f.presence || f.raat_date);
     txt.value = baseTexte;
   }
-  // Meme logique sur le §6 "Analyse des risques — Interferences" (la ligne
-  // "Amiante — retrait ou confinement", rq-r4) : c'est elle, pas le simple
-  // tableau CMR du §7, qui porte le risque + mesures que l'entreprise
-  // consulte et signe (remarque d'Alain du 03/11).
-  var rqCb = document.getElementById('rq-r4'), rqObs = document.getElementById('rqobs-r4');
-  if (rqCb) {
-    if (horsPeriode && rqCb.checked) {
-      rqCb.checked = false;
-      if (rqObs) rqObs.value = noteHorsPeriode;
-      toggleRQ('r4');
-    } else if (!horsPeriode && rqObs && rqObs.value === noteHorsPeriode) {
-      var pgcR = (terrainAffaire.risques_pgc) ? terrainAffaire.risques_pgc : (window._risquesPGC || {});
-      rqCb.checked = !!pgcR['r4'];
-      rqObs.value = '';
-      toggleRQ('r4');
-    }
-  }
-}
-// icVerifierCoactiviteDemolition : symetrique d'icVerifierPeriodeAmiante,
-// mais dans l'autre sens -- si la periode de L'ENTREPRISE COURANTE recoupe
-// reellement celle de la demolition/desamiantage (et que ce n'est pas elle-
-// meme l'entreprise de demolition), on active les risques de coactivite qui
-// vont avec (ensevelissement, demolition>200m3, projections, poussieres,
-// engins) plutot que de laisser ca a la seule vigilance manuelle (03/11,
-// liste convenue avec Alain -- point 1). On ne decoche jamais ces cases
-// automatiquement : on ne fait qu'ajouter, pour ne pas ecraser une decision
-// prise a la main pendant une vraie IC.
-var IC_RISQUES_COACTIVITE_DEMOLITION = ['r2', 'r11', 'r16', 'r20', 'r22'];
-function icVerifierCoactiviteDemolition() {
-  if (!terrainAffaire) return;
-  var demo = icTrouverEntrepriseDemolition(terrainAffaire);
-  if (!demo) return;
-  var courante = terrainAffaire._entCourante;
-  if (courante && demo === courante) return; // l'entreprise de demolition a deja ses propres risques via son lot
-  var demoDebut = demo.dateInterv ? new Date(demo.dateInterv + 'T00:00:00') : null;
-  var f = affaireFaits(terrainAffaire).amiante;
-  var demoFinTxt = f.fin_desamiantage || icCalculerFinDesamiantage(terrainAffaire);
-  var demoFin = demoFinTxt ? icDateFR(demoFinTxt) : null;
-  if (!demoDebut || isNaN(demoDebut.getTime()) || !demoFin) return;
-  var entDebut = icDateDebutPeriode(getVal('fic-ent-periode'));
-  var entFin = icDateFinPeriode(getVal('fic-ent-periode'));
-  if (!entDebut || !entFin) return;
-  var chevauche = entDebut.getTime() <= demoFin.getTime() && entFin.getTime() >= demoDebut.getTime();
-  if (!chevauche) return;
-  var note = 'Chevauchement avec la démolition/désamiantage (' + (demo.nom || 'entreprise concernée') + ', jusqu’au ' + demoFinTxt + ') — coactivité à vérifier pendant l’IC.';
-  IC_RISQUES_COACTIVITE_DEMOLITION.forEach(function (id) {
-    var chk = document.getElementById('rq-' + id);
-    if (!chk) return;
-    if (!chk.checked) { chk.checked = true; toggleRQ(id); }
-    var obs = document.getElementById('rqobs-' + id);
-    if (obs && !obs.value) obs.value = note;
-  });
-}
-// icVerifierCoactiviteEntreprises : generalise icVerifierCoactiviteDemolition
-// a TOUTES les entreprises du chantier, pas seulement celle de demolition
-// (03/11, demande d'Alain -- meme exercice que celui deja fait pour Forge
-// avec PGC_IMPORTES/PGC_EXPORTES, mais fonde ici sur les risques typiques du
-// LOT de chaque entreprise -- risquesDuLot()/METIERS_RISQUES, deja utilise
-// pour le §6D -- plutot que sur des mots-cles detectes dans un texte de PGC).
-// Pour l'entreprise courante de l'IC :
-//  - RISQUES IMPORTES (6B) = risques typiques du lot de CHAQUE AUTRE
-//    entreprise dont la periode chevauche celle de l'entreprise courante
-//    (ce que l'activite des autres fait peser sur elle).
-//  - RISQUES EXPORTES (6C) = risques typiques du lot de l'entreprise
-//    courante elle-meme, uniquement s'il existe au moins une autre
-//    entreprise en chevauchement (sinon rien a exporter vers personne).
-// Jamais de decochage automatique : on ne fait qu'ajouter, comme pour toutes
-// les autres verifications automatiques de la fiche IC -- Alain reste libre
-// de decocher a la main pendant la vraie IC.
-function icVerifierCoactiviteEntreprises() {
-  if (!terrainAffaire) return;
-  var courante = terrainAffaire._entCourante;
-  if (!courante) return;
-  var entDebut = icDateDebutPeriode(getVal('fic-ent-periode'));
-  var entFin = icDateFinPeriode(getVal('fic-ent-periode'));
-  if (!entDebut || !entFin) return;
-  var lotCourant = getVal('fic-ent-lot') || courante.lot || '';
-  var risquesCourants = risquesDuLot(lotCourant);
-  var autresEnChevauchement = [];
-  (terrainAffaire.entreprises || []).forEach(function (e) {
-    if (e === courante || !e.dateInterv) return;
-    var autreDebut = new Date(e.dateInterv + 'T00:00:00');
-    if (isNaN(autreDebut.getTime())) return;
-    var autreFin = icAjouterDuree(e.dateInterv, e.duree) || autreDebut;
-    var chevauche = entDebut.getTime() <= autreFin.getTime() && entFin.getTime() >= autreDebut.getTime();
-    if (!chevauche) return;
-    autresEnChevauchement.push(e);
-    // Champ dedie rqobsimp- (pas le rqobs- general, partage avec 6A) : une
-    // entreprise doit pouvoir lire/contester le motif d'un risque IMPORTE
-    // sans que ça n'affecte ni ne confonde le motif EXPORTE du meme risque
-    // (03/11, remarque d'Alain -- le paragraphe unique rendait ça illisible
-    // des qu'un risque etait coche dans les deux sens).
-    var noteImp = 'Coactivité avec ' + (e.nom || 'une autre entreprise') + ' (' + (e.lot || 'lot non précisé') + '), période en chevauchement — à vérifier pendant l’IC.';
-    risquesDuLot(e.lot).forEach(function (id) {
-      var chk = document.getElementById('rq-' + id);
-      if (!chk) return;
-      if (!chk.checked) { chk.checked = true; toggleRQ(id); }
-      var imp = document.getElementById('imp-' + id);
-      if (imp && !imp.checked) { imp.checked = true; toggleImpObs(id); }
-      var obsImp = document.getElementById('rqobsimp-' + id);
-      if (obsImp && !obsImp.value) obsImp.value = noteImp;
-    });
-  });
-  if (autresEnChevauchement.length) {
-    var noms = autresEnChevauchement.map(function (e) { return e.nom; }).filter(Boolean).join(', ');
-    var noteExp = 'Risque propre au lot de l’entreprise, à signaler aux entreprises en coactivité' + (noms ? ' (' + noms + ')' : '') + ' — à vérifier pendant l’IC.';
-    risquesCourants.forEach(function (id) {
-      var chk = document.getElementById('rq-' + id);
-      if (!chk) return;
-      if (!chk.checked) { chk.checked = true; toggleRQ(id); }
-      var ex = document.getElementById('ex-' + id);
-      if (ex && !ex.checked) { ex.checked = true; toggleExpObs(id); }
-      var obsExp = document.getElementById('rqobsexp-' + id);
-      if (obsExp && !obsExp.value) obsExp.value = noteExp;
-    });
-  }
-  countRQ();
 }
 // Pre-remplit la grille IC §7 (CMR) et §8 (permis) avec ce qu'on sait deja
 // (affaire.faits) -- vous restez libres de corriger a l'ecran avant de
@@ -7835,34 +6990,6 @@ function icPreRemplirGrilleDepuisFaits() {
     setSelect('icg-voirie-s', 'Fourni');
     setTexte('icg-voirie-t', f.contraintes.arrete_voirie);
   }
-  // Section 7 "Silice / HAP / sols pollues" (CMR) : pas de fiche de faits
-  // dediee, mais le risque est quasi systematique (sciage, demolition
-  // beton, terrassement) -- on propose dans "Mesures" la meme phrase
-  // reglementaire que les fiches-risques du PGC, pour que la fiche IC
-  // montre explicitement que l'entreprise sait qu'elle doit le traiter
-  // dans son PPSPS (5/11, demande d'Alain). Reste modifiable a l'ecran.
-  setTexte('icg-silice-t', 'Valeur limite réglementaire d’exposition à la silice cristalline : 0,1 mg/m³ pour le quartz (R.4412-149). Moyens de réduction de l’empoussièrement et protection respiratoire à charge de l’entreprise selon son évaluation des risques, précisés dans son PPSPS.');
-  // Section 4A "Bennes / tri dechets" et "Base vie / sanitaires" : infos de
-  // chantier (pas propres a l'entreprise). Pas de regle generale -- Alain
-  // precise que la gestion des dechets depend du chantier (bennes parfois
-  // mises a disposition et payees au compte prorata, sinon chaque
-  // entreprise evacue les siennes) -- donc jamais de defaut invente. Source
-  // : la fiche de faits CBT (05/11), remplie par Alain -- eventuellement a
-  // partir d'un passage repere automatiquement dans le CBT, mais toujours
-  // relu et valide avant enregistrement (cf. ouvrirFaitsCBT). Repli sur les
-  // anciens emplacements pour les affaires anterieures a cet ajout.
-  if (f.cbt.dechets) setTexte('icg-bennes-t', f.cbt.dechets);
-  else if (terrainAffaire.dechetsGestion) setTexte('icg-bennes-t', terrainAffaire.dechetsGestion);
-  if (f.cbt.base_vie) {
-    setTexte('icg-basevie-t', f.cbt.base_vie);
-  } else {
-    var aff4 = (typeof currentAffaireObj === 'function') ? currentAffaireObj() : null;
-    var agg4 = (typeof agregerElementsPGC === 'function') ? agregerElementsPGC(aff4) : null;
-    if (agg4 && agg4.base_vie) setTexte('icg-basevie-t', agg4.base_vie);
-  }
-  // Section 4A "Emprise / cloture" : info de chantier issue du plan de
-  // masse/PIC depose (05/11, cf. ouvrirFaitsPlans) -- meme principe.
-  if (f.plans.cloture) setTexte('icg-cloture-t', f.plans.cloture);
 }
 
 function icSet(id, v) { var el = document.getElementById(id); if (el) el.value = v || ''; }
@@ -7872,15 +6999,6 @@ function icApresChoixEntreprise(ent) {
   icSet('fic-ent-nom', ent.nom); icSet('fic-ent-contact', ent.contact); icSet('fic-ent-tel', ent.tel);
   icSet('fic-ent-tel-fixe', ent.telFixe); icSet('fic-ent-lot', ent.lot); icSet('fic-ent-effectif', ent.effectif);
   icSet('t-ent-nom-sig', ent.contact); icSet('t-ent-qualite-sig', ent.nom);
-  // Periode intervention (§2) pre-remplie depuis les dates saisies une fois
-  // dans les Intervenants (Date approx. d'intervention + Duree prevue), sans
-  // ecraser une periode deja tapee sur cette fiche. Alain garde la main pour
-  // corriger/affiner (demande du 03/11 : "comme on a fait pour harmo").
-  var champPer = document.getElementById('fic-ent-periode');
-  if (champPer && !champPer.value) {
-    var perSuggeree = icFormaterPeriodeEntreprise(ent);
-    if (perSuggeree) champPer.value = perSuggeree;
-  }
   // Sous-traitants et prestataires rattaches
   var sts = icEnfants(ent, 'sous-traitant'), prests = icEnfants(ent, 'prestataire');
   var liste = document.getElementById('fic-st-liste');
@@ -7953,13 +7071,6 @@ function icCompleterFicData(d) {
   d.donneurOrdre = donneur ? donneur.nom : ''; d.donneurPresent = getCheck('ic-do-present');
   d.prestataires = getVal('ic-prestataires');
   d.grille = icCollecterGrille();
-  // "Bennes / tri dechets" (4A) est une info de chantier, pas propre a
-  // l'entreprise : une fois saisie par Alain pour cette affaire (a partir
-  // du PGC/CBT qu'il a lus), on la fige sur terrainAffaire pour la
-  // reproposer -- jamais l'imposer -- aux IC suivantes de la MEME affaire
-  // (05/11, demande d'Alain : "c'est suivant les chantiers" -- jamais de
-  // defaut inter-affaires, seulement une reprise au sein du meme chantier).
-  if (d.grille.bennes && d.grille.bennes.t) terrainAffaire.dechetsGestion = d.grille.bennes.t;
   d.risquesPropres = ic7dCollecter();
   d.presents = icCollecterPresents();
   d.pointsPPSPS = getVal('ic-points-ppsps');
@@ -7967,53 +7078,6 @@ function icCompleterFicData(d) {
   d.formalites = IC_FORMALITES.map(function (f, i) { return getCheck('ic-form-' + i); });
   if (!terrainAffaire._icFaites) terrainAffaire._icFaites = [];
   terrainAffaire._icFaites.push(ent.id || ent.nom || '');
-  // Point 6 de la liste convenue avec Alain (03/11) : un risque releve en IC
-  // qui n'est jamais revu ensuite affaiblit sa position devant l'inspection
-  // ("releve puis oublie"). terrainAffaire._ficData est ecrase a chaque
-  // nouvelle IC -- on archive donc ici un historique persistant
-  // (terrainAffaire.icHistorique), relu par les formulaires VIS/RCO pour
-  // rappeler automatiquement ce qui reste a lever.
-  icArchiverHistorique(ent, d);
-}
-function icArchiverHistorique(ent, d) {
-  if (!terrainAffaire) return;
-  if (!terrainAffaire.icHistorique) terrainAffaire.icHistorique = [];
-  var cle = (ent.id || ent.nom || '') + '|' + (d.dateIC || '');
-  var existant = terrainAffaire.icHistorique.filter(function (h) { return h.cle === cle; })[0];
-  var record = {
-    cle: cle,
-    entNom: ent.nom || d.entNom || '',
-    dateIC: d.dateIC || '',
-    notif: d.obsNotif || '',
-    dgi: d.obsDGI || '',
-    delai: d.obsDelai || ''
-  };
-  if (existant) {
-    Object.keys(record).forEach(function (k) { existant[k] = record[k]; });
-  } else {
-    terrainAffaire.icHistorique.push(record);
-  }
-}
-// icRisquesNonLeves : les IC dont une Notification ou un DGI a ete saisi
-// mais pas encore de "Delai levee / Suite donnee" -- a rappeler tant que ce
-// n'est pas rempli sur une IC ulterieure pour la meme entreprise.
-function icRisquesNonLeves() {
-  return ((terrainAffaire && terrainAffaire.icHistorique) || []).filter(function (h) {
-    return (h.notif || h.dgi) && !h.delai;
-  });
-}
-function icRappelSuiviHtml() {
-  var nonLeves = icRisquesNonLeves();
-  if (!nonLeves.length) return '';
-  var h = '<div style="border:2px solid #CC0000;border-radius:8px;padding:10px 14px;margin-bottom:14px;background:#fff5f5;">';
-  h += '<div style="font-weight:700;color:#CC0000;margin-bottom:6px;">⚠ Points IC non encore levés — à vérifier lors de cette visite</div>';
-  nonLeves.forEach(function (r) {
-    var niveau = r.dgi ? 'DGI' : 'Notification';
-    var texte = r.dgi || r.notif;
-    h += '<div style="font-size:13px;margin-bottom:4px;"><strong>' + icEscAttr(r.entNom) + '</strong> (' + icEscAttr(r.dateIC) + ', ' + niveau + ') — ' + icEscAttr(texte) + '</div>';
-  });
-  h += '</div>';
-  return h;
 }
 
 // Point 12 : IC groupee par lot — une fiche par entreprise, constats communs conserves
@@ -8143,13 +7207,6 @@ function injecterICComplete(zip, d, isCat3) {
     else st = (d.stOui && d.stEntreprises && d.stEntreprises.length)
       ? d.stEntreprises.map(function (e) { return e.nom + (e.lot ? ' (' + e.lot + ')' : ''); }).join(' ; ') : 'Aucun sous-traitant d\u00e9clar\u00e9';
     icLigne(doc, tEE, 'Sous-traitants', [st]);
-    // §3 EU (etablissement en activite) : meme table que l'EE, colonnes de
-    // droite. Ajoute le 03/11 (demande d'Alain, cf. Chausson Materiaux) --
-    // auparavant toujours vide, meme quand l'EU etait saisie.
-    if (d.euNom || d.euActif) {
-      var euDesignation = (d.euActif ? '⚠ Site en activité pendant les travaux (R.4532-14)\n' : '') + (d.euNom || '') + (d.euActivite ? '\n' + d.euActivite : '');
-      icLigne(doc, tEE, 'Désignation / R. sociale', [euDesignation]);
-    }
   }
   icRemplacerT(doc, 'Prestataires : ___', function (s) { return s.replace(/_{3,}/, d.prestataires || 'aucun d\u00e9clar\u00e9'); });
 
@@ -8171,12 +7228,6 @@ function injecterICComplete(zip, d, isCat3) {
     });
     // Grille 4, 5, 6, 8, 9, 10
     var g = d.grille || {};
-    // Restructuration IC du 05/11 (demande d'Alain, verif OPPBTP/R.4532-13) :
-    // l'IC doit se limiter a la verification de terrain ; les mesures
-    // detaillees (texte reglementaire) des risques CMR sont desormais
-    // imprimees en annexe (table "7bis"), pas dans le corps du §7 ou seul
-    // "Present (Oui/Non)" reste -- un constat terrain, pas une analyse.
-    var tMesCmr = icTable(doc, 'Mesures (à reporter au PPSPS');
     IC_GRILLE.forEach(function (sec) {
       var tbl = icTable(doc, sec.ancre);
       sec.items.forEach(function (it) {
@@ -8195,17 +7246,10 @@ function injecterICComplete(zip, d, isCat3) {
           var c6 = icLigne(doc, tbl, 'Autre :', v.lab ? [icCoche(v.c), v.t] : []);
           if (c6 && v.lab) icCellText(doc, c6, 'Autre : ' + v.lab);
         }
-        else if (kind === 'cmr') {
-          icLigne(doc, tbl, lab, [v.c ? 'Oui' : 'Non']);
-          if (v.t) icLigne(doc, tMesCmr, lab, [v.t]);
-        }
+        else if (kind === 'cmr') icLigne(doc, tbl, lab, [v.c ? 'Oui' : 'Non', v.t]);
         else if (kind === 'cmrA') {
-          var c8 = icLigne(doc, tbl, 'Autre :', v.lab ? [v.c ? 'Oui' : 'Non'] : []);
+          var c8 = icLigne(doc, tbl, 'Autre :', v.lab ? [v.c ? 'Oui' : 'Non', v.t] : []);
           if (c8 && v.lab) icCellText(doc, c8, 'Autre : ' + v.lab);
-          if (v.t) {
-            var c8b = icLigne(doc, tMesCmr, 'Autre :', v.lab ? [v.t] : []);
-            if (c8b && v.lab) icCellText(doc, c8b, 'Autre : ' + v.lab);
-          }
         }
         else if (kind === 'perm') icLigne(doc, tbl, lab, [v.t, v.s || '\u2014']);
       });
@@ -8217,50 +7261,21 @@ function injecterICComplete(zip, d, isCat3) {
       if (m[2] === 'nom') icLigne(doc, t11, m[0], [val ? '\u2713' : '\u2014', val || '']);
       else icLigne(doc, t11, m[0], [icCoche(val), '']);
     });
-    // 7A / 7B / 7C : risques coches, mesures verifiees (PGC_RISQUES_LIB).
-    // Point 4 de la liste convenue avec Alain : distinguer visuellement les
-    // risques reglementaires (arrete 25/02/2003, intrinsequement les plus
-    // graves) des risques BTP courants -- l'ecran de saisie le montre deja
-    // (badge "Pt.X" vs "BTP"), jamais l'impression. L'ordre de d.risquesIC
-    // (construit par countRQ() sur r1..r27 dans l'ordre) place deja de fait
-    // les reglementaires (r1-r14) avant les BTP courants (r15-r27) ; on
-    // ajoute ici le repere textuel pour que ca se voie sans avoir a
-    // connaitre les identifiants.
-    // Restructuration du 03/11 (remarque d'Alain) : le §6 ne compte plus que
-    // les 3 categories OPPBTP (importes / exportes / propres), pas une 4eme
-    // case "co-activite site actif" qui faisait doublon et compliquait la
-    // lecture pour l'entreprise. Un risque coche mais pas encore qualifie
-    // "importe" ou "exporte" pendant l'IC n'apparait plus nulle part --
-    // choix explicite d'Alain pour forcer la qualification sur place plutot
-    // que de laisser une case fourre-tout.
-    var l7 = { b: [], c: [] };
+    // 7A / 7B / 7C : risques coches, mesures verifiees (PGC_RISQUES_LIB)
+    var l7 = { a: [], b: [], c: [] };
     (d.risquesIC || []).forEach(function (r) {
       var def = (typeof IC_RISQUES_DEF !== 'undefined' && IC_RISQUES_DEF[r.id]) || {};
       var lib = PGC_RISQUES_LIB[r.id] || {};
       var mes = def.mesures ? def.mesures.join('\n') : (lib.mesures || '');
-      var estLoi = icRisquesLoiIds().indexOf(r.id) !== -1;
-      var ref = icRisqueRef(r.id);
-      var label = (estLoi ? '[Art. 25/02/2003 ' + ref + '] ' : '') + (lib.label || def.label || r.id);
-      // 6B/6C : l'OPPBTP distingue clairement risques importes (subis par
-      // l'entreprise -- les mesures decrivent comment ELLE se protege) et
-      // risques exportes (generes par l'entreprise -- les mesures decrivent
-      // comment ELLE protege LES AUTRES) : ce ne sont jamais les memes
-      // mesures, meme quand le risque technique porte le meme nom
-      // (remarque d'Alain du 03/11, confirmee sur preventionbtp.fr). 6B
-      // reprend "mes" (mesures de protection de l'entreprise, deja
-      // existantes) ; 6C utilise le catalogue dedie PGC_RISQUES_LIB_EXPORTE
-      // (comment l'entreprise protege les autres), pas le meme texte.
-      var mesExp = (PGC_RISQUES_LIB_EXPORTE[r.id] && PGC_RISQUES_LIB_EXPORTE[r.id].mesures) || mes;
-      // Chaque sens imprime sa PROPRE observation (rqobsimp/rqobsexp,
-      // 03/11) -- jamais la meme que l'autre sens. Repli sur r.obs (ancien
-      // champ unique) pour une fiche dont les donnees auraient ete
-      // enregistrees avant cette evolution.
-      if (r.imp) l7.b.push([label, mes, r.obsImp || r.obs || '']);
-      if (r.ex) l7.c.push([label, mesExp, r.obsExp || r.obs || '']);
+      var ligne = [lib.label || def.label || r.id, mes, r.obs || ''];
+      if (r.imp) l7.b.push(ligne);
+      if (r.ex) l7.c.push(ligne);
+      if (r.id === 'r24' || (!r.imp && !r.ex)) l7.a.push(ligne);
     });
     var vide = ['Aucun risque relev\u00e9 lors de l\u2019IC', '', ''];
-    icRemplirLignes(doc, icTable(doc, '6A — Risques importés'), 2, l7.b.length ? l7.b : [vide]);
-    icRemplirLignes(doc, icTable(doc, '6B — Risques exportés'), 2, l7.c.length ? l7.c : [vide]);
+    icRemplirLignes(doc, icTable(doc, '6A — Co-activité'), 2, l7.a.length ? l7.a : [vide]);
+    icRemplirLignes(doc, icTable(doc, '6B — Risques importés'), 2, l7.b.length ? l7.b : [vide]);
+    icRemplirLignes(doc, icTable(doc, '6C — Risques exportés'), 2, l7.c.length ? l7.c : [vide]);
   } else {
     // Cat. 3 : formalites exigees
     var tF = icTable(doc, 'Document exigé');
@@ -8273,33 +7288,17 @@ function injecterICComplete(zip, d, isCat3) {
     }
   }
 
-  // 7D : risques propres -- tries par gravite decroissante et marques
-  // "G1" a "G5" dans le libelle (point 3 de la liste convenue avec Alain) :
-  // la donnee de gravite existe deja par fiche metier mais ne remontait
-  // jusqu'ici que dans l'ecran de saisie (badge "G5"), jamais a l'impression.
-  var rp = (d.risquesPropres || []).slice().sort(function (x, y) {
-    return (y.gravite || 0) - (x.gravite || 0);
-  }).map(function (r) {
-    var label = (r.gravite ? 'G' + r.gravite + ' \u2014 ' : '') + r.label + (r.origine ? ' (' + r.origine.toLowerCase() + ')' : '');
-    return [label, r.mesure || '\u00c0 pr\u00e9ciser dans le PPSPS', '\u2713'];
+  // 7D : risques propres
+  var rp = (d.risquesPropres || []).map(function (r) {
+    return [r.label + (r.origine ? ' (' + r.origine.toLowerCase() + ')' : ''), r.mesure || '\u00c0 pr\u00e9ciser dans le PPSPS', '\u2713'];
   });
   var t7d = icTable(doc, 'Risque propre (origine)');
   if (t7d) {
     var debut7d = icEnfantsW(t7d, 'tr').length === 2 ? 1 : 2;
     icRemplirLignes(doc, t7d, debut7d, rp.length ? rp : [['Aucun risque propre relev\u00e9 lors de l\u2019IC', '', '']]);
   }
-  // Points a reporter dans le PPSPS : les risques reglementaires coches en
-  // §6 (loi:true -- arrete 25/02/2003, les plus graves : hauteur, amiante,
-  // demolition, HTB...) doivent y figurer explicitement, pas seulement les
-  // risques propres du §6D -- sinon une IC qui coche l'amiante en §6A sans
-  // le reporter ici laisse a l'entreprise un pretexte pour ne rien detailler
-  // dans son PPSPS (03/11, point 2 de la liste convenue avec Alain).
-  var loiIds = (typeof icRisquesLoiIds === 'function') ? icRisquesLoiIds() : [];
-  var risquesLoi = (d.risquesIC || []).filter(function (r) { return loiIds.indexOf(r.id) !== -1; }).map(function (r) {
-    var lib = PGC_RISQUES_LIB[r.id] || {};
-    return (lib.label || r.id) + (r.obs ? ' : ' + r.obs : '');
-  });
-  var pts = risquesLoi.concat((d.risquesPropres || []).map(function (r) { return r.label + (r.mesure ? ' : ' + r.mesure : ''); }));
+  // Points a reporter dans le PPSPS
+  var pts = (d.risquesPropres || []).map(function (r) { return r.label + (r.mesure ? ' : ' + r.mesure : ''); });
   if (d.pointsPPSPS) pts.push(d.pointsPPSPS);
   var tPts = icRemplacerT(doc, 'Points à reporter dans le PPSPS', function (s) { return s; });
   if (tPts) {
@@ -8413,7 +7412,6 @@ function genFormulaireFIC() {
 
   // Section 3 - EU
   html2 += sectionHeader('3', 'Entreprise Utilisatrice (EU) / Site', '&#127963;');
-  html2 += '<label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-weight:500;"><input type="checkbox" id="fic-eu-actif" onchange="icAppliquerRisquesEU()" style="width:18px;height:18px;"> Établissement en activité pendant les travaux (R.4532-14)</label>';
   html2 += fieldRow('Raison sociale EU', 'fic-eu-nom', 'text', 'Nom EU ou N/A', '');
   html2 += twoCol(
     fieldRow('Representant EU', 'fic-eu-contact', 'text', 'Nom Prenom', ''),
@@ -8529,29 +7527,7 @@ function genFormulaireFIC() {
   if (faitsTerrain.plomb.presence) {
     obsAuto.push('Plomb detecte' + (faitsTerrain.plomb.localisation ? ' : ' + faitsTerrain.plomb.localisation : '') + '.');
   }
-  // Base vie et gestion des dechets : deux infos de chantier (valables pour
-  // toute entreprise qui y intervient) plus utiles ici qu'un fait ponctuel
-  // (amiante) qui ne concerne pas forcement le lot de l'entreprise en cours
-  // (05/11, demande d'Alain -- ex. Batisol). Source : la fiche de faits CBT
-  // (faitsTerrain.cbt, cf. ouvrirFaitsCBT) -- jamais un defaut invente,
-  // seulement ce qui a ete saisi/valide par Alain pour CE chantier. Repli
-  // sur les anciens emplacements pour les affaires anterieures a cet ajout.
-  if (faitsTerrain.cbt.base_vie) obsAuto.push('Base vie : ' + faitsTerrain.cbt.base_vie);
-  else {
-    var aggObs = (typeof agregerElementsPGC === 'function') ? agregerElementsPGC(terrainAffaire) : null;
-    if (aggObs && aggObs.base_vie) obsAuto.push('Base vie : ' + aggObs.base_vie);
-  }
-  if (faitsTerrain.cbt.dechets) obsAuto.push('Gestion des dechets : ' + faitsTerrain.cbt.dechets);
-  else if (terrainAffaire.dechetsGestion) obsAuto.push('Gestion des dechets : ' + terrainAffaire.dechetsGestion);
   if (faitsTerrain.contraintes.synthese) obsAuto.push('Contraintes du site : ' + faitsTerrain.contraintes.synthese);
-  // Alertes critiques du planning (05/11) : point critique a ne pas rater
-  // (co-activites incompatibles/simultanees) -- restitue en observations,
-  // comme l'ancienne analyse IA le faisait (alertes_rouges).
-  if (faitsTerrain.alertesPlanning && faitsTerrain.alertesPlanning.length) {
-    obsAuto.push('Points critiques du planning : ' + faitsTerrain.alertesPlanning.join(' ; '));
-  }
-  // Acces chantier (05/11) : info de chantier issue du plan de masse/PIC.
-  if (faitsTerrain.plans.acces) obsAuto.push('Accès chantier : ' + faitsTerrain.plans.acces);
   if (faitsTerrain.reunions && faitsTerrain.reunions.length) {
     var derniereReunion = faitsTerrain.reunions[faitsTerrain.reunions.length - 1];
     if (derniereReunion.decisions || derniereReunion.nouvelles_entreprises) {
@@ -8559,17 +7535,7 @@ function genFormulaireFIC() {
     }
   }
   html2 += sectionHeader('11', 'Observations du CSPS', '&#128221;');
-  html2 += fieldRow('Observation (sans urgence)', 'fic-obs-csps', 'textarea', 'Observations, prescriptions...', obsAuto.join('\n'));
-  // Point 5 de la liste convenue avec Alain (03/11) : "Notification" et
-  // "DANGER GRAVE IMMINENT" n'avaient aucun champ -- toujours vides au
-  // §12, meme pour un vrai evenement grave. Trois champs distincts, chacun
-  // rempli dans sa propre case du tableau (plutot qu'un selecteur de niveau
-  // partageant un seul texte). Le champ DGI est mis en evidence a l'ecran
-  // (le libelle l'est deja en rouge/gras dans le modele Word imprime).
-  html2 += fieldRow('Notification (avant reprise)', 'fic-obs-notif', 'textarea', 'A notifier avant toute reprise des travaux...', '');
-  html2 += '<div class="field" style="margin-bottom:10px;"><label style="color:#CC0000;font-weight:700;">Danger Grave Imminent (arret immediat)</label>'
-    + '<textarea id="fic-obs-dgi" placeholder="Description du danger grave et imminent constate..." style="width:100%;padding:10px;border:2px solid #CC0000;border-radius:6px;font-family:inherit;font-size:14px;min-height:70px;"></textarea></div>';
-  html2 += fieldRow('Delai levee / Suite donnee', 'fic-obs-delai', 'textarea', 'Suite donnee a la notification ou au DGI ci-dessus...', '');
+  html2 += fieldRow('Observations / prescriptions', 'fic-obs-csps', 'textarea', 'Observations, prescriptions...', obsAuto.join('\n'));
   html2 += twoCol(
     fieldRow('Frequence visites CSPS', 'fic-obs-freq', 'text', 'Ex: Mensuelle', ''),
     fieldRow('Reunions coordination', 'fic-obs-reunion', 'text', 'Ex: Bimensuelle', '')
@@ -8588,7 +7554,6 @@ function genFormulaireVIS() {
   var nowH = new Date().getHours().toString().padStart(2,'0') + ':' + new Date().getMinutes().toString().padStart(2,'0');
   visObsCount = 0;
   var html2 = '';
-  html2 += icRappelSuiviHtml();
 
   // Section 1 - Visite
   html2 += sectionHeader('1', 'Identification de la visite', '&#128065;');
@@ -8710,7 +7675,6 @@ function visAjouterObs() {
   h += '<div class="field"><label>Photos</label>';
   h += '<input type="file" id="' + id + '-photos" accept="image/*" multiple capture="environment" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px;">';
   h += '<div id="' + id + '-preview" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>';
-  h += '<button type="button" class="btn btn-outline btn-sm" style="margin-top:8px;width:100%;" onclick="visDecrirePhoto(\'' + id + '\', this)">&#129302; D&eacute;crire d\'apr&egrave;s la photo</button>';
   h += '</div>';
   h += '</div>'; // ferme obs-fields
   h += '<button class="vis-obs-val btn btn-success" style="width:100%;padding:12px;margin-top:10px;font-size:14px;">&#10003; Valider cette observation</button>';
@@ -8772,36 +7736,9 @@ function visAjouterObs() {
       };
       reader.readAsDataURL(file);
     });
-    setTimeout(function () {
-      var _d = document.getElementById(id + '-desc');
-      var _p = document.getElementById(id + '-photos');
-      if (_p && _p.files && _p.files.length && _d && !_d.value.trim() && typeof visDecrirePhoto === 'function') visDecrirePhoto(id, null);
-    }, 60);
   });
 
   document.getElementById('vis-obs-list').appendChild(div);
-}
-
-async function visDecrirePhoto(id, btn) {
-  var input = document.getElementById(id + '-photos');
-  var desc = document.getElementById(id + '-desc');
-  if (!input || !input.files || !input.files.length) { showToast('Ajoute d\'abord une photo a cette observation.', 'error'); return; }
-  var old = btn ? btn.textContent : ''; if (btn) { btn.textContent = '⏳ Analyse...'; btn.disabled = true; }
-  try {
-    var dataUrl = await compresserImage(input.files[0], 1280, 0.72);
-    var prompt = "REPONDS IMPERATIVEMENT EN FRANCAIS, jamais dans une autre langue. Tu es un coordonnateur SPS en visite de chantier. Decris cette photo comme une OBSERVATION pour le CR de visite : nature du constat/probleme, risque concerne, localisation si visible. 2 a 4 phrases, factuel, vocabulaire SPS, sans politesse. Si la photo ne montre pas un chantier, dis-le en une phrase.";
-    var r = await fetch('/api/claude', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'qwen/qwen3.8-27b', reasoning_effort: 'none', max_tokens: 600, messages: [{ role: 'user', content: [{ type: 'image_url', image_url: { url: dataUrl } }, { type: 'text', text: prompt }] }] })
-    });
-    var j = await r.json();
-    if (!r.ok) throw new Error(j.error || ('Serveur ' + r.status));
-    var txt = ((j.content && j.content[0] && j.content[0].text) || '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-    if (!txt) throw new Error('Reponse vide');
-    desc.value = desc.value && desc.value.trim() ? (desc.value.trim() + '\n' + txt) : txt;
-    showToast('Description remplie par l\'IA.', 'success');
-  } catch (e) { showToast('IA : ' + e.message, 'error'); }
-  finally { if (btn) { btn.textContent = old; btn.disabled = false; } }
 }
 
 
@@ -8887,7 +7824,6 @@ function genFormulaireRCO() {
   var today = new Date().toISOString().split('T')[0];
   var nowH = new Date().getHours().toString().padStart(2,'0') + ':' + new Date().getMinutes().toString().padStart(2,'0');
   var html2 = '';
-  html2 += icRappelSuiviHtml();
   html2 += sectionHeader('1', 'Identification de la reunion', '&#129309;');
   html2 += twoCol(fieldRow('Date', 'rco-date', 'date', '', today), fieldRow('N reunion', 'rco-no', 'number', '1', '1'));
   html2 += twoCol(fieldRow('Heure', 'rco-heure', 'time', '', nowH), fieldRow('Lieu', 'rco-lieu', 'text', 'Ex: Base vie', ''));
@@ -8982,10 +7918,6 @@ function genFormulaireDGI() {
   html2 += fieldRow('Mesure complémentaire 1', 'dgi-mes1', 'text', 'Si nécessaire', '');
   html2 += fieldRow('Mesure complémentaire 2', 'dgi-mes2', 'text', 'Si nécessaire', '');
   html2 += fieldRow('Conditions de reprise', 'dgi-reprise', 'textarea', 'Ex: garde-corps posé et vérifié par le CSPS', '');
-  html2 += '<div class="field" style="margin-bottom:10px;"><label>Photos (argumenter l\'arret)</label>';
-  html2 += '<input type="file" id="dgi-photos" accept="image/*" multiple capture="environment" onchange="dgiPhotosChange(this)" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px;">';
-  html2 += '<div id="dgi-photos-preview" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>';
-  html2 += '</div>';
   html2 += sectionEnd();
   html2 += sectionHeader('2', 'Entreprise concernee', '&#127970;');
   html2 += fieldRow('Entreprise', 'dgi-ent', 'text', 'Raison sociale', '');
@@ -8995,23 +7927,6 @@ function genFormulaireDGI() {
     + '</select></div>';
   html2 += sectionEnd();
   return html2;
-}
-
-function dgiPhotosChange(input) {
-  var preview = document.getElementById('dgi-photos-preview');
-  if (!preview) return;
-  preview.innerHTML = '';
-  Array.from(input.files || []).forEach(function(file) {
-    var reader = new FileReader();
-    reader.onload = function(ev) {
-      var img = document.createElement('img');
-      img.src = ev.target.result;
-      img.dataset.b64 = ev.target.result;
-      img.style.cssText = 'width:80px;height:80px;object-fit:cover;border-radius:4px;border:1px solid var(--border);';
-      preview.appendChild(img);
-    };
-    reader.readAsDataURL(file);
-  });
 }
 
 function optionsDestinatairesIC() {
@@ -9931,61 +8846,18 @@ function terrainRemplirEntreprise(idx) {
 
 // ── CANVAS SIGNATURES ────────────────────────────────────────────
 // === Croisement Lot / Corps de metier -> risques typiques (global, reutilise par initRisquesWidget et recroiserRisquesLot) ===
-// Reactivee le 03/11 (demande d'Alain) : coche directement les risques
-// typiques du lot dans le tableau reglementaire du §6, des la selection de
-// l'entreprise -- comme avant le retrait du 30/09 (qui avait laisse le
-// pre-cochage uniquement aux propositions "a confirmer" du §6D). Alain
-// garde evidemment la main pour decocher si un risque ne s'applique pas.
-// Mots-cles repris de IC_METIER_MOTS (meme reconnaissance de lot que le
-// §6D) pour eviter deux listes a maintenir en parallele ; seule la liste
-// de risques associee est propre au §6. Premiere version a affiner par
-// Alain au fil de l'usage -- le choix des risques par lot est un jugement
-// metier, pas une regle ecrite noir sur blanc.
-var METIERS_RISQUES_IDS = {
-  // r6 ajoute le 03/11 : sur les chantiers d'Alain, c'est generalement le GO
-  // qui installe/raccorde la base vie (eau, electricite, sanitaires) --
-  // declenche donc directement sur le lot Gros œuvre, pas seulement sur un
-  // lot "installations de chantier" separe (cf. base_vie ci-dessous, garde
-  // pour les cas ou une autre entreprise s'en charge).
-  gros_oeuvre: ['r1', 'r6', 'r15', 'r16', 'r18', 'r19', 'r22'],
-  charpente_couverture: ['r1', 'r16', 'r18', 'r19'],
-  'électricité': ['r6', 'r17', 'r23'],
-  plomberie_cvc: ['r3', 'r17', 'r23'],
-  peinture: ['r3', 'r20', 'r21'],
-  menuiserie_metallerie: ['r16', 'r17', 'r23'],
-  terrassement_vrd: ['r2', 'r8', 'r19', 'r22'],
-  'démolition_désamiantage': ['r4', 'r11', 'r16', 'r20'],
-  'étanchéité_isolation': ['r1', 'r17', 'r20'],
-  second_oeuvre: ['r18', 'r20', 'r23'],
-  'revêtement_pvc': ['r3', 'r20'],
-  plafonds_suspendus: ['r1', 'r18'],
-  echafaudeur: ['r1', 'r16'],
-  grutier_levage: ['r13', 'r14', 'r22'],
-  paysagiste_espaces_verts: ['r18', 'r19', 'r22'],
-  enseigne_signaletique: ['r1', 'r6', 'r23'],
-  cloture_portail: ['r15', 'r18', 'r22', 'r23'],
-  montage_rayonnage: ['r13', 'r18', 'r22'],
-  enduiseur_facadier: ['r1', 'r3', 'r20'],
-  tailleur_pierre: ['r19', 'r20', 'r23'],
-  base_vie: ['r6', 'r18', 'r22']
-};
-var METIERS_RISQUES = Object.keys(IC_METIER_MOTS).map(function (k) {
-  return { mots: IC_METIER_MOTS[k], risques: METIERS_RISQUES_IDS[k] || [] };
-});
+var METIERS_RISQUES = []; // ancienne table retiree le 30/09 : les propositions viennent des fiches metier d'Harmo (IC_METIERS_RISQUES)
 
 function normaliserTexte(s) {
   return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
 function risquesDuLot(lotTexte) {
-  // icNormTxt (pas normaliserTexte) : gere le "œ" de "Gros œuvre", sinon ce
-  // lot tres courant ne matche jamais (bug trouve le 03/11 en reactivant
-  // cette fonction).
-  var lotNorm = icNormTxt(lotTexte);
+  var lotNorm = normaliserTexte(lotTexte);
   if (!lotNorm) return [];
   var trouve = [];
   METIERS_RISQUES.forEach(function(m) {
-    var matchMot = m.mots.some(function(mot) { return lotNorm.indexOf(icNormTxt(mot)) !== -1; });
+    var matchMot = m.mots.some(function(mot) { return lotNorm.indexOf(normaliserTexte(mot)) !== -1; });
     if (matchMot) {
       m.risques.forEach(function(rid) { if (trouve.indexOf(rid) === -1) trouve.push(rid); });
     }
@@ -10021,50 +8893,6 @@ function recroiserRisquesLot() {
   showToast(nbAjoutes > 0 ? (nbAjoutes + ' risque(s) ajoute(s) suivant le lot "' + lotTexte + '"') : 'Risques du lot deja tous coches.', 'success');
 }
 
-// Catalogue des 27 risques du §6 (arrete 25/02/2003 + risques BTP
-// courants) -- sorti d'initRisquesWidget() le 03/11 (point 2 de la liste
-// convenue avec Alain) pour etre reutilise par injecterICComplete() : les
-// risques "loi:true" (reglementaires, les plus graves) coches en IC doivent
-// se retrouver dans "Points a reporter dans le PPSPS", pas seulement les
-// risques propres du §6D.
-var IC_RISQUES_CATALOGUE = [
-  {sep:'Risques particuliers reglementaires — Arrete 25/02/2003'},
-  {id:'r1',  label:'Chute de hauteur > 3 m',                         ref:'Pt.1',  loi:true},
-  {id:'r2',  label:'Ensevelissement / enlisement',                    ref:'Pt.1',  loi:true},
-  {id:'r3',  label:'Substances chimiques / agents biologiques',       ref:'Pt.2',  loi:true},
-  {id:'r4',  label:'Amiante — retrait ou confinement',               ref:'Pt.3',  loi:true},
-  {id:'r5',  label:'Radiations ionisantes',                           ref:'Pt.4',  loi:true},
-  {id:'r6',  label:'Travaux sous tension / HTB (reseaux elec.)',      ref:'Pt.5',  loi:true},
-  {id:'r7',  label:'Risque de noyade',                                ref:'Pt.6',  loi:true},
-  {id:'r8',  label:'Puits / terrassements souterrains / tunnels',     ref:'Pt.7',  loi:true},
-  {id:'r9',  label:'Travaux en plongee appareillee',                  ref:'Pt.8',  loi:true},
-  {id:'r10', label:'Milieu hyperbare',                                ref:'Pt.9',  loi:true},
-  {id:'r11', label:'Demolition / deconstruction > 200 m3',           ref:'Pt.10', loi:true},
-  {id:'r12', label:'Travaux avec explosifs',                          ref:'Pt.11', loi:true},
-  {id:'r13', label:'Montage / demontage elements prefabriques lourds',ref:'Pt.12', loi:true},
-  {id:'r14', label:'Levage lourd > 60 t/m',                          ref:'Pt.13', loi:true},
-  {sep:'Risques courants BTP'},
-  {id:'r15', label:'Chute de plain-pied',                            ref:'BTP',   loi:false},
-  {id:'r16', label:'Projections / Chutes de materiaux',              ref:'BTP',   loi:false},
-  {id:'r17', label:'Points Chauds / Incendie',                       ref:'BTP',   loi:false},
-  {id:'r18', label:'Manutention manuelle / TMS',                     ref:'BTP',   loi:false},
-  {id:'r19', label:'Bruit',                                          ref:'BTP',   loi:false},
-  {id:'r20', label:'Poussieres (hors amiante)',                      ref:'BTP',   loi:false},
-  {id:'r21', label:'Produits dangereux / CMR (hors surv. medicale)', ref:'BTP',   loi:false},
-  {id:'r22', label:'Engins / heurt de vehicules',                    ref:'BTP',   loi:false},
-  {id:'r23', label:'Coupures / blessures outils',                    ref:'BTP',   loi:false},
-  {id:'r24', label:'Coactivite / superposition de taches',           ref:'BTP',   loi:false},
-  {id:'r25', label:'Risque Canicule (decret 2025-482)',              ref:'BTP',   loi:false},
-  {id:'r27', label:'Intemperies / conditions meteo degradees',       ref:'BTP',   loi:false},
-  {id:'r26', label:'AUTRES — precision entreprise',                  ref:'BTP',   loi:false},
-];
-function icRisquesLoiIds() {
-  return IC_RISQUES_CATALOGUE.filter(function (r) { return r.loi; }).map(function (r) { return r.id; });
-}
-function icRisqueRef(id) {
-  var r = IC_RISQUES_CATALOGUE.filter(function (x) { return x.id === id; })[0];
-  return r ? r.ref : '';
-}
 function initRisquesWidget() {
   var tbody = document.getElementById('risques-tbody');
   if (!tbody) return;
@@ -10079,7 +8907,37 @@ function initRisquesWidget() {
   var risquesMetier = risquesDuLot(lotCourant);
   window._risquesMetierActifs = risquesMetier;
 
-  var RISQUES = IC_RISQUES_CATALOGUE;
+  var RISQUES = [
+    {sep:'Risques particuliers reglementaires — Arrete 25/02/2003'},
+    {id:'r1',  label:'Chute de hauteur > 3 m',                         ref:'Pt.1',  loi:true},
+    {id:'r2',  label:'Ensevelissement / enlisement',                    ref:'Pt.1',  loi:true},
+    {id:'r3',  label:'Substances chimiques / agents biologiques',       ref:'Pt.2',  loi:true},
+    {id:'r4',  label:'Amiante — retrait ou confinement',               ref:'Pt.3',  loi:true},
+    {id:'r5',  label:'Radiations ionisantes',                           ref:'Pt.4',  loi:true},
+    {id:'r6',  label:'Travaux sous tension / HTB (reseaux elec.)',      ref:'Pt.5',  loi:true},
+    {id:'r7',  label:'Risque de noyade',                                ref:'Pt.6',  loi:true},
+    {id:'r8',  label:'Puits / terrassements souterrains / tunnels',     ref:'Pt.7',  loi:true},
+    {id:'r9',  label:'Travaux en plongee appareillee',                  ref:'Pt.8',  loi:true},
+    {id:'r10', label:'Milieu hyperbare',                                ref:'Pt.9',  loi:true},
+    {id:'r11', label:'Demolition / deconstruction > 200 m3',           ref:'Pt.10', loi:true},
+    {id:'r12', label:'Travaux avec explosifs',                          ref:'Pt.11', loi:true},
+    {id:'r13', label:'Montage / demontage elements prefabriques lourds',ref:'Pt.12', loi:true},
+    {id:'r14', label:'Levage lourd > 60 t/m',                          ref:'Pt.13', loi:true},
+    {sep:'Risques courants BTP'},
+    {id:'r15', label:'Chute de plain-pied',                            ref:'BTP',   loi:false},
+    {id:'r16', label:'Projections / Chutes de materiaux',              ref:'BTP',   loi:false},
+    {id:'r17', label:'Points Chauds / Incendie',                       ref:'BTP',   loi:false},
+    {id:'r18', label:'Manutention manuelle / TMS',                     ref:'BTP',   loi:false},
+    {id:'r19', label:'Bruit',                                          ref:'BTP',   loi:false},
+    {id:'r20', label:'Poussieres (hors amiante)',                      ref:'BTP',   loi:false},
+    {id:'r21', label:'Produits dangereux / CMR (hors surv. medicale)', ref:'BTP',   loi:false},
+    {id:'r22', label:'Engins / heurt de vehicules',                    ref:'BTP',   loi:false},
+    {id:'r23', label:'Coupures / blessures outils',                    ref:'BTP',   loi:false},
+    {id:'r24', label:'Coactivite / superposition de taches',           ref:'BTP',   loi:false},
+    {id:'r25', label:'Risque Canicule (decret 2025-482)',              ref:'BTP',   loi:false},
+    {id:'r27', label:'Intemperies / conditions meteo degradees',       ref:'BTP',   loi:false},
+    {id:'r26', label:'AUTRES — precision entreprise',                  ref:'BTP',   loi:false},
+  ];
 
   var html = '';
   RISQUES.forEach(function(r) {
@@ -10088,7 +8946,7 @@ function initRisquesWidget() {
       return;
     }
     var dePGC = pgc[r.id] ? true : false;
-    var deMetier = risquesMetier.indexOf(r.id) !== -1; // risques typiques du lot (reactive le 03/11)
+    var deMetier = false; // risques typiques du lot : proposes en 7D (risques propres)
     var pre = dePGC || deMetier;
     var origine = '';
     if (dePGC && deMetier) origine = '<span title="Detecte PGC + typique du lot" style="font-size:8px;font-weight:700;padding:0 4px;border-radius:3px;background:var(--bg-warning);color:var(--text-warning);margin-left:4px;">PGC+LOT</span>';
@@ -10099,20 +8957,10 @@ function initRisquesWidget() {
       : 'background:var(--bg-success);color:var(--text-success);';
     html += '<tr id="rqrow-' + r.id + '" style="' + (pre ? 'background:var(--bg-accent);' : '') + '">';
     html += '<td style="border:0.5px solid var(--border);padding:4px 8px;text-align:center;"><input type="checkbox" id="rq-' + r.id + '" ' + (pre ? 'checked' : '') + ' onchange="toggleRQ(\'' + r.id + '\')" style="width:15px;height:15px;"></td>';
-    html += '<td style="border:0.5px solid var(--border);padding:4px 8px;font-size:13px;" id="rqlbl-' + r.id + '">' + r.label + origine
-      + '<input type="text" id="rqobs-' + r.id + '" placeholder="Observations entreprise / exploitant" style="display:' + (pre ? 'block' : 'none') + ';width:100%;margin-top:4px;padding:5px;font-size:12px;border:1px solid var(--border);border-radius:4px;">'
-      // Deux champs distincts pour R.IMP et R.EX (03/11, demande d'Alain : un
-      // meme risque coche "importe" ET "exporte" se retrouvait avec une seule
-      // observation partagee -- impossible pour une entreprise de verifier
-      // ou de decocher un sens sans perdre/confondre l'explication de
-      // l'autre). Affiches uniquement quand la case correspondante est
-      // cochee -- voir toggleImpObs/toggleExpObs.
-      + '<input type="text" id="rqobsimp-' + r.id + '" placeholder="Observations — risque IMPORTE (subi par l’entreprise)" style="display:none;width:100%;margin-top:4px;padding:5px;font-size:12px;border:1px solid var(--border);border-radius:4px;background:#eef6ff;">'
-      + '<input type="text" id="rqobsexp-' + r.id + '" placeholder="Observations — risque EXPORTE (vers les autres)" style="display:none;width:100%;margin-top:4px;padding:5px;font-size:12px;border:1px solid var(--border);border-radius:4px;background:#fff4e5;">'
-      + '</td>';
+    html += '<td style="border:0.5px solid var(--border);padding:4px 8px;font-size:13px;" id="rqlbl-' + r.id + '">' + r.label + origine + '<input type="text" id="rqobs-' + r.id + '" placeholder="Observations entreprise / exploitant" style="display:' + (pre ? 'block' : 'none') + ';width:100%;margin-top:4px;padding:5px;font-size:12px;border:1px solid var(--border);border-radius:4px;"></td>';
     html += '<td style="border:0.5px solid var(--border);padding:4px 8px;"><span style="font-size:10px;padding:1px 5px;border-radius:4px;' + badgeStyle + '">' + r.ref + '</span></td>';
-    html += '<td style="border:0.5px solid var(--border);padding:4px 8px;text-align:center;"><input type="checkbox" id="imp-' + r.id + '" ' + (!pre ? 'disabled' : '') + ' onchange="toggleImpObs(\'' + r.id + '\')" style="width:15px;height:15px;' + (!pre ? 'opacity:0.25;' : '') + '"></td>';
-    html += '<td style="border:0.5px solid var(--border);padding:4px 8px;text-align:center;"><input type="checkbox" id="ex-' + r.id + '" ' + (!pre ? 'disabled' : '') + ' onchange="toggleExpObs(\'' + r.id + '\')" style="width:15px;height:15px;' + (!pre ? 'opacity:0.25;' : '') + '"></td>';
+    html += '<td style="border:0.5px solid var(--border);padding:4px 8px;text-align:center;"><input type="checkbox" id="imp-' + r.id + '" ' + (!pre ? 'disabled' : '') + ' onchange="countRQ()" style="width:15px;height:15px;' + (!pre ? 'opacity:0.25;' : '') + '"></td>';
+    html += '<td style="border:0.5px solid var(--border);padding:4px 8px;text-align:center;"><input type="checkbox" id="ex-' + r.id + '" ' + (!pre ? 'disabled' : '') + ' onchange="countRQ()" style="width:15px;height:15px;' + (!pre ? 'opacity:0.25;' : '') + '"></td>';
     html += '</tr>';
   });
   tbody.innerHTML = html;
@@ -10129,25 +8977,7 @@ function toggleRQ(id) {
   ex.disabled  = !on; ex.style.opacity  = on ? '1' : '0.25';
   if (!on) { imp.checked = false; ex.checked = false; }
   var obsRq = document.getElementById('rqobs-' + id); if (obsRq) obsRq.style.display = on ? 'block' : 'none';
-  var obsImp = document.getElementById('rqobsimp-' + id); if (obsImp) obsImp.style.display = (on && imp.checked) ? 'block' : 'none';
-  var obsExp = document.getElementById('rqobsexp-' + id); if (obsExp) obsExp.style.display = (on && ex.checked) ? 'block' : 'none';
   row.style.background = on ? 'var(--bg-accent)' : '';
-  countRQ();
-}
-// toggleImpObs/toggleExpObs : montre/cache le champ d'observation dedie a
-// R.IMP (resp. R.EX) quand on coche/decoche la case correspondante -- ne
-// touche jamais a l'observation de l'autre sens, pour qu'on puisse decocher
-// un sens sans perdre ni confondre l'explication de l'autre (03/11).
-function toggleImpObs(id) {
-  var imp = document.getElementById('imp-' + id);
-  var obsImp = document.getElementById('rqobsimp-' + id);
-  if (obsImp) obsImp.style.display = imp.checked ? 'block' : 'none';
-  countRQ();
-}
-function toggleExpObs(id) {
-  var ex = document.getElementById('ex-' + id);
-  var obsExp = document.getElementById('rqobsexp-' + id);
-  if (obsExp) obsExp.style.display = ex.checked ? 'block' : 'none';
   countRQ();
 }
 
@@ -10164,7 +8994,7 @@ function countRQ() {
       var ex  = document.getElementById('ex-' + id).checked;
       if (imp) ci++;
       if (ex) ce++;
-      data.push({ id: id, imp: imp, ex: ex, obs: getVal('rqobs-' + id), obsImp: getVal('rqobsimp-' + id), obsExp: getVal('rqobsexp-' + id) });
+      data.push({ id: id, imp: imp, ex: ex, obs: getVal('rqobs-' + id) });
     }
   });
   var elR = document.getElementById('cnt-rq');
@@ -10174,32 +9004,6 @@ function countRQ() {
   if (elI) elI.textContent = ci;
   if (elE) elE.textContent = ce;
   window._risquesICData = data;
-}
-
-// Ajoute le 03/11 (demande d'Alain) : quand l'EU (ex: Chausson Materiaux)
-// reste en activite pendant les travaux, certaines categories doivent
-// apparaitre d'office en importe/exporte en §6B/6C, sinon l'entreprise
-// peut arguer que le CSPS n'a rien releve en IC pour justifier de ne rien
-// mettre dans son PPSPS. Jugement metier (pas une regle ecrite) : cible
-// la circulation engins (double sens), le bruit/poussieres et les
-// projections que le chantier fait peser sur l'activite commerciale de
-// l'EU. N'ecrase rien si l'EU est decochee (on laisse tel quel).
-var IC_RISQUES_EU_IMP = ['r16', 'r19', 'r20', 'r22'];
-var IC_RISQUES_EU_EX = ['r22'];
-function icAppliquerRisquesEU() {
-  var actif = document.getElementById('fic-eu-actif');
-  if (!actif || !actif.checked) return;
-  IC_RISQUES_EU_IMP.concat(IC_RISQUES_EU_EX).forEach(function (id) {
-    var chk = document.getElementById('rq-' + id);
-    if (chk && !chk.checked) { chk.checked = true; toggleRQ(id); }
-  });
-  IC_RISQUES_EU_IMP.forEach(function (id) {
-    var imp = document.getElementById('imp-' + id); if (imp && !imp.checked) { imp.checked = true; toggleImpObs(id); }
-  });
-  IC_RISQUES_EU_EX.forEach(function (id) {
-    var ex = document.getElementById('ex-' + id); if (ex && !ex.checked) { ex.checked = true; toggleExpObs(id); }
-  });
-  countRQ();
 }
 
 function initSigCanvas(canvasId, key) {
@@ -10283,7 +9087,6 @@ async function genererDocTerrain() {
       euContact:     getVal('fic-eu-contact'),
       euTel:         getVal('fic-eu-tel'),
       euActivite:    getVal('fic-eu-activite'),
-      euActif:       getCheck('fic-eu-actif'),
       // Infos prealables
       infoMO:        getCheck('fic-info-mo'),
       infoCACES:     getCheck('fic-info-caces'),
@@ -10298,9 +9101,6 @@ async function genererDocTerrain() {
       secRDV:        getVal('fic-sec-rdv'),
       // Observations
       obsCSPS:       getVal('fic-obs-csps'),
-      obsNotif:      getVal('fic-obs-notif'),
-      obsDGI:        getVal('fic-obs-dgi'),
-      obsDelai:      getVal('fic-obs-delai'),
       // Section I Cat.3 - Explications PGC
       cat3_acces:         getVal('fic-cat3-acces'),
       cat3_securisation:  getVal('fic-cat3-securisation'),
@@ -10332,17 +9132,6 @@ async function genererDocTerrain() {
     };
     if (typeof countRQ === 'function') { countRQ(); terrainAffaire._ficData.risquesIC = window._risquesICData || []; }
     icCompleterFicData(terrainAffaire._ficData);
-    // Persiste l'EU au niveau du chantier (et non de la fiche) : saisi une
-    // fois, repris automatiquement sur les fiches IC des autres entreprises
-    // du meme chantier (03/11, demande d'Alain -- cf. icInitFormulaire).
-    if (terrainAffaire._ficData.euNom || terrainAffaire._ficData.euActif) {
-      terrainAffaire.chantier = terrainAffaire.chantier || {};
-      terrainAffaire.chantier.eu = {
-        nom: terrainAffaire._ficData.euNom, contact: terrainAffaire._ficData.euContact,
-        tel: terrainAffaire._ficData.euTel, activite: terrainAffaire._ficData.euActivite,
-        actif: terrainAffaire._ficData.euActif
-      };
-    }
   } else if (ref === 'VIS') {
     // Recuperer la premiere entreprise de la liste
     var firstEnt = document.querySelector('#vis-ent-list .vis-ent-nom');
@@ -10512,18 +9301,6 @@ async function genererDocTerrain() {
       }
     });
     terrainAffaire._participants = participants;
-  } else if (ref === 'DGI') {
-    // Photos jointes au signalement DGI : servent a argumenter l'arret de
-    // tache (aucune IA ici, juste la pièce jointe au document).
-    var dgiPhotos = [], dgiLegendes = [];
-    var dgiPreview = document.getElementById('dgi-photos-preview');
-    if (dgiPreview) {
-      dgiPreview.querySelectorAll('img').forEach(function(img) {
-        if (img.src && img.src.startsWith('data:')) { dgiPhotos.push(img.src); dgiLegendes.push(''); }
-      });
-    }
-    terrainAffaire._photos = dgiPhotos;
-    terrainAffaire._photosLegendes = dgiLegendes;
   }
 
   showToast('Generation ' + (DOC_TITRES[ref] || ref) + ' en cours...');
