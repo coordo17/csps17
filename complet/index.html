@@ -6559,7 +6559,11 @@ var IC_RISQUES_DEF = {
 // Fiches-risques par metier reprises du PGC Harmo (H_METIERS_RISQUES et H_METIER_MOTS),
 // texte inchange. Regenerer avec source/outils/extraire_metiers_harmo.py.
 var IC_METIER_MOTS = {
-'gros_oeuvre': ['gros oeuvre','maconnerie','macon','beton arme','coffrage','ferraillage','voile beton','dallage'],
+'gros_oeuvre': ['gros oeuvre','maconnerie','macon','beton arme','coffrage','ferraillage','voile beton'],
+// dallage (06/11, demande d'Alain) : sorti de gros_oeuvre -- risques reels
+// distincts (toupies/pompe a beton en zone de coulage, glissade sur beton
+// frais, reservations multi-lots), pas le meme lot qu'un macon.
+'dallage': ['dallage','dalle beton interieure','dalle industrielle'],
 'charpente_couverture': ['charpente','couverture','couvreur','toiture','zinguerie','tuile','ardoise'],
 'électricité': ['electricite','electricien','cfo','cfa','courant fort','courant faible','armoire electrique'],
 'plomberie_cvc': ['plomberie','plombier','cvc','chauffage','climatisation','sanitaire','ventilation'],
@@ -9863,6 +9867,12 @@ var METIERS_RISQUES_IDS = {
   // memes risques, comme Fred le fait a la main (le GO n'est pas coche
   // comme le plombier).
   gros_oeuvre: ['r1', 'r2', 'r4', 'r6', 'r15', 'r16', 'r18', 'r19', 'r20', 'r22'],
+  // dallage (06/11) : lot separe de gros_oeuvre -- toupies/pompe a beton en
+  // zone de coulage (r16/r22), glissade sur beton frais/cure (r15),
+  // reservations transmises par plusieurs lots avant coulage (r24) --
+  // cf. audit Phase 5. Pas de risque electrique/amiante/silice ici, a
+  // l'inverse du GO.
+  dallage: ['r15', 'r16', 'r22', 'r24'],
   // r13/r14 ajoutes (06/11) : levage de portees jusqu'a 13,66 ml, charpente
   // metallique -- pas seulement de la hauteur statique (couverture/bardage).
   charpente_couverture: ['r1', 'r13', 'r14', 'r16', 'r18', 'r19', 'r22'],
