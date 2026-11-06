@@ -7645,6 +7645,18 @@ function icCollecterPresents() {
   }).filter(function (p) { return p.nom || p.qualite; });
 }
 
+// 06/11, demande d'Alain : detecte si le chantier est "en site occupe" /
+// "etablissement en activite" a partir de la nature de l'operation saisie
+// (champ chantier-nature, qu'elle vienne d'une saisie manuelle ou de
+// l'import de la Convention SPS) -- mots-cles repris de ce qui a ete
+// trouve en-tete du PGC et du PPSPS d'Auray ("TRAVAUX SUR EXISTANT EN
+// SITE OCCUPE. Decret de 94"). Reconnaissance par mots-cles, pas d'IA.
+var IC_SITE_OCCUPE_MOTS = ['site occupe', 'en activite', 'decret de 94', 'decret 94', 'etablissement recevant du public', 'a phaser', 'partie occupe'];
+function icSiteOccupeDetecte() {
+  var txt = icNormTxt((terrainAffaire && terrainAffaire.chantier && terrainAffaire.chantier.nature) || '');
+  if (!txt) return false;
+  return IC_SITE_OCCUPE_MOTS.some(function (m) { return txt.indexOf(icNormTxt(m)) !== -1; });
+}
 function icInitFormulaire() {
   icPresCount = 0; icRpCount = 0;
   var liste = document.getElementById('ic-pres-liste');
@@ -7668,6 +7680,14 @@ function icInitFormulaire() {
     icSet('fic-eu-tel', eu.tel); icSet('fic-eu-activite', eu.activite);
     var chkEu = document.getElementById('fic-eu-actif');
     if (chkEu) chkEu.checked = !!eu.actif;
+  } else if (typeof icSiteOccupeDetecte === 'function' && icSiteOccupeDetecte()) {
+    // 06/11, demande d'Alain : avant toute saisie manuelle de l'EU, precoche
+    // la case "etablissement en activite" quand la nature de l'operation
+    // (saisie a la main ou importee de la convention) dit explicitement
+    // que le site reste occupe/en activite pendant les travaux -- jamais le
+    // contraire (on ne decoche jamais une case deja remplie a la main).
+    var chkEuAuto = document.getElementById('fic-eu-actif');
+    if (chkEuAuto) chkEuAuto.checked = true;
   }
   icAppliquerRisquesEU();
   // Decoche automatiquement "Amiante" au §7 si la periode d'intervention de
