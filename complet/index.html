@@ -7631,7 +7631,7 @@ function icPresAjouter(nom, qualite, role) {
     + '<input type="text" class="ic-pres-qual" value="' + icEscAttr(qualite) + '" placeholder="Entreprise / Qualit\u00e9" style="flex:1;padding:6px;border:1px solid var(--border);border-radius:5px;font-size:13px;">'
     + (role === 'autre' ? '<button type="button" class="btn-remove-ent" onclick="this.closest(\'.ic-pres\').remove()">x</button>' : '') + '</div>'
     + (role === 'autre'
-      ? '<canvas id="ic-pres-sig-' + n + '" height="90" style="border:1px solid var(--border);border-radius:6px;width:100%;touch-action:none;background:white;margin-top:4px;"></canvas>'
+      ? '<canvas id="ic-pres-sig-' + n + '" height="180" style="border:1px solid var(--border);border-radius:6px;width:100%;touch-action:none;background:white;margin-top:4px;"></canvas>'
         + '<button type="button" class="btn btn-outline btn-sm" onclick="clearSig(\'ic-pres-sig-' + n + '\', \'pres_' + n + '\', \'\')">&#10005; Effacer</button>'
       : '<div style="font-size:11px;color:var(--text-light);margin-top:2px;">Signature reprise du visa (' + (role === 'csps' ? 'coordonnateur' : 'repr\u00e9sentant de l\u2019entreprise') + ').</div>');
   liste.appendChild(d);
