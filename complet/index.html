@@ -722,6 +722,13 @@
         <div class="form-card">
           <div class="form-card-header">&#128203; Identification de l'operation</div>
           <div class="form-card-body">
+            <div class="form-row" style="margin-bottom:12px;">
+              <div class="field" style="flex:1 1 100%;">
+                <button type="button" class="btn btn-outline btn-sm" onclick="conventionChoisirFichier()">&#128220; Importer depuis la Convention SPS (fichier)</button>
+                <input type="file" id="convention-import-input" accept=".pdf,.docx,.txt" style="display:none;" onchange="conventionFichierChoisi(event)">
+                <p style="font-size:11px;color:var(--text-light);margin-top:4px;">Pré-remplit chantier, MOA et CSPS conception à partir de la convention de coordination déposée, par repérage de motifs (aucune IA). À vérifier avant d'enregistrer.</p>
+              </div>
+            </div>
             <div class="form-row">
               <div class="field"><label>N Affaire (auto)</label><input type="text" id="num-affaire" readonly placeholder="CSPS-2026-0001"></div>
               <div class="field"><label>Designation du chantier *</label><input type="text" id="chantier-nom" placeholder="Ex : Negoce Chausson Ploneour-Lanvern"></div>
@@ -1586,6 +1593,168 @@ async function importerContratDepuisFichier(file) {
     if (infos.tel) { var elT = document.getElementById('cspsc-tel'); if (elT && !elT.value) { elT.value = infos.tel; n++; } }
     if (infos.mail) { var elM = document.getElementById('cspsc-mail'); if (elM && !elM.value) { elM.value = infos.mail; n++; } }
     showToast(n ? n + ' champ(s) repéré(s) dans ' + file.name + ' (CSPS Conception) — à vérifier.' : 'Aucun co-traitant CSPS distinct repéré dans ' + file.name + '.', n ? 'success' : 'error');
+  } catch (err) {
+    showToast('Erreur lecture : ' + err.message, 'error');
+  }
+}
+
+// ============================================================================
+// Import de la Convention de coordination SPS pour pre-remplir une nouvelle
+// affaire (06/11, demande d'Alain : "pouvoir entrer une nouvelle affaire sans
+// tout taper a la main"). Reperage par motifs sur les intitules standards de
+// la convention (section "1.1 - Caracteristiques de l'operation" + blocs MOA /
+// Coordonnateur) -- aucune IA, meme logique que extraireCoTraitantCSPS.
+// Chaque champ n'est rempli que s'il est actuellement vide (jamais ecrase),
+// et tout reste a verifier avant enregistrement.
+// ============================================================================
+function captureEntre(texte, labelDebut, labelsFin, maxLen) {
+  // Capture le texte entre labelDebut et le premier labelFin rencontre (ou fin
+  // de chaine / longueur max si aucun labelFin ne suit). Insensible a la casse,
+  // tolerant aux espaces multiples introduits par l'extraction PDF.
+  var reDebut = new RegExp(labelDebut.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+') + '\\s*:?\\s*', 'i');
+  var mDebut = texte.match(reDebut);
+  if (!mDebut) return '';
+  var start = mDebut.index + mDebut[0].length;
+  var rest = texte.slice(start, start + (maxLen || 300));
+  var endIdx = rest.length;
+  for (var i = 0; i < labelsFin.length; i++) {
+    var reFin = new RegExp(labelsFin[i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'), 'i');
+    var mFin = rest.match(reFin);
+    if (mFin && mFin.index < endIdx) endIdx = mFin.index;
+  }
+  return rest.slice(0, endIdx).replace(/\s+/g, ' ').replace(/[\s\-–,]+$/, '').trim();
+}
+
+function extraireConventionSPS(texte) {
+  var t = texte.replace(/\s+/g, ' ');
+  var out = {};
+
+  // --- 1.1 Caracteristiques de l'operation ---
+  out.chantier_adresse = captureEntre(t, "Adresse du chantier", ["Nature de l'opération", "Nature de l’opération"], 200);
+  out.chantier_nature = captureEntre(t, "Nature de l'opération", ["Entreprises présumées", "Entreprises presumees"], 400)
+    || captureEntre(t, "Nature de l’opération", ["Entreprises présumées", "Entreprises presumees"], 400);
+  out.chantier_nb_ent = captureEntre(t, "Entreprises présumées", ["Volume prévisionnel", "Volume previsionnel"], 180)
+    .replace(/\(.*?\)/g, '').trim();
+  out.chantier_hj = captureEntre(t, "Volume prévisionnel des travaux", ["Date présumée", "Date presumee"], 60);
+  out.chantier_debut_txt = captureEntre(t, "Date présumée de début des travaux", ["Délai prévisionnel", "Delai previsionnel"], 60);
+  out.chantier_duree = captureEntre(t, "Délai prévisionnel d'exécution", ["Montant prévisionnel", "Montant previsionnel"], 60)
+    || captureEntre(t, "Délai prévisionnel d’exécution", ["Montant prévisionnel", "Montant previsionnel"], 60);
+  var montant = captureEntre(t, "Montant prévisionnel des travaux", ["Étendue de la mission", "Etendue de la mission"], 80);
+  out.chantier_montant = (montant.match(/[\d\s]{3,}(?:,\d+)?\s*€/) || [montant])[0].replace(/\s+/g, ' ').trim();
+  var etendue = captureEntre(t, "Étendue de la mission", ["Catégorie de l'opération", "Categorie de l'operation", "Article 2"], 150)
+    || captureEntre(t, "Etendue de la mission", ["Catégorie de l'opération", "Categorie de l'operation", "Article 2"], 150);
+  if (/conception/i.test(etendue) && /r[ée]alisation/i.test(etendue)) out.mission_phase = 'deux';
+  else if (/r[ée]alisation/i.test(etendue)) out.mission_phase = 'realisation';
+  else if (/conception/i.test(etendue)) out.mission_phase = 'conception';
+
+  // --- 1.2 Categorie ---
+  var mCat = t.match(/rel[eè]ve\s+de\s+la\s+(1re|2e|3e|1ère|2ème|3ème)\s+cat[ée]gorie/i);
+  if (mCat) {
+    var c = mCat[1].charAt(0);
+    out.categorie = (c === '1') ? 1 : (c === '2') ? 2 : 3;
+  }
+
+  // --- Operation / nom du chantier (debut de la convention) ---
+  var nomBrut = captureEntre(t, "Opération", ["Entre les soussignés", "Entre les soussignes"], 250);
+  // S'arrete avant l'adresse (qui commence typiquement par un tiret suivi d'un
+  // numero), deja capturee separement dans chantier_adresse.
+  out.chantier_nom = nomBrut.replace(/\s*[–\-]\s*\d.*$/, '').trim();
+
+  // --- Maitre d'ouvrage (premier bloc "Raison sociale" apres "soussignes") ---
+  var idxSoussignes = t.search(/Entre\s+les\s+soussign[ée]s/i);
+  var finMoa = idxSoussignes >= 0 ? t.slice(idxSoussignes).search(/ci-apr[èe]s\s+d[ée]nomm[ée]e?|d['’]une\s+part/i) : -1;
+  var zoneMoa = idxSoussignes >= 0
+    ? t.slice(idxSoussignes, finMoa > 0 ? idxSoussignes + finMoa : idxSoussignes + 600)
+    : t.slice(0, 600);
+  out.moa_nom = captureEntre(zoneMoa, "Raison sociale", ["Siège social", "Siege social"], 150);
+  out.moa_adresse = captureEntre(zoneMoa, "Siège social", ["Adresse de correspondance", "SIREN", "SIRET", "Représentée par", "Representee par"], 200)
+    || captureEntre(zoneMoa, "Siege social", ["Adresse de correspondance", "SIREN", "SIRET", "Représentée par", "Representee par"], 200);
+  var contactMoa = captureEntre(zoneMoa, "Représentée par", ["ci-après", "ci-apres", "ET ", "Mandataire"], 150)
+    || captureEntre(zoneMoa, "Representee par", ["ci-après", "ci-apres", "ET ", "Mandataire"], 150);
+  if (contactMoa && !/^son\s/i.test(contactMoa)) out.moa_contact = contactMoa;
+
+  // --- CSPS Conception : bloc "...Coordonnateur phase conception" (zone ciblee,
+  // plus fiable que le reperage generique sur tout le document). Repli sur
+  // extraireCoTraitantCSPS si la structure ne correspond pas a ce modele.
+  var idxConception = t.search(/Coordonnateur\s+phase\s+conception/i);
+  if (idxConception >= 0) {
+    var finConception = t.slice(idxConception).search(/Co[\-\s]?traitant|Coordonnateur\s+phase\s+r[ée]alisation/i);
+    var zoneConception = t.slice(idxConception, finConception > 0 ? idxConception + finConception : idxConception + 500);
+    var nomConception = captureEntre(zoneConception, "Raison sociale", ["Siège social", "Siege social"], 150);
+    var contactConception = captureEntre(zoneConception, "Représentée par", ["Contact", "ci-après", "ci-apres"], 150)
+      || captureEntre(zoneConception, "Representee par", ["Contact", "ci-après", "ci-apres"], 150);
+    if (nomConception && !/alain|suzanne|csps\s?17/i.test(nomConception)) {
+      out.cspsc_nom = contactConception ? (nomConception + ' — ' + contactConception) : nomConception;
+      var telConception = (zoneConception.match(/(?:0|\+33\s?)[1-9](?:[\s.\-]?\d{2}){4}/) || [])[0];
+      var mailConception = (zoneConception.match(/[\w.+-]+@[\w-]+\.[\w.-]+/) || [])[0];
+      if (telConception) out.cspsc_tel = telConception;
+      if (mailConception) out.cspsc_mail = mailConception;
+    }
+  }
+  if (!out.cspsc_nom) {
+    var coTraitant = extraireCoTraitantCSPS(t);
+    if (coTraitant.nom) out.cspsc_nom = coTraitant.nom;
+    if (coTraitant.tel) out.cspsc_tel = coTraitant.tel;
+    if (coTraitant.mail) out.cspsc_mail = coTraitant.mail;
+  }
+  // Email/tel generiques du bloc MOA si fournis (rares dans ces conventions)
+  var zoneMoaEmail = (zoneMoa.match(/[\w.+-]+@[\w-]+\.[\w.-]+/) || [])[0];
+  if (zoneMoaEmail) out.moa_mail = zoneMoaEmail;
+  var zoneMoaTel = (zoneMoa.match(/(?:0|\+33\s?)[1-9](?:[\s.\-]?\d{2}){4}/) || [])[0];
+  if (zoneMoaTel) out.moa_tel = zoneMoaTel;
+
+  return out;
+}
+
+function conventionChoisirFichier() {
+  var input = document.getElementById('convention-import-input');
+  if (input) input.click();
+}
+async function conventionFichierChoisi(event) {
+  var file = event.target.files && event.target.files[0];
+  event.target.value = '';
+  if (file) await importerConventionDepuisFichier(file);
+}
+async function importerConventionDepuisFichier(file) {
+  showToast('Lecture de ' + file.name + '...', 'success');
+  try {
+    var texte = await extraireTexteFichier(file);
+    if (!texte || texte.replace(/\s/g, '').length < 20) {
+      throw new Error('Texte illisible (document scanné sans OCR exploitable, ou fichier vide).');
+    }
+    var infos = extraireConventionSPS(texte);
+    var n = 0;
+    function remplir(id, val) {
+      if (!val) return;
+      var el = document.getElementById(id);
+      if (el && !el.value) { el.value = val; n++; }
+    }
+    remplir('chantier-nom', infos.chantier_nom);
+    remplir('chantier-adresse', infos.chantier_adresse);
+    remplir('chantier-nature', infos.chantier_nature);
+    remplir('chantier-duree', infos.chantier_duree);
+    remplir('chantier-montant', infos.chantier_montant);
+    remplir('chantier-hj', infos.chantier_hj);
+    remplir('chantier-nb-ent', infos.chantier_nb_ent);
+    remplir('moa-nom', infos.moa_nom);
+    remplir('moa-adresse', infos.moa_adresse);
+    remplir('moa-contact', infos.moa_contact);
+    remplir('moa-tel', infos.moa_tel);
+    remplir('moa-mail', infos.moa_mail);
+    remplir('cspsc-nom', infos.cspsc_nom);
+    remplir('cspsc-tel', infos.cspsc_tel);
+    remplir('cspsc-mail', infos.cspsc_mail);
+    if (infos.mission_phase) {
+      var selPhase = document.getElementById('mission-phase');
+      if (selPhase && !selPhase.value) { selPhase.value = infos.mission_phase; n++; }
+    }
+    if (infos.categorie && typeof currentCat !== 'undefined' && !currentCat && typeof selectCat === 'function') {
+      selectCat(infos.categorie); n++;
+    }
+    if (infos.chantier_debut_txt) {
+      showToast('Date de début repérée en texte libre ("' + infos.chantier_debut_txt + '") — à saisir manuellement dans le champ date.', '');
+    }
+    showToast(n ? n + ' champ(s) repéré(s) dans ' + file.name + ' — à vérifier avant d\'enregistrer.' : 'Aucune information exploitable repérée dans ' + file.name + '.', n ? 'success' : 'error');
   } catch (err) {
     showToast('Erreur lecture : ' + err.message, 'error');
   }
@@ -5867,17 +6036,8 @@ async function generateDoc(ref, previewMode) {
       finalZip = injecterIntervenantsRJC(finalZip, data);
     }
     // Injecter les photos dans le docx (avant nettoyage)
-    // [06/11] Reserve au DGI (seul document concu pour recevoir ces photos,
-    // cf. modele 'Photo 1'/'Photo 2'...) : sans ce filtre sur ref, une photo
-    // deposee une fois sur un DGI restait sur terrainAffaire._photos et se
-    // reinjectait ensuite dans tous les documents suivants du meme chantier
-    // (ex. Fiche IC) puisque ce champ n'etait jamais vide apres usage.
-    if (ref === 'DGI' && typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire._photos && terrainAffaire._photos.length > 0) {
+    if (typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire._photos && terrainAffaire._photos.length > 0) {
       finalZip = injecterPhotos(finalZip, terrainAffaire._photos, terrainAffaire._photosLegendes);
-      // Vider aussitot apres usage pour ne pas polluer les documents suivants.
-      terrainAffaire._photos = [];
-      terrainAffaire._photosLegendes = [];
-      try { if (typeof persistAffaires === 'function') persistAffaires(); } catch (ePersistPhotos) {}
     }
     // Nettoyer les lignes vides (apres injection photos)
     if (ref === 'VIS') finalZip = nettoyerDocx(finalZip, data);
