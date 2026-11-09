@@ -5389,7 +5389,7 @@ function injecterSignatures(zip, sigCsps, sigEnt, sigEU) {
   var cspsEstTampon = (typeof TAMPON_CSPS_DATAURL !== 'undefined' && sigCsps === TAMPON_CSPS_DATAURL);
 
   if (sigCsps && addImg(sigCsps, nextRid)) {
-    sigImgCSPS = cspsEstTampon ? makeImgXml(nextRid, 1150000, 978000) : makeImgXml(nextRid);
+    sigImgCSPS = cspsEstTampon ? makeImgXml(nextRid, 2377000, 2023000) : makeImgXml(nextRid);
     nextRid++;
   }
   if (sigEnt && addImg(sigEnt, nextRid)) { sigImgEnt = makeImgXml(nextRid); nextRid++; }
