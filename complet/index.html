@@ -1612,14 +1612,22 @@ function captureEntre(texte, labelDebut, labelsFin, maxLen) {
   // Capture le texte entre labelDebut et le premier labelFin rencontre (ou fin
   // de chaine / longueur max si aucun labelFin ne suit). Insensible a la casse,
   // tolerant aux espaces multiples introduits par l'extraction PDF.
-  var reDebut = new RegExp(labelDebut.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+') + '\\s*:?\\s*', 'i');
+  // 09/11 (bug trouve par Alain) : tolerant aussi aux espaces autour des
+  // tirets ("ci - apres" au lieu de "ci-apres") -- sinon un label de fin
+  // comme "ci-apres" ne matche pas et la capture continue jusqu'au MaxLen,
+  // laissant passer la suite de la phrase (ex: "... ci-apres denommee
+  // LE MAITRE D'OUVRAGE" entier dans le champ contact).
+  function reSouple(label) {
+    return label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+').replace(/-/g, '\\s*-\\s*');
+  }
+  var reDebut = new RegExp(reSouple(labelDebut) + '\\s*:?\\s*', 'i');
   var mDebut = texte.match(reDebut);
   if (!mDebut) return '';
   var start = mDebut.index + mDebut[0].length;
   var rest = texte.slice(start, start + (maxLen || 300));
   var endIdx = rest.length;
   for (var i = 0; i < labelsFin.length; i++) {
-    var reFin = new RegExp(labelsFin[i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'), 'i');
+    var reFin = new RegExp(reSouple(labelsFin[i]), 'i');
     var mFin = rest.match(reFin);
     if (mFin && mFin.index < endIdx) endIdx = mFin.index;
   }
@@ -1670,9 +1678,16 @@ function extraireConventionSPS(texte) {
   out.moa_nom = captureEntre(zoneMoa, "Raison sociale", ["Siège social", "Siege social"], 150);
   out.moa_adresse = captureEntre(zoneMoa, "Siège social", ["Adresse de correspondance", "SIREN", "SIRET", "Représentée par", "Representee par"], 200)
     || captureEntre(zoneMoa, "Siege social", ["Adresse de correspondance", "SIREN", "SIRET", "Représentée par", "Representee par"], 200);
-  var contactMoa = captureEntre(zoneMoa, "Représentée par", ["ci-après", "ci-apres", "ET ", "Mandataire"], 150)
-    || captureEntre(zoneMoa, "Representee par", ["ci-après", "ci-apres", "ET ", "Mandataire"], 150);
-  if (contactMoa && !/^son\s/i.test(contactMoa)) out.moa_contact = contactMoa;
+  var contactMoa = captureEntre(zoneMoa, "Représentée par", ["ci-après", "ci-apres", "ET ", "Mandataire", "dénommé", "denomme"], 150)
+    || captureEntre(zoneMoa, "Representee par", ["ci-après", "ci-apres", "ET ", "Mandataire", "dénommé", "denomme"], 150);
+  // 09/11 (bug trouve par Alain) : "Representee par son gerant" ne donne pas
+  // un vrai nom -- on ne remplit le champ QUE si on tient un vrai nom (garde
+  // large : refuse tout ce qui commence par "son"/"ses" meme avec un espace
+  // parasite, et tout ce qui contient encore "denomme"/"ci-apres" si le
+  // decoupage ci-dessus a quand meme laisse passer un reliquat de phrase).
+  if (contactMoa && !/^s\s*(on|es)\b/i.test(contactMoa) && !/d[ée]nomm|ci[\s-]*apr[eè]s/i.test(contactMoa)) {
+    out.moa_contact = contactMoa;
+  }
 
   // --- CSPS Conception : bloc "...Coordonnateur phase conception" (zone ciblee,
   // plus fiable que le reperage generique sur tout le document). Repli sur
@@ -3258,10 +3273,27 @@ function repererClauseCBT(texte, motsCles) {
   for (var i = 0; i < motsCles.length; i++) {
     var pos = texteMin.indexOf(motsCles[i].toLowerCase());
     if (pos === -1) continue;
-    var debut = Math.max(0, pos - 40), fin = Math.min(texte.length, pos + 320);
-    var extrait = texte.slice(debut, fin).replace(/\s+/g, ' ').trim();
+    var debut = Math.max(0, pos - 40);
+    // 09/11 (bug trouve par Alain, 1ere FIC produite CSPS-2026-0001) : une
+    // fenetre fixe de 320 caracteres apres le mot-cle deborde souvent sur
+    // la section suivante du document (numero de page isole, titre en
+    // chiffres romains "III -- NETTOYAGE DU CHANTIER...") et produisait un
+    // extrait illisible, concatene tel quel dans les Observations du CSPS
+    // (§12). On cherche maintenant la fin de la phrase (point/point-virgule
+    // suivi d'une majuscule ou d'un chiffre) ou un repere de titre, a
+    // l'interieur d'une fenetre large de garde-fou (600 car. max), et on
+    // s'arrete la plutot que d'aller jusqu'au bout de la fenetre.
+    var finGarde = Math.min(texte.length, pos + 600);
+    var brut = texte.slice(debut, finGarde);
+    var relPos = pos - debut;
+    var apresMotCle = brut.slice(relPos);
+    var reArret = /[.;]\s+(?=[A-ZÀ-ÝÉ0-9])|\n\s*(?:[IVXLC]{1,4}|[0-9]{1,2})\s*[\-–.°)]\s*[A-ZÀ-ÝÉ]/;
+    var mArret = apresMotCle.match(reArret);
+    var finRel = mArret ? (mArret.index + (/^[.;]/.test(mArret[0]) ? 1 : 0)) : Math.min(apresMotCle.length, 320);
+    var finAbs = relPos + finRel;
+    var extrait = brut.slice(0, finAbs).replace(/\s+/g, ' ').trim();
     if (debut > 0) extrait = '…' + extrait;
-    if (fin < texte.length) extrait = extrait + '…';
+    if (finAbs < brut.length) extrait = extrait + '…';
     return extrait;
   }
   return null;
