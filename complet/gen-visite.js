@@ -45,6 +45,15 @@
       return '<w:tr>' + tc(3200, para(label, 15)) + tc(3200, para(e.lot, 18)) + tc(3240, para(e.effectif ? String(e.effectif) : '', 18)) + '</w:tr>';
     }), false);
   }
+  // 09/11 (demande Alain) : tracer les entreprises attendues sur le chantier
+  // (presentes dans le dossier de l'affaire) mais non venues le jour de la
+  // visite — utile en cas de litige sur un defaut de coordination.
+  function entreprisesAbsentes(xml, liste) {
+    if (!liste || !liste.length) return xml;
+    return remplacerLignes(xml, 'Entreprise attendue, non présente', liste.map(function (e) {
+      return '<w:tr>' + tc(4820, para(e.nom || '', 15)) + tc(4820, para(e.lot, 18)) + '</w:tr>';
+    }), false);
+  }
   var TYPES = { obs: ['☑','☐','☐'], notif: ['☐','☑','☐'], dgi: ['☐','☐','☑'] };
   function observations(xml, liste) {
     var ancre = '☐ Observation ☐ Notification ☐ Danger grave imminent';
@@ -225,7 +234,8 @@
       moa_nom: chantier.moa || '', chantier_nom: chantier.nom || '', chantier_adresse: chantier.adresse || '',
       chantier_nature: chantier.nature || '', ref_pgc: chantier.refPgc || '—', ref_vis: cr.ref || '',
       date_visite: dateFR(cr.date), no_visite: String(cr.no || ''), heure_visite: cr.heure || '',
-      meteo_visite: cr.meteo || '', phase: cr.phase || '', avancement: cr.avancement || '', prochaine: cr.prochaine || ''
+      meteo_visite: cr.meteo || '', phase: cr.phase || '', avancement: cr.avancement || '', prochaine: cr.prochaine || '',
+      application_pgc: cr.applicationPgc || ''
     });
     zip = doc.getZip();
     var ctx = { zip: zip, rels: zip.file('word/_rels/document.xml.rels').asText(), ct: zip.file('[Content_Types].xml').asText() };
@@ -237,6 +247,7 @@
     }));
     xml = participants(xml, part);
     xml = entreprises(xml, ents);
+    xml = entreprisesAbsentes(xml, (cr.entreprisesAbsentes || []).filter(function (e) { return e && e.nom; }));
     var obsValides = (cr.observations || []).filter(function (o) { return o && o.description; });
     xml = suiviPrecedent(xml, cr.observationsPrecedentes);
     xml = observations(xml, obsValides);
@@ -247,7 +258,7 @@
     if (!cr.photos) (cr.observations || []).forEach(function (o) { (o.photos || []).forEach(function (p) { toutes.push({ url: p.url, w: p.w, h: p.h, legende: p.legende || String(o.description || '').slice(0, 80) }); }); });
     xml = photos(ctx, xml, toutes);
     xml = signature(ctx, xml, cr.signatureCsps);
-    xml = supprimerLignesVides(xml, ['Prochaine intervention prévue', 'Conditions météo']);
+    xml = supprimerLignesVides(xml, ['Prochaine intervention prévue', 'Conditions météo', 'Application des mesures de coordination (PGC)']);
     zip.file('word/document.xml', xml);
     zip.file('word/_rels/document.xml.rels', ctx.rels);
     zip.file('[Content_Types].xml', ctx.ct);

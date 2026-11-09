@@ -5573,7 +5573,7 @@ var DOC_FILES = {
   'FIC3':        'Fiche_IC_Cat3_CSPS17_v6.docx',
   'IC':          'CSPS17_Courrier_CSPS_v2.docx',
   'PPP':         'CSPS17_Grille_Analyse_PPSPS_v5.docx',
-  'VIS':         'CR_Visite_Chantier_CSPS17_v2.docx',
+  'VIS':         'CR_Visite_Chantier_CSPS17_v5.docx',
   'OBS':         'CSPS17_Courrier_CSPS_v2.docx',
   'DGI':         'CSPS17_Signalement_DGI_v5.docx',
   'RCO':         'CSPS17_CR_Reunion_Coordination_v3.docx',
@@ -8692,6 +8692,10 @@ function genFormulaireVIS() {
   html2 += fieldRow('Avancement global', 'vis-avancement', 'text', 'Ex: 30% - Gros oeuvre en cours', '');
   html2 += fieldRow('Phase / travaux en cours', 'vis-phase', 'text', 'Ex: Terrassement, fondations', '');
   html2 += fieldRow('Prochaine intervention prévue', 'vis-prochaine', 'text', 'Ex: 15/10/2026 ou semaine 42', '');
+  // 09/11 (demande Alain) : le CSPS doit aussi veiller, en visite, a ce que les
+  // mesures de coordination qu'il a definies dans le PGC soient correctement
+  // appliquees (R.4532-13), pas seulement constater l'avancement des travaux.
+  html2 += fieldRow('Application des mesures de coordination (PGC)', 'vis-application-pgc', 'text', 'Ex: Conforme au PGC, ou ecart(s) — voir observations', '');
   html2 += sectionEnd();
 
   // Section 2 - Entreprises presentes (multiples)
@@ -8737,6 +8741,10 @@ function visAjouterEntreprise() {
   h += '<div class="field"><label style="font-size:11px;">Representant</label><input type="text" class="vis-ent-contact" placeholder="Nom + Qualite" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;"></div>';
   h += '<div class="field"><label style="font-size:11px;">Tel</label><input type="tel" class="vis-ent-tel" placeholder="06 xx xx xx xx" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;"></div>';
   h += '</div>';
+  // 09/11 (demande Alain) : une entreprise attendue (presente au dossier de
+  // l'affaire) mais non venue le jour de la visite doit laisser une trace,
+  // distincte des entreprises effectivement presentes (co-activite, litige).
+  h += '<label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;color:#991b1b;"><input type="checkbox" class="vis-ent-absente"> Entreprise absente (attendue, non présente ce jour)</label>';
   div.innerHTML = h;
 
   div.querySelector('.vis-ent-del').addEventListener('click', function() { div.remove(); });
@@ -10478,6 +10486,7 @@ async function genererDocTerrain() {
       avancement: getVal('vis-avancement'),
       phase: getVal('vis-phase'),
       prochaine: getVal('vis-prochaine'),
+      applicationPgc: getVal('vis-application-pgc'),
     };
   } else if (ref === 'RCO') {
     visiteData = { noVisite: getVal('rco-no'), heure: getVal('rco-heure'), lieu: getVal('rco-lieu') };
@@ -10593,8 +10602,9 @@ async function genererDocTerrain() {
     terrainAffaire._photosLegendes = legendes;
     terrainAffaire._observations = observations;
 
-    // Collecter les entreprises presentes
+    // Collecter les entreprises presentes (et, separement, celles attendues mais absentes)
     var entreprisesPresentes = [];
+    var entreprisesAbsentes = [];
     document.querySelectorAll('#vis-ent-list > div').forEach(function(entDiv) {
       var nom = entDiv.querySelector('.vis-ent-nom');
       var contact = entDiv.querySelector('.vis-ent-contact');
@@ -10602,18 +10612,24 @@ async function genererDocTerrain() {
       var type = entDiv.querySelector('.vis-ent-type');
       var lot = entDiv.querySelector('.vis-ent-lot');
       var eff = entDiv.querySelector('.vis-ent-eff');
+      var absente = entDiv.querySelector('.vis-ent-absente');
       if (nom && nom.value.trim()) {
-        entreprisesPresentes.push({
-          nom: nom.value,
-          contact: contact ? contact.value : '',
-          tel: tel ? tel.value : '',
-          type: type ? type.value : 'EE',
-          lot: lot ? lot.value : '',
-          effectif: eff ? eff.value : '',
-        });
+        if (absente && absente.checked) {
+          entreprisesAbsentes.push({ nom: nom.value, lot: lot ? lot.value : '' });
+        } else {
+          entreprisesPresentes.push({
+            nom: nom.value,
+            contact: contact ? contact.value : '',
+            tel: tel ? tel.value : '',
+            type: type ? type.value : 'EE',
+            lot: lot ? lot.value : '',
+            effectif: eff ? eff.value : '',
+          });
+        }
       }
     });
     terrainAffaire._entreprisesPresentes = entreprisesPresentes;
+    terrainAffaire._entreprisesAbsentes = entreprisesAbsentes;
 
     // Participants = CSPS + entreprises presentes
     var participants = [{ nom: 'Alain SUZANNE — CSPS17', qualite: 'Coordonnateur SPS', present: true }];
@@ -10662,7 +10678,7 @@ async function mettreAJourAppli(){
     }
     var fichiers = ['index.html', 'local-api.js', 'gen-visite.js', 'sync-drive.js', 'lib/pizzip.js', 'lib/docxtemplater.js'];
     Object.keys(DOC_FILES).forEach(function(k){ fichiers.push('modeles/' + DOC_FILES[k]); });
-    fichiers.push('modeles/CR_Visite_Chantier_CSPS17_v4.docx');
+    fichiers.push('modeles/CR_Visite_Chantier_CSPS17_v5.docx');
     await Promise.all(fichiers.map(function(f){ return fetch(f, { cache: 'reload' }).catch(function(){}); }));
     if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
       var regs = await navigator.serviceWorker.getRegistrations();
@@ -10677,7 +10693,7 @@ function dimensionsPhoto(url){
   return new Promise(function(ok){ var im = new Image(); im.onload = function(){ ok({ w: im.naturalWidth, h: im.naturalHeight }); }; im.onerror = function(){ ok({ w: 4, h: 3 }); }; im.src = url; });
 }
 async function crVisiteV3(data, ta){
-  var r = await fetch('modeles/CR_Visite_Chantier_CSPS17_v4.docx');
+  var r = await fetch('modeles/CR_Visite_Chantier_CSPS17_v5.docx');
   if (!r.ok) throw new Error('Modele CR de visite v3 introuvable');
   var modele = new Uint8Array(await r.arrayBuffer());
   var v = ta._visite || {}, c = data.chantier || {}, tags = buildTagData(data);
@@ -10687,7 +10703,9 @@ async function crVisiteV3(data, ta){
   var chantier = { nom: c.nom, adresse: c.adresse, nature: c.nature, moa: (data.moa || {}).nom, cat: data.cat, refPgc: tags.ref_pgc || '' };
   var cr = { date: v.date, heure: v.heure, no: no, ref: 'CSPS17/VIS/' + annee + '-' + String(no).padStart(3, '0'),
     meteo: v.meteo, phase: v.phase || '', avancement: v.avancement, prochaine: v.prochaine || '',
-    entreprises: ta._entreprisesPresentes || [], observations: ta._observations || [], photos: photos,
+    applicationPgc: v.applicationPgc || '',
+    entreprises: ta._entreprisesPresentes || [], entreprisesAbsentes: ta._entreprisesAbsentes || [],
+    observations: ta._observations || [], photos: photos,
     signatureCsps: (typeof sigData !== 'undefined' && sigData) ? sigData.csps : null };
   // Suivi : observations du CR de visite precedent de cette affaire, puis memorisation des
   // observations de ce CR pour le suivant (synchronise avec la tablette avec l'affaire).
