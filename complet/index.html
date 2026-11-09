@@ -6095,7 +6095,17 @@ async function generateDoc(ref, previewMode) {
     var now = new Date();
     var pad = function(n){ return (n<10?'0':'')+n; };
     var stamp = now.getFullYear() + pad(now.getMonth()+1) + pad(now.getDate()) + '-' + pad(now.getHours()) + pad(now.getMinutes());
-    a.download = 'CSPS17_' + ref + '_' + (data.num || 'doc') + '_' + stamp + '.docx';
+    // 09/11 (demande d'Alain) : pour la FIC, le nom du fichier telecharge est
+    // plus utile avec le nom de l'entreprise qu'avec la reference numerique
+    // de l'affaire (CSPS-2026-0001, identique sur les 14 fiches d'un meme
+    // chantier -- impossible de s'y retrouver dans le dossier de telechargement).
+    var idDoc = data.num || 'doc';
+    if (ref === 'FIC' && data.entNom) {
+      var entPropre = data.entNom.normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim().slice(0, 60);
+      if (entPropre) idDoc = 'CSPS-' + entPropre;
+    }
+    a.download = 'CSPS17_' + ref + '_' + idDoc + '_' + stamp + '.docx';
     // Auto-log RJC : chaque document genere s'ajoute tout seul au registre-journal
     // (au fur et a mesure du deroulement de l'operation — Art. R.4532-38), sauf le RJC lui-meme.
     if (ref !== 'RJC') {
