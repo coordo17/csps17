@@ -41,13 +41,28 @@
     if (jeton && Date.now() < jetonFin - 60000) return Promise.resolve(jeton);
     return chargerGoogle().then(function(){
       return new Promise(function(ok, ko){
+        // 09/11 (demande d'Alain) : quand la fenetre de connexion Google est
+        // bloquee par le navigateur (pop-up bloque, cookies tiers restreints),
+        // ni callback ni error_callback ne se declenchent -- le bouton
+        // "Synchroniser" restait grise indefiniment, sans aucun message.
+        // Garde-fou : si rien ne s'est passe apres 15 s, on abandonne avec un
+        // message explicite plutot que de rester bloque sans explication.
+        var fini = false;
+        var delai = setTimeout(function(){
+          if (fini) return; fini = true;
+          ko(new Error('Pas de réponse de Google après 15 s — la fenêtre de connexion a probablement été bloquée par le navigateur (pop-up). Autorisez les pop-up pour ce site puis réessayez.'));
+        }, 15000);
         clientJeton = google.accounts.oauth2.initTokenClient({
           client_id: CLIENT_ID, scope: SCOPE, hint: 'cspsdonnees@gmail.com',
           callback: function(r){
+            if (fini) return; fini = true; clearTimeout(delai);
             if (r.error) return ko(new Error('Connexion Google refusée : ' + r.error));
             jeton = r.access_token; jetonFin = Date.now() + (r.expires_in || 3600) * 1000; ok(jeton);
           },
-          error_callback: function(e){ ko(new Error('Connexion Google interrompue' + (e && e.type ? ' (' + e.type + ')' : ''))); }
+          error_callback: function(e){
+            if (fini) return; fini = true; clearTimeout(delai);
+            ko(new Error('Connexion Google interrompue' + (e && e.type ? ' (' + e.type + ')' : '')));
+          }
         });
         clientJeton.requestAccessToken({ prompt: '' });
       });
