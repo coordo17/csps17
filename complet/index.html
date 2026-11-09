@@ -6100,8 +6100,12 @@ async function generateDoc(ref, previewMode) {
     // de l'affaire (CSPS-2026-0001, identique sur les 14 fiches d'un meme
     // chantier -- impossible de s'y retrouver dans le dossier de telechargement).
     var idDoc = data.num || 'doc';
-    if (ref === 'FIC' && data.entNom) {
-      var entPropre = data.entNom.normalize('NFD').replace(/[̀-ͯ]/g, '')
+    // 09/11 (correctif : premiere version regardait data.entNom, qui
+    // n'existe pas -- le nom de l'entreprise FIC est dans data._ficData.entNom,
+    // alimente depuis terrainAffaire._ficData, pas a la racine de data).
+    var entNomFic = data._ficData && data._ficData.entNom;
+    if (ref === 'FIC' && entNomFic) {
+      var entPropre = entNomFic.normalize('NFD').replace(/[̀-ͯ]/g, '')
         .replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim().slice(0, 60);
       if (entPropre) idDoc = 'CSPS-' + entPropre;
     }
