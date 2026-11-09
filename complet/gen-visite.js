@@ -222,7 +222,16 @@
     if (!dataUrl) return xml;
     var cible = 'Signature :</w:t></w:r>', pos = xml.indexOf(cible); if (pos === -1) return xml;
     if (!ajouterImage(ctx, dataUrl, 290, 'sig290')) return xml;
-    return xml.slice(0, pos + cible.length) + imageXml(290, 'sig290', 1800000, 500000) + xml.slice(pos + cible.length);
+    // 09/11 (demande Alain, tampon+signature) : le tampon par defaut (carre,
+    // cachet + paraphe scanne) n'a pas le meme gabarit qu'un paraphe trace a
+    // main levee (large et bas) -- meme logique que injecterSignatures()
+    // dans index.html. racine.TAMPON_CSPS_DATAURL car ce module est une IIFE
+    // chargee dans la meme page (window partage) mais aussi testable en Node.
+    var tamponUrl = (typeof TAMPON_CSPS_DATAURL !== 'undefined') ? TAMPON_CSPS_DATAURL
+      : (racine && racine.TAMPON_CSPS_DATAURL) ? racine.TAMPON_CSPS_DATAURL : null;
+    var estTampon = !!tamponUrl && dataUrl === tamponUrl;
+    var dims = estTampon ? [2377000, 2023000] : [1800000, 500000];
+    return xml.slice(0, pos + cible.length) + imageXml(290, 'sig290', dims[0], dims[1]) + xml.slice(pos + cible.length);
   }
 
   // chantier = {nom, adresse, nature, moa, cat, refPgc}
