@@ -8299,7 +8299,13 @@ function injecterICComplete(zip, d, isCat3) {
             var rModele = ts[tj].parentNode; // <w:r>
             var pNode = rModele.parentNode; // <w:p>
             var rPrModele = icEnfantsW(rModele, 'rPr')[0];
-            icEnfantsW(pNode, 'r').forEach(function (rr) { pNode.removeChild(rr); });
+            // 09/11 (bug trouve en relisant le code) : le libelle "Points a
+            // reporter dans le PPSPS de l'entreprise : " (tPts) est un <w:r>
+            // FRERE du run des underscores dans le MEME <w:p> -- il ne faut
+            // donc pas le supprimer avec les autres runs, sinon le libelle
+            // disparait du document genere et seule la liste a puces reste.
+            var rLabel = tPts.parentNode;
+            icEnfantsW(pNode, 'r').forEach(function (rr) { if (rr !== rLabel) pNode.removeChild(rr); });
             var items = pts.length ? pts : ['N\u00e9ant'];
             var rNew = doc.createElementNS(IC_W, 'w:r');
             if (rPrModele) rNew.appendChild(rPrModele.cloneNode(true));
