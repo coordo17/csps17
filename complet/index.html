@@ -6600,7 +6600,18 @@ var IC_METIER_MOTS = {
 'électricité': ['electricite','electricien','cfo','cfa','courant fort','courant faible','armoire electrique'],
 'plomberie_cvc': ['plomberie','plombier','cvc','chauffage','climatisation','sanitaire','ventilation'],
 'peinture': ['peinture','peintre','revetement mural','ravalement'],
-'menuiserie_metallerie': ['menuiserie','menuisier','metallerie','serrurerie','serrurier','miroiterie','vitrerie','vitrier','chassis vitre'],
+// 09/11 (bug trouve via la comparaison des FIC de la fiche Auray) : ancien
+// lot unique 'menuiserie_metallerie' regroupait bois/metal/verre sous une
+// seule liste de risques -- un miroitier (Alkar Aluminium) heritait donc du
+// risque "produits de traitement bois", sans rapport avec son metier reel.
+// Scinde en 4 lots distincts, chacun avec ses risques propres uniquement.
+'menuiserie_bois': ['menuiserie bois','menuisier bois','agencement bois','ebenisterie'],
+'serrurerie_metallerie': ['serrurerie','serrurier','metallerie','ferronnerie'],
+'vitrerie_miroiterie': ['miroiterie','vitrerie','vitrier','chassis vitre','vitrage'],
+// Secours generique quand le lot dit juste "menuiserie"/"menuisier" sans
+// precision bois/metal/verre -- ne garde que les risques communs aux trois,
+// jamais les risques specifiques (scie/toupie bois, soudure metal, vitrage).
+'menuiserie_generale': ['menuiserie','menuisier'],
 'terrassement_vrd': ['terrassement','vrd','reseaux divers','voirie','assainissement','tranchee'],
 'démolition_désamiantage': ['demolition','deconstruction','desamiantage','curage','retrait amiante'],
 'étanchéité_isolation': ['etancheite','etancheur','isolation thermique','bardage isolant'],
@@ -6875,11 +6886,14 @@ g: 5,
 mes: 'RAT obligatoire (R4412-97). En cas de suspicion de fibres friables non couvertes par le repérage : arrêt de l\'intervention, signalement immédiat au CSPS, et détermination de la sous-section applicable (3 ou 4) avant reprise. Formation SS3 ou SS4 obligatoire pour le personnel intervenant, selon la sous-section applicable, à charge de l\'entreprise.'
 }]
 },
-'menuiserie_metallerie': {
-extincteurs: ['poudreABC', 'couverture'],
-materiel: ['trousse', 'dea', 'garrot', 'couverture', 'oculaire'],
-label: 'Menuiserie -- Métallerie -- Serrurie',
-traits: ['hauteur','point_chaud','nuisance'],
+// 09/11 : ancien lot unique 'menuiserie_metallerie' scinde en 4 (voir
+// IC_METIER_MOTS) pour que chaque corps de metier ne recoive que ses
+// propres risques -- un miroitier n'a plus le risque "traitement du bois".
+'menuiserie_bois': {
+extincteurs: ['poudreABC'],
+materiel: ['trousse', 'dea', 'garrot'],
+label: 'Menuiserie bois',
+traits: ['hauteur','nuisance'],
 epi: ['casque', 'gilet', 'chaussures', 'gants', 'lunettes', 'antibruit'],
 risques: [{
 sit: 'Pose menuiseries exterieures (fenetres, baies) en hauteur',
@@ -6892,15 +6906,33 @@ risk: 'Coupures graves -- amputation -- projections',
 g: 4,
 mes: 'Machines conformes aux recommandations du fabricant, protections vérifiées et formation à l\'utilisation à charge de l\'entreprise, précisées dans son PPSPS.'
 }, {
+sit: 'Bruit -- machines > 85dB en atelier ou chantier',
+risk: 'Surdité professionnelle irréversible',
+g: 3,
+mes: 'Seuils réglementaires d\'exposition sonore (R.4431-2) : prévention dès 80 dB(A), protection auditive obligatoire dès 85 dB(A), valeur limite 87 dB(A). Réduction du bruit à la source (isolation, encoffrement des machines) à privilégier avant la seule protection individuelle, conformément aux articles R.4434-1 et suivants du Code du travail. Protection auditive individuelle à charge de l\'entreprise en complément, précisée dans son PPSPS.'
+}, {
+sit: 'Produits de traitement bois (lasures, creosote)',
+risk: 'Inhalation COV -- contact cutane -- CMR possible',
+g: 3,
+mes: 'Protection contre les risques chimiques à charge de l\'entreprise, précisée dans son PPSPS.'
+}]
+},
+'serrurerie_metallerie': {
+extincteurs: ['poudreABC', 'couverture'],
+materiel: ['trousse', 'dea', 'garrot', 'couverture'],
+label: 'Serrurerie -- Métallerie',
+traits: ['hauteur','point_chaud','nuisance'],
+epi: ['casque', 'gilet', 'chaussures', 'gants', 'lunettes', 'antibruit'],
+risques: [{
+sit: 'Pose menuiseries exterieures (fenetres, baies) en hauteur',
+risk: 'Chute de hauteur -- chute de charge -- décès',
+g: 4,
+mes: 'Protection contre les chutes de hauteur et de charges à charge de l\'entreprise, formalisée dans son PPSPS.'
+}, {
 sit: 'Soudure MIG/MAG -- découpe plasma',
 risk: 'Rayonnements UV -- fumées métalliques -- brûlures',
 g: 4,
 mes: 'Protection individuelle et ventilation lors de la soudure à charge de l\'entreprise, précisées dans son PPSPS.'
-}, {
-sit: 'Manipulation et coupe vitrage',
-risk: 'Coupures profondes -- blessures graves',
-g: 4,
-mes: 'Protection individuelle à charge de l\'entreprise lors de la manipulation et de la coupe de vitrage, précisée dans son PPSPS. Évacuation des déchets de verre selon les modalités de gestion des déchets prévues au PGC.'
 }, {
 sit: 'Travaux de serrurerie -- meulage acier',
 risk: 'Projections -- brûlures -- incendie',
@@ -6916,11 +6948,47 @@ sit: 'Manutention profiles métalliques lourds',
 risk: 'Écrasement pieds -- hernies -- lombalgies',
 g: 3,
 mes: 'Aide mécanique à la manutention (potence, chariot) à privilégier conformément aux articles R.4541-3 à R.4541-5 du Code du travail. Équipements individuels et organisation de la manutention à charge de l\'entreprise, précisés dans son PPSPS.'
+}]
+},
+'vitrerie_miroiterie': {
+extincteurs: ['poudreABC'],
+materiel: ['trousse', 'dea', 'garrot', 'oculaire'],
+label: 'Vitrerie -- Miroiterie',
+traits: ['hauteur','nuisance'],
+epi: ['casque', 'gilet', 'chaussures', 'gants', 'lunettes'],
+risques: [{
+sit: 'Pose menuiseries exterieures (fenetres, baies) en hauteur',
+risk: 'Chute de hauteur -- chute de charge -- décès',
+g: 4,
+mes: 'Protection contre les chutes de hauteur et de charges à charge de l\'entreprise, formalisée dans son PPSPS.'
 }, {
-sit: 'Produits de traitement bois (lasures, creosote)',
-risk: 'Inhalation COV -- contact cutane -- CMR possible',
+sit: 'Manipulation et coupe vitrage',
+risk: 'Coupures profondes -- blessures graves',
+g: 4,
+mes: 'Protection individuelle à charge de l\'entreprise lors de la manipulation et de la coupe de vitrage, précisée dans son PPSPS. Évacuation des déchets de verre selon les modalités de gestion des déchets prévues au PGC.'
+}, {
+sit: 'Bruit -- machines > 85dB en atelier ou chantier',
+risk: 'Surdité professionnelle irréversible',
 g: 3,
-mes: 'Protection contre les risques chimiques à charge de l\'entreprise, précisée dans son PPSPS.'
+mes: 'Seuils réglementaires d\'exposition sonore (R.4431-2) : prévention dès 80 dB(A), protection auditive obligatoire dès 85 dB(A), valeur limite 87 dB(A). Réduction du bruit à la source (isolation, encoffrement des machines) à privilégier avant la seule protection individuelle, conformément aux articles R.4434-1 et suivants du Code du travail. Protection auditive individuelle à charge de l\'entreprise en complément, précisée dans son PPSPS.'
+}]
+},
+'menuiserie_generale': {
+extincteurs: ['poudreABC'],
+materiel: ['trousse', 'dea', 'garrot'],
+label: 'Menuiserie (non precisee)',
+traits: ['hauteur','nuisance'],
+epi: ['casque', 'gilet', 'chaussures', 'gants', 'lunettes', 'antibruit'],
+risques: [{
+sit: 'Pose menuiseries exterieures (fenetres, baies) en hauteur',
+risk: 'Chute de hauteur -- chute de charge -- décès',
+g: 4,
+mes: 'Protection contre les chutes de hauteur et de charges à charge de l\'entreprise, formalisée dans son PPSPS.'
+}, {
+sit: 'Bruit -- machines > 85dB en atelier ou chantier',
+risk: 'Surdité professionnelle irréversible',
+g: 3,
+mes: 'Seuils réglementaires d\'exposition sonore (R.4431-2) : prévention dès 80 dB(A), protection auditive obligatoire dès 85 dB(A), valeur limite 87 dB(A). Réduction du bruit à la source (isolation, encoffrement des machines) à privilégier avant la seule protection individuelle, conformément aux articles R.4434-1 et suivants du Code du travail. Protection auditive individuelle à charge de l\'entreprise en complément, précisée dans son PPSPS.'
 }]
 },
 'terrassement_vrd': {
@@ -9974,7 +10042,13 @@ var METIERS_RISQUES_IDS = {
   plomberie_cvc: ['r3', 'r17', 'r18', 'r23'],
   peinture: ['r3', 'r20', 'r21'],
   // r18 ajoute (06/11) : manutention de vitrage (miroiterie).
-  menuiserie_metallerie: ['r16', 'r17', 'r18', 'r23'],
+  // 09/11 : eclate en 4 lots (voir IC_METIER_MOTS) ; meme jeu de codes
+  // generiques repris sur chacun, ce niveau-ci n'etant pas bois/metal/verre
+  // specifique (checklist §A/B generale, pas la liste 6D/7D detaillee).
+  menuiserie_bois: ['r16', 'r17', 'r18', 'r23'],
+  serrurerie_metallerie: ['r16', 'r17', 'r18', 'r23'],
+  vitrerie_miroiterie: ['r16', 'r17', 'r18', 'r23'],
+  menuiserie_generale: ['r16', 'r17', 'r18', 'r23'],
   terrassement_vrd: ['r2', 'r8', 'r19', 'r22', 'r24'],
   // r2/r22 ajoutes (06/11) : effondrement non maitrise + engins de
   // demolition (pelle, BRH) a proximite de pietons, cf. audit Phase 1.
