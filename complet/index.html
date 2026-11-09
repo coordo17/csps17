@@ -8290,7 +8290,29 @@ function injecterICComplete(zip, d, isCat3) {
     for (var ti = 0; ti < ts.length; ti++) {
       if (ts[ti] === tPts) {
         for (var tj = ti + 1; tj < Math.min(ti + 4, ts.length); tj++) {
-          if (/^_{5,}$/.test(ts[tj].textContent.trim())) { ts[tj].textContent = pts.length ? pts.join(' ; ') : 'N\u00e9ant'; break; }
+          if (/^_{5,}$/.test(ts[tj].textContent.trim())) {
+            // 09/11 (demande d'Alain) : un seul paragraphe avec tous les
+            // points (parfois 8-9) separes par " ; " formait un mur de
+            // texte illisible. On reconstruit le run en une liste a puces,
+            // une ligne par point (<w:br> entre chaque, meme technique que
+            // icCellText pour les cellules de tableau multi-lignes).
+            var rModele = ts[tj].parentNode; // <w:r>
+            var pNode = rModele.parentNode; // <w:p>
+            var rPrModele = icEnfantsW(rModele, 'rPr')[0];
+            icEnfantsW(pNode, 'r').forEach(function (rr) { pNode.removeChild(rr); });
+            var items = pts.length ? pts : ['N\u00e9ant'];
+            var rNew = doc.createElementNS(IC_W, 'w:r');
+            if (rPrModele) rNew.appendChild(rPrModele.cloneNode(true));
+            items.forEach(function (ligne, k) {
+              if (k) rNew.appendChild(doc.createElementNS(IC_W, 'w:br'));
+              var tNew = doc.createElementNS(IC_W, 'w:t');
+              tNew.setAttribute('xml:space', 'preserve');
+              tNew.textContent = (items.length > 1 ? '\u2022 ' : '') + ligne;
+              rNew.appendChild(tNew);
+            });
+            pNode.appendChild(rNew);
+            break;
+          }
         }
         break;
       }
