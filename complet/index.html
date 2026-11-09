@@ -7572,7 +7572,7 @@ function icMetiersDuLot(lot) { // = detecterMetiersMultiples d'Harmo
 }
 function icTexteHarmo(t) { return String(t || '').replace(/ -- /g, ' \u2013 '); }
 function ic7dHtml() {
-  return sectionHeader('6D', 'Risques propres \u00e0 l\u2019entreprise (travaux confi\u00e9s)', '&#128736;')
+  return sectionHeader('C', 'Risques propres \u00e0 l\u2019entreprise (travaux confi\u00e9s)', '&#128736;')
     + '<p style="font-size:12px;color:var(--text-light);margin-bottom:8px;">R.4532-66 : risques li\u00e9s aux modes op\u00e9ratoires, mat\u00e9riels, produits, d\u00e9placements, organisation. '
     + 'Propositions : fiches-risques du m\u00e9tier (PGC Harmo), \u00e0 confirmer une par une. La mesure est celle annonc\u00e9e par l\u2019entreprise ; sans mesure, le Word indique \u00ab \u00e0 pr\u00e9ciser dans le PPSPS \u00bb.</p>'
     + '<div id="ic7d-liste"></div>'
@@ -7635,11 +7635,11 @@ function ic7dCollecter() {
 var icPresCount = 0;
 var IC_FORMALITES = ['PPSPS simplifi\u00e9', 'Habilitations \u00e9lectriques', 'Autorisations de conduite', 'Attestations de formation au travail en hauteur', 'Fiches de Donn\u00e9es de S\u00e9curit\u00e9'];
 function icFinHtml() {
-  var h = sectionHeader('13 bis', 'Personnes pr\u00e9sentes (\u00e9margement)', '&#9997;');
+  var h = sectionHeader('6 bis', 'Personnes pr\u00e9sentes (\u00e9margement)', '&#9997;');
   h += '<div id="ic-pres-liste"></div>';
   h += '<button type="button" class="btn btn-outline btn-sm" onclick="icPresAjouter(\'\', \'\', \'autre\')">+ Ajouter une personne</button>';
   h += sectionEnd();
-  h += sectionHeader('14', 'PPSPS et diffusion', '&#128228;');
+  h += sectionHeader('7', 'PPSPS et diffusion', '&#128228;');
   h += fieldRow('Autres points \u00e0 reporter dans le PPSPS (les risques 7D y sont repris automatiquement)', 'ic-points-ppsps', 'textarea', '', '');
   if (terrainAffaire && terrainAffaire.cat === 3) {
     h += '<p style="font-size:12px;font-weight:600;margin:8px 0 4px;">Formalit\u00e9s exig\u00e9es avant d\u00e9marrage</p>';
@@ -8435,7 +8435,7 @@ function genFormulaireFIC() {
   html2 += sectionEnd();
 
   // Section 3 - EU
-  html2 += sectionHeader('3', 'Entreprise Utilisatrice (EU) / Site', '&#127963;');
+  html2 += sectionHeader('3', 'Établissement en activité / Exploitant du site (R.4532-14)', '&#127963;');
   html2 += '<label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-weight:500;"><input type="checkbox" id="fic-eu-actif" onchange="icAppliquerRisquesEU()" style="width:18px;height:18px;"> Établissement en activité pendant les travaux (R.4532-14)</label>';
   html2 += fieldRow('Raison sociale EU', 'fic-eu-nom', 'text', 'Nom EU ou N/A', '');
   html2 += twoCol(
@@ -8468,7 +8468,7 @@ function genFormulaireFIC() {
   html2 += icPrestatairesHtml();
 
   // Section 7 - Analyse risques IMP/EX
-  html2 += sectionHeader('6', 'Analyse des risques — Interferences', '&#9888;');
+  html2 += sectionHeader('A-B', 'Analyse des risques — Interferences', '&#9888;');
   html2 += '<p style="font-size:12px;color:var(--text-light);margin-bottom:10px;">Cochez le risque pour l\'activer, puis qualifiez R.IMP et/ou R.EX. Les risques pre-coches proviennent du PGC.</p>';
   html2 += '<div id="risques-widget">';
   html2 += '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
@@ -8508,7 +8508,7 @@ function genFormulaireFIC() {
   // Section 11 - Secours
   var secoursPgc = terrainAffaire.secours_pgc || window._secoursPGC || {};
   var secAlerteDefault = [secoursPgc.urgences, (secoursPgc.hopital ? secoursPgc.hopital + (secoursPgc.distance ? ' (' + secoursPgc.distance + ')' : '') : '')].filter(Boolean).join(' — ');
-  html2 += sectionHeader('10', 'Organisation des secours', '&#128657;');
+  html2 += sectionHeader('4', 'Organisation des secours', '&#128657;');
   html2 += fieldRow('SST present(s) — Nom(s)', 'fic-sec-sst', 'text', 'Nom du SST', '');
   html2 += fieldRow('Trousse de secours — emplacement', 'fic-sec-trousse', 'text', 'Ex: Base vie', secoursPgc.trousse || '');
   html2 += fieldRow('DAE — emplacement', 'fic-sec-dae', 'text', 'Ex: Entree base vie', secoursPgc.dae || '');
@@ -8565,7 +8565,7 @@ function genFormulaireFIC() {
       obsAuto.push('CR de reunion' + (derniereReunion.date ? ' du ' + derniereReunion.date : '') + ' : ' + [derniereReunion.decisions, derniereReunion.nouvelles_entreprises].filter(Boolean).join(' — ') + '.');
     }
   }
-  html2 += sectionHeader('11', 'Observations du CSPS', '&#128221;');
+  html2 += sectionHeader('5', 'Observations du CSPS', '&#128221;');
   html2 += fieldRow('Observation (sans urgence)', 'fic-obs-csps', 'textarea', 'Observations, prescriptions...', obsAuto.join('\n'));
   // Point 5 de la liste convenue avec Alain (03/11) : "Notification" et
   // "DANGER GRAVE IMMINENT" n'avaient aucun champ -- toujours vides au
