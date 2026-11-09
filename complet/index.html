@@ -7947,6 +7947,18 @@ function icApresChoixEntreprise(ent) {
   // Representant : ligne d'emargement
   var rep = document.querySelector('#ic-pres-liste .ic-pres[data-role="ent"]');
   if (rep) { rep.querySelector('.ic-pres-nom').value = ent.contact || ''; rep.querySelector('.ic-pres-qual').value = ent.nom || ''; }
+  // 09/11 (bug trouve via comparaison des FIC avec celles de Fred) : cette
+  // fonction est le point d'entree commun au premier chargement de la fiche
+  // ET a chaque changement d'entreprise dans la liste deroulante (hors flux
+  // "fiche suivante du meme lot" qui, lui, vide deja ic7d-liste via icPasserA).
+  // Sans ce vidage, le tableau 7D/6C des risques propres n'etait jamais
+  // reinitialise entre deux entreprises choisies via la liste deroulante :
+  // chaque fiche generee accumulait en plus les risques propres de TOUTES
+  // les entreprises precedemment traitees dans la meme session navigateur
+  // (ex. 102 lignes pour la 14e entreprise d'une meme session au lieu des
+  // seules lignes de son propre lot).
+  var liste7d = document.getElementById('ic7d-liste');
+  if (liste7d) liste7d.innerHTML = '';
   ic7dProposer(false);
 }
 
