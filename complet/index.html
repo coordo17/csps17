@@ -1055,7 +1055,7 @@
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;position:sticky;top:58px;background:#f0f4f9;padding:10px 0;z-index:50;">
           <button class="btn btn-outline btn-sm" onclick="retourTerrainSelect()">&#8592; Retour</button>
           <h3 id="terrain-doc-title" style="color:var(--blue-dark);margin:0;flex:1;"></h3>
-          <button class="btn btn-success btn-sm" onclick="genererDocTerrain()">&#128196; Generer</button>
+          <button class="btn btn-success btn-sm" onclick="genererDocOuMultiple()">&#128196; Generer</button>
         </div>
 
         <!-- Contenu dynamique injecte par ouvrirFormulaireDoc -->
@@ -1101,7 +1101,7 @@
         </div>
 
         <div style="margin-bottom:40px;">
-          <button class="btn btn-success" style="width:100%;padding:18px;font-size:16px;" onclick="genererDocTerrain()">&#128196; Generer et telecharger le document</button>
+          <button class="btn btn-success" style="width:100%;padding:18px;font-size:16px;" onclick="genererDocOuMultiple()">&#128196; Generer et telecharger le document</button>
         </div>
 
       </div>
@@ -5674,8 +5674,10 @@ function buildTagData(data) {
     courrier_corps:         (data._courrier && data._courrier.corps) ? data._courrier.corps : '',
     courrier_pj:            (data._courrier && data._courrier.pj) ? data._courrier.pj : '',
     courrier_titre:         titreCourrier(data._courrier),
-    obs_notif:              !!(data._courrier && /^(Observation|Notification|Relance)$/.test(data._courrier.nature || '')),
-    notif:                  !!(data._courrier && /^(Notification|Relance)$/.test(data._courrier.nature || '')),
+    // 09/11 : etendu a l'echelle de relance (1ere/2eme relance, mise en
+    // demeure) -- meme regroupement que estNatureObsNotif().
+    obs_notif:              !!(data._courrier && estNatureObsNotif(data._courrier.nature)),
+    notif:                  !!(data._courrier && /^(Notification|1ère relance|2ème relance|Mise en demeure)$/.test(data._courrier.nature || '')),
     courrier_ref:           (data._courrier && data._courrier.refPgc) || '',
     courrier_delai:         (data._courrier && data._courrier.delai) || '',
     courrier_pied:          piedCourrier(data._courrier),
@@ -6104,8 +6106,13 @@ async function generateDoc(ref, previewMode) {
     // n'existe pas -- le nom de l'entreprise FIC est dans data._ficData.entNom,
     // alimente depuis terrainAffaire._ficData, pas a la racine de data).
     var entNomFic = data._ficData && data._ficData.entNom;
-    if (ref === 'FIC' && entNomFic) {
-      var entPropre = entNomFic.normalize('NFD').replace(/[̀-ͯ]/g, '')
+    // 09/11 (demande Alain, courrier a plusieurs entreprises) : meme logique
+    // pour IC/OBS, sinon tous les courriers d'un envoi groupe partagent (a
+    // quelques secondes pres) le meme nom de fichier -- destRaison en
+    // priorite (raison sociale), sinon destNom (ex. MOA/MOE/admin sans raison).
+    var nomPourFichier = entNomFic || (data._courrier && (data._courrier.destRaison || data._courrier.destNom));
+    if ((ref === 'FIC' || ref === 'IC' || ref === 'OBS') && nomPourFichier) {
+      var entPropre = nomPourFichier.normalize('NFD').replace(/[̀-ͯ]/g, '')
         .replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim().slice(0, 60);
       if (entPropre) idDoc = 'CSPS-' + entPropre;
     }
@@ -9161,23 +9168,110 @@ function remplirDestinataireIC() {
   var elAdr = document.getElementById('ic-dest-adresse'); if (elAdr) elAdr.value = adresse;
 }
 
-var COURRIER_NATURES = ['Transmission simple', 'Observation', 'Notification', 'Relance', 'Autre'];
+// 09/11 (demande Alain) : bascule entre destinataire unique (MOA/MOE/admin/une
+// seule entreprise) et plusieurs entreprises cochees (courrier identique,
+// un fichier Word distinct genere par entreprise -- voir genererDocOuMultiple).
+function toggleMultiDestinataires() {
+  var multi = document.getElementById('ic-multi-toggle');
+  var wrap = document.getElementById('ic-multi-ent-wrap');
+  var uniqueWrap = document.getElementById('ic-dest-unique-wrap');
+  var actif = !!(multi && multi.checked);
+  if (wrap) wrap.style.display = actif ? 'block' : 'none';
+  if (uniqueWrap) uniqueWrap.style.display = actif ? 'none' : 'block';
+  if (actif) {
+    var liste = document.getElementById('ic-multi-ent-list');
+    if (liste && !liste.dataset.rempli) {
+      var ents = (terrainAffaire && terrainAffaire.entreprises) || [];
+      if (!ents.length) {
+        liste.innerHTML = '<p style="color:#991b1b;margin:0;">Aucune entreprise enregistrée dans l’affaire.</p>';
+      } else {
+        liste.innerHTML = ents.map(function (e, i) {
+          if (!e || !e.nom) return '';
+          return '<label style="display:block;margin-bottom:6px;"><input type="checkbox" class="ic-multi-ent-check" value="' + i + '"> '
+            + escHtml(e.nom) + (e.lot ? ' (' + escHtml(e.lot) + ')' : '') + '</label>';
+        }).join('');
+      }
+      liste.dataset.rempli = '1';
+    }
+  }
+}
+
+// 09/11 (demande Alain) : echelle de relance a trois niveaux (1ere relance,
+// 2eme relance, mise en demeure) en plus des natures existantes, chacune
+// avec son propre titre et pied de page.
+var COURRIER_NATURES = ['Transmission simple', 'Observation', 'Notification', '1\u00e8re relance', '2\u00e8me relance', 'Mise en demeure', 'Autre'];
 function titreCourrier(c) {
   var n = (c && c.nature) || '';
   if (n === 'Observation') return 'OBSERVATION DU COORDONNATEUR SPS';
   if (n === 'Notification') return 'NOTIFICATION DU COORDONNATEUR SPS';
-  if (n === 'Relance') return 'RELANCE DU COORDONNATEUR SPS';
+  if (n === '1\u00e8re relance') return 'RELANCE DU COORDONNATEUR SPS';
+  if (n === '2\u00e8me relance') return 'DEUXI\u00c8ME RELANCE DU COORDONNATEUR SPS';
+  if (n === 'Mise en demeure') return 'MISE EN DEMEURE';
   return 'COURRIER CSPS';
 }
 function piedCourrier(c) {
   var n = (c && c.nature) || '';
-  if (/^(Observation|Notification|Relance)$/.test(n))
+  // Pas de reference a un pouvoir d'arret ou d'alerte precis : ce pouvoir
+  // depend du contrat de la mission CSPS (meme logique deja retenue pour le
+  // signalement DGI, "titre selon le pouvoir d'arret contractuel").
+  if (n === 'Mise en demeure')
+    return "Consign\u00e9e au registre-journal de la coordination (R.4532-38) \u2014 sans mise en conformit\u00e9 dans le d\u00e9lai imparti, le ma\u00eetre d'ouvrage en sera inform\u00e9 et, selon les pouvoirs confi\u00e9s contractuellement au coordonnateur, l'arr\u00eat des travaux concern\u00e9s pourra \u00eatre sollicit\u00e9 \u2014 \u00e0 conserver 5 ans apr\u00e8s r\u00e9ception de l'ouvrage (R.4532-41).";
+  if (/^(Observation|Notification|1\u00e8re relance|2\u00e8me relance)$/.test(n))
     return "Consign\u00e9 au registre-journal de la coordination (R.4532-38) \u2014 visa \u00e0 retourner sous 24 h ; copie au ma\u00eetre d'ouvrage sous 48 h (recommandation CARSAT Centre-Ouest) \u2014 \u00e0 conserver 5 ans apr\u00e8s r\u00e9ception de l'ouvrage (R.4532-41).";
   return 'Consign\u00e9 au registre-journal de la coordination (R.4532-38).';
 }
 
 function estNatureObsNotif(val) {
-  return val === 'Observation' || val === 'Notification';
+  return /^(Observation|Notification|1\u00e8re relance|2\u00e8me relance|Mise en demeure)$/.test(val || '');
+}
+
+// 09/11 (demande Alain, "pas de secretaire") : bibliotheque de corps de
+// courrier pre-rediges par situation frequente, pour eviter de repartir
+// d'une page blanche a chaque fois. Toujours des textes-cadres (avec [a
+// completer]) jamais des faits inventes -- Alain complete les specificites.
+var COURRIER_MODELES = [
+  { id: '', label: '\u2014 Choisir un mod\u00e8le (ou texte libre ci-dessous) \u2014' },
+  { id: 'convocation', label: 'Convocation \u00e0 une r\u00e9union de coordination', nature: 'Transmission simple',
+    objet: 'Convocation \u00e0 la r\u00e9union de coordination SPS du [date]',
+    corps: "Vous \u00eates convi\u00e9(e) \u00e0 la r\u00e9union de coordination SPS qui se tiendra le [date] \u00e0 [heure], [lieu].\n\nOrdre du jour :\n\u2013 Point d'avancement et coactivit\u00e9 des entreprises pr\u00e9sentes\n\u2013 Suivi des observations en cours\n\u2013 [\u00e0 compl\u00e9ter]\n\nMerci de confirmer votre pr\u00e9sence ou de d\u00e9signer un repr\u00e9sentant habilit\u00e9." },
+  { id: 'demande-ppsps', label: 'Demande de PPSPS avant d\u00e9marrage', nature: 'Transmission simple',
+    objet: 'Demande de transmission du PPSPS avant d\u00e9marrage des travaux',
+    corps: "Conform\u00e9ment \u00e0 l'article L.4532-9 du Code du travail, votre entreprise doit \u00e9tablir un plan particulier de s\u00e9curit\u00e9 et de protection de la sant\u00e9 (PPSPS) avant le d\u00e9marrage de son intervention sur le chantier.\n\nMerci de nous le transmettre dans les meilleurs d\u00e9lais, afin qu'il puisse \u00eatre analys\u00e9 et harmonis\u00e9 avec les PPSPS des autres entreprises intervenantes (R.4532-48)." },
+  { id: 'rappel-epi', label: 'Rappel des consignes de s\u00e9curit\u00e9 / EPI', nature: 'Observation',
+    objet: 'Rappel des consignes de s\u00e9curit\u00e9 et du port des \u00e9quipements de protection individuelle',
+    corps: "Lors de notre derni\u00e8re visite, il a \u00e9t\u00e9 constat\u00e9 que [\u00e0 compl\u00e9ter], notamment le port des \u00e9quipements de protection individuelle (EPI).\n\nNous vous rappelons que le respect des consignes de s\u00e9curit\u00e9 du chantier et des mesures pr\u00e9vues au PGC rel\u00e8ve de l'obligation g\u00e9n\u00e9rale de s\u00e9curit\u00e9 de votre entreprise (L.4121-1 et suivants)." },
+  { id: 'non-conformite', label: 'Notification de non-conformit\u00e9 au PGC', nature: 'Notification',
+    objet: 'Notification de non-conformit\u00e9 au plan g\u00e9n\u00e9ral de coordination',
+    corps: "Nous portons \u00e0 votre connaissance que [\u00e0 compl\u00e9ter] ne respecte pas les prescriptions du plan g\u00e9n\u00e9ral de coordination SPS (PGC) applicable \u00e0 l'op\u00e9ration.\n\nMerci de nous indiquer les mesures de mise en conformit\u00e9 envisag\u00e9es, ainsi que leur d\u00e9lai de r\u00e9alisation." },
+  { id: 'designation-rep', label: 'Demande de d\u00e9signation d\u2019un repr\u00e9sentant', nature: 'Transmission simple',
+    objet: 'Demande de d\u00e9signation d\u2019un repr\u00e9sentant pour la coordination SPS',
+    corps: "Afin d'assurer le bon d\u00e9roulement de la coordination SPS sur l'op\u00e9ration, merci de nous communiquer le nom et les coordonn\u00e9es de la personne que vous d\u00e9signez comme repr\u00e9sentant de votre entreprise pour les questions de s\u00e9curit\u00e9 et de protection de la sant\u00e9 (inspection commune, suivi du PPSPS)." },
+  { id: 'fin-mission', label: 'Information de fin de mission CSPS', nature: 'Transmission simple',
+    objet: 'Information de fin de mission de coordination SPS',
+    corps: "Nous vous informons que notre mission de coordination SPS sur l'op\u00e9ration s'ach\u00e8ve le [date].\n\nLe dossier d'interventions ult\u00e9rieures sur l'ouvrage (DIUO) vous sera transmis [s\u00e9par\u00e9ment / ci-joint]." },
+  { id: 'demande-complement', label: 'Demande de compl\u00e9ment d\u2019information', nature: 'Transmission simple',
+    objet: 'Demande de compl\u00e9ment d\u2019information',
+    corps: "Afin de compl\u00e9ter le suivi de la coordination SPS, merci de nous communiquer [\u00e0 compl\u00e9ter : planning actualis\u00e9, effectif pr\u00e9visionnel, liste des sous-traitants...] dans les meilleurs d\u00e9lais." },
+  { id: 'diuo', label: 'Transmission du DIUO en fin de chantier', nature: 'Transmission simple',
+    objet: 'Transmission du dossier d\u2019interventions ult\u00e9rieures sur l\u2019ouvrage (DIUO)',
+    corps: "Vous trouverez ci-joint le dossier d'interventions ult\u00e9rieures sur l'ouvrage (DIUO), \u00e9tabli conform\u00e9ment aux articles R.4532-95 et suivants du Code du travail, \u00e0 conserver pour toute intervention future sur l'ouvrage." },
+  { id: 'relance1', label: 'Relance \u2014 1\u00e8re relance', nature: '1\u00e8re relance',
+    objet: 'Relance \u2014 [objet du courrier initial]',
+    corps: "Par courrier du [date du courrier initial], nous vous avons [rappel\u00e9 / notifi\u00e9] [\u00e0 compl\u00e9ter], rest\u00e9 \u00e0 ce jour sans suite.\n\nNous vous demandons de bien vouloir y r\u00e9pondre ou de r\u00e9gulariser la situation dans un d\u00e9lai de [d\u00e9lai], faute de quoi une nouvelle relance sera adress\u00e9e." },
+  { id: 'relance2', label: 'Relance \u2014 2\u00e8me relance', nature: '2\u00e8me relance',
+    objet: 'Deuxi\u00e8me relance \u2014 [objet du courrier initial]',
+    corps: "Malgr\u00e9 notre courrier du [date] et notre relance du [date], la situation n'a pas \u00e9volu\u00e9 \u00e0 ce jour.\n\nNous vous demandons une derni\u00e8re fois de bien vouloir r\u00e9gulariser la situation dans un d\u00e9lai de [d\u00e9lai]. \u00c0 d\u00e9faut, le ma\u00eetre d'ouvrage en sera inform\u00e9 et une mise en demeure pourra \u00eatre adress\u00e9e." },
+  { id: 'mise-en-demeure', label: 'Mise en demeure', nature: 'Mise en demeure',
+    objet: 'Mise en demeure \u2014 [objet]',
+    corps: "Malgr\u00e9 nos courriers des [dates des relances pr\u00e9c\u00e9dentes], rest\u00e9s sans effet, nous constatons que [\u00e0 compl\u00e9ter].\n\nPar la pr\u00e9sente, nous vous mettons en demeure de r\u00e9gulariser cette situation dans un d\u00e9lai de [d\u00e9lai], faute de quoi le ma\u00eetre d'ouvrage en sera inform\u00e9." },
+];
+function appliquerModeleCourrier(id) {
+  var m = COURRIER_MODELES.filter(function (x) { return x.id === id; })[0];
+  if (!m || !id) return;
+  icSet('ic-objet', m.objet || '');
+  icSet('ic-corps', m.corps || '');
+  var sel = document.getElementById('ic-nature');
+  if (sel && m.nature) { sel.value = m.nature; try { toggleChampsObservationIC(); } catch (e) {} }
 }
 
 // Bascule l'affichage des champs specifiques (ref PGC/PPSPS, delai de correction)
@@ -9202,13 +9296,26 @@ function genFormulaireIC(natureDefaut) {
     + '<select id="ic-dest-select" onchange="remplirDestinataireIC()" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;">'
     + optionsDestinatairesIC()
     + '</select></div>';
+  // 09/11 (demande Alain) : courrier identique a plusieurs entreprises a la
+  // fois -- un fichier Word distinct est genere par entreprise cochee, le
+  // destinataire unique ci-dessous restant utilisable pour MOA/MOE/admin ou
+  // un seul destinataire.
+  html2 += '<div class="field" style="margin-bottom:10px;"><label><input type="checkbox" id="ic-multi-toggle" onchange="toggleMultiDestinataires()"> Envoyer ce courrier (identique) à plusieurs entreprises</label></div>';
+  html2 += '<div id="ic-multi-ent-wrap" style="display:none;margin-bottom:10px;padding:10px;border:1px solid var(--border);border-radius:6px;background:#f8fafc;">'
+    + '<div id="ic-multi-ent-list" style="font-size:13px;"></div></div>';
+  html2 += '<div id="ic-dest-unique-wrap">';
   html2 += fieldRow('À l’attention de', 'ic-dest-nom', 'text', 'Ex : M. DURAND', '');
   html2 += fieldRow('Qualité', 'ic-dest-qualite', 'text', 'Ex : Maître d’Ouvrage, représentant entreprise...', '');
   html2 += fieldRow('Raison sociale', 'ic-dest-raison', 'text', 'Ex : SARL DURAND BTP', '');
   html2 += fieldRow('Adresse', 'ic-dest-adresse', 'textarea', 'Adresse complete du destinataire', '');
+  html2 += '</div>';
   html2 += sectionEnd();
 
   html2 += sectionHeader('2', 'Courrier', '&#128196;');
+  html2 += '<div class="field" style="margin-bottom:10px;"><label>Modèle de courrier (pré-rempli, à ajuster)</label>'
+    + '<select id="ic-modele" onchange="appliquerModeleCourrier(this.value)" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;">'
+    + COURRIER_MODELES.map(function(m){ return '<option value="' + m.id + '">' + m.label + '</option>'; }).join('')
+    + '</select></div>';
   html2 += '<div class="field" style="margin-bottom:10px;"><label>Nature du courrier</label>'
     + '<select id="ic-nature" onchange="toggleChampsObservationIC()" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;">'
     + COURRIER_NATURES.map(function(n){ return '<option' + (n === nature0 ? ' selected' : '') + '>' + n + '</option>'; }).join('')
@@ -10663,6 +10770,33 @@ async function genererDocTerrain() {
 }
 
 async function genTerrainDoc(ref) { ouvrirFormulaireDoc(ref); }
+
+// 09/11 (demande Alain) : point d'entree du bouton "Generer" -- si un
+// courrier (IC/OBS) est en mode "plusieurs entreprises", boucle sur les
+// entreprises cochees en reutilisant telle quelle la generation habituelle
+// (genererDocTerrain), juste en changeant le destinataire a chaque passage ;
+// sinon comportement inchange pour tous les autres documents.
+async function genererDocOuMultiple() {
+  var multi = document.getElementById('ic-multi-toggle');
+  if ((currentTerrainDoc === 'IC' || currentTerrainDoc === 'OBS') && multi && multi.checked) {
+    var checked = Array.prototype.slice.call(document.querySelectorAll('.ic-multi-ent-check:checked'));
+    if (!checked.length) { showToast('Coche au moins une entreprise destinataire', 'error'); return; }
+    var destNomEl = document.getElementById('ic-dest-nom'), destQualEl = document.getElementById('ic-dest-qualite'),
+        destRaisonEl = document.getElementById('ic-dest-raison'), destAdrEl = document.getElementById('ic-dest-adresse');
+    for (var i = 0; i < checked.length; i++) {
+      var idx = parseInt(checked[i].value, 10);
+      var ent = (terrainAffaire.entreprises || [])[idx] || {};
+      if (destNomEl) destNomEl.value = ent.contact || '';
+      if (destQualEl) destQualEl.value = ent.type || 'Entreprise';
+      if (destRaisonEl) destRaisonEl.value = (ent.nom || '') + (ent.lot ? ' (' + ent.lot + ')' : '');
+      if (destAdrEl) destAdrEl.value = ent.adresse || '';
+      await genererDocTerrain();
+    }
+    showToast(checked.length + ' courriers générés', 'success');
+    return;
+  }
+  await genererDocTerrain();
+}
 
 // Mettre a jour : vide les copies gardees de complet/ (page, scripts, modeles Word)
 // puis recharge depuis GitHub. Les affaires et fichiers du registre ne sont pas touches.
