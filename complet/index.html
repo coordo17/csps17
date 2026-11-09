@@ -5498,6 +5498,43 @@ function nettoyerDocx(zip, data) {
   return zip;
 }
 
+// 09/11 (demande Alain) : "quand un paragraphe commence en fin de page,
+// c'est dommage d'avoir en fin de page le nom du paragraphe et avoir page
+// suivante le corps de ce paragraphe" -- tous les documents CSPS17 suivent
+// le meme gabarit (titre de section = dernier paragraphe d'un tableau a une
+// ligne, suivi d'un paragraphe-espaceur vide, suivi du tableau de contenu).
+// On "colle" (w:keepNext, pagination native Word, deterministe -- pas d'IA)
+// le titre + l'espaceur au tableau qui suit, pour que Word les garde
+// ensemble sur la meme page ou les fasse tous basculer page suivante.
+function empecherOrphelins(zip) {
+  var docFile = zip.file('word/document.xml');
+  if (!docFile) return zip;
+  var xmlStr = docFile.asText();
+
+  function injecterKeepNext(p) {
+    if (p.indexOf('<w:pPr>') !== -1) {
+      return p.indexOf('<w:keepNext') !== -1 ? p : p.replace('<w:pPr>', '<w:pPr><w:keepNext/>');
+    }
+    return p.replace(/^(<w:p\b[^>]*)>/, '$1><w:pPr><w:keepNext/></w:pPr>');
+  }
+
+  // Cas 1 : tableau -> paragraphe-espaceur vide -> tableau suivant (le cas le
+  // plus frequent dans ces gabarits : titre de section puis contenu).
+  var reEspaceur = /(<w:p\b[^>]*>(?:(?!<\/w:p>)[\s\S])*?<\/w:p>)<\/w:tc><\/w:tr><\/w:tbl>(<w:p\b[^>]*?)\/>(<w:tbl>)/g;
+  xmlStr = xmlStr.replace(reEspaceur, function (tout, titreP, espaceurOuvrant, tblSuivant) {
+    return injecterKeepNext(titreP) + '</w:tc></w:tr></w:tbl>' + espaceurOuvrant + '><w:pPr><w:keepNext/></w:pPr></w:p>' + tblSuivant;
+  });
+
+  // Cas 2 (plus rare) : tableau -> tableau suivant directement, sans espaceur.
+  var reDirect = /(<w:p\b[^>]*>(?:(?!<\/w:p>)[\s\S])*?<\/w:p>)<\/w:tc><\/w:tr><\/w:tbl>(<w:tbl>)/g;
+  xmlStr = xmlStr.replace(reDirect, function (tout, titreP, tblSuivant) {
+    return injecterKeepNext(titreP) + '</w:tc></w:tr></w:tbl>' + tblSuivant;
+  });
+
+  zip.file('word/document.xml', xmlStr);
+  return zip;
+}
+
 function cocherCategorie(xmlStr, cat) {
   if (!cat) return xmlStr;
   // Case a cocher APRES le libelle (31/10, demande d'Alain), cf. bloc ci-dessus.
@@ -6103,6 +6140,11 @@ async function generateDoc(ref, previewMode) {
     if (ref === 'VIS' && window.GenVisite && typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire._visite) {
       finalZip = await crVisiteV3(data, terrainAffaire);
     }
+    // 09/11 (demande Alain) : eviter qu'un titre de section se retrouve seul
+    // en bas de page avec son contenu qui demarre la page suivante. Applique
+    // a tous les documents (apres toutes les injections specifiques, y
+    // compris la surcharge VIS ci-dessus qui remplace entierement finalZip).
+    finalZip = empecherOrphelins(finalZip);
     var out = finalZip.generate({
       type: 'blob',
       mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
