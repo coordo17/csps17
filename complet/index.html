@@ -154,6 +154,20 @@
   .page { display: none; }
   .page.active { display: block; }
 
+  /* [10/11, demande d'Alain] Pop-up plein ecran pour le formulaire Terrain
+     quand il est ouvert depuis la page Documents : le bouton "Generer" d'un
+     document (FIC/VIS/IC/RCO/OBS/DGI/PPP/RJC) doit poser les memes questions
+     (entreprise/destinataire/motif...) que le Module Terrain, SANS changer
+     de page -- cf. genererDepuisDocuments(). */
+  #terrain-doc-form.terrain-form-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: #f0f4f9;
+    z-index: 2000;
+    overflow-y: auto;
+    padding: 16px;
+  }
+
   .welcome {
     max-width: 600px;
     margin: 60px auto;
@@ -1215,6 +1229,12 @@ var DOCS = [
   { ref: 'RFM',       title: 'Rapport Fin de Mission', icon: '&#127919;', cats: [1,2,3] },
   { ref: 'HARMOP',    title: 'Harmonisation PPSPS', icon: '&#9878;', cats: [1,2,3], lienExterne: 'https://analyse-ppsps-bxam.onrender.com/', genNatif: 'genererHarmonisationNative' },
 ];
+
+// [10/11, demande d'Alain] Documents dont le bouton "Generer" (page Documents)
+// doit ouvrir le formulaire du Module Terrain (entreprise/destinataire/motif...)
+// au lieu de generer directement avec ce qui trainait en memoire -- memes refs
+// que celles qu'ouvrirFormulaireDoc() sait traiter specifiquement.
+var DOCS_AVEC_FORMULAIRE_TERRAIN = ['FIC', 'VIS', 'IC', 'RCO', 'OBS', 'DGI', 'PPP', 'RJC'];
 
 function showPage(id) {
   document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
@@ -4403,9 +4423,19 @@ function renderDocsGrid() {
     // -- nom de la fonction a appeler, pas d'Apercu dans cette premiere etape
     // du portage (mammoth/previewDoc attend un .docx produit via le pipeline
     // docxtemplater existant).
+    // DOCS_AVEC_FORMULAIRE_TERRAIN (10/11, demande d'Alain) : pour ces
+    // documents, "Generer" depuis Documents ouvrait directement le document
+    // avec ce qui trainait en memoire -- sans jamais demander l'entreprise,
+    // le destinataire ou le motif, questions que seul le Module Terrain
+    // posait. On ouvre maintenant le meme formulaire que le Module Terrain,
+    // en pop-up par-dessus la page Documents (genererDepuisDocuments).
     var actionsGeneration = doc.genNatif ?
       '<button class="btn btn-primary btn-sm" onclick="' + doc.genNatif + '(\'' + doc.ref + '\')">Generer</button>' + btnTelecharger
       : doc.externeSeul ? '' :
+      DOCS_AVEC_FORMULAIRE_TERRAIN.includes(doc.ref) ?
+      '<button class="btn btn-primary btn-sm" onclick="genererDepuisDocuments(\'' + doc.ref + '\')">Generer</button>'
+      + btnTelecharger
+      :
       '<button class="btn btn-primary btn-sm" onclick="generateDocAvecCheck(\'' + doc.ref + '\')">Generer</button>'
       + '<button class="btn btn-outline btn-sm" onclick="previewDoc(\'' + doc.ref + '\')">Apercu</button>'
       + btnTelecharger;
@@ -6981,6 +7011,11 @@ if (document.getElementById('page-terrain') && document.getElementById('page-ter
 
 // ── MODULE TERRAIN ──────────────────────────────────────────────
 var terrainAffaire = null;
+// [10/11, demande d'Alain] 'documents' quand le formulaire Terrain a ete
+// ouvert depuis le bouton "Generer" de la page Documents (pop-up), null
+// quand on vient du Module Terrain normal (etape 1 -> etape 2) -- decide
+// ce que fait "Retour" (cf. retourTerrainSelect) et genererDepuisDocuments.
+var terrainFormOrigine = null;
 var currentTerrainDoc = null;
 var sigData = { ent: null, csps: TAMPON_CSPS_DATAURL, eu: null };
 
@@ -7133,9 +7168,45 @@ function ouvrirFormulaireDoc(ref) {
 }
 
 function retourTerrainSelect() {
+  // [10/11, demande d'Alain] venu du bouton "Generer" de Documents (pop-up) :
+  // on referme la pop-up et on revient simplement a la page Documents, pas a
+  // l'etape 1 du Module Terrain (qui n'a pas de sens hors de ce module).
+  if (terrainFormOrigine === 'documents') {
+    fermerFormulaireDocuments();
+    return;
+  }
   document.getElementById('terrain-step-select').style.display = 'block';
   document.getElementById('terrain-doc-form').style.display = 'none';
   currentTerrainDoc = null;
+}
+
+// [10/11, demande d'Alain] Point d'entree du bouton "Generer" d'un document
+// depuis la page Documents (FIC/VIS/IC/RCO/OBS/DGI/PPP/RJC) : jusqu'ici ce
+// bouton generait directement avec ce qui trainait en memoire, sans jamais
+// demander l'entreprise/le destinataire/le motif -- seul le Module Terrain
+// posait ces questions. On reutilise ici le MEME formulaire (ouvrirFormulaireDoc),
+// affiche en pop-up plein ecran par-dessus la page Documents (CSS
+// .terrain-form-overlay), sans naviguer vers le Module Terrain.
+function genererDepuisDocuments(ref) {
+  var affaire = currentAffaireObj();
+  if (!affaire) { showToast('Aucune affaire selectionnee', 'error'); return; }
+  terrainAffaire = affaire;
+  terrainFormOrigine = 'documents';
+  document.getElementById('page-terrain').classList.add('active');
+  document.getElementById('terrain-doc-form').classList.add('terrain-form-overlay');
+  ouvrirFormulaireDoc(ref);
+}
+
+// Referme la pop-up ouverte par genererDepuisDocuments et revient a la page
+// Documents (rafraichit la grille pour voir le document tout juste genere).
+function fermerFormulaireDocuments() {
+  var form = document.getElementById('terrain-doc-form');
+  form.style.display = 'none';
+  form.classList.remove('terrain-form-overlay');
+  document.getElementById('page-terrain').classList.remove('active');
+  terrainFormOrigine = null;
+  currentTerrainDoc = null;
+  if (document.getElementById('docs-grid')) renderDocsGrid();
 }
 
 // ── FORMULAIRES PAR DOCUMENT ─────────────────────────────────────
