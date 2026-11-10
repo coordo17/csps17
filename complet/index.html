@@ -6556,6 +6556,11 @@ async function generateDoc(ref, previewMode) {
       paragraphLoop: true,
       linebreaks: true,
       delimiters: { start: '{{', end: '}}' },
+      // [Filet de securite "undefined" - 10/11, bug trouve par Alain sur un
+      // CR de Visite] docxtemplater affiche sinon litteralement le mot
+      // "undefined" pour un tag absent de l'objet de donnees (au lieu d'une
+      // case vide) -- jamais acceptable sur un document officiel.
+      nullGetter: function(){ return ''; },
     });
     var _tags = buildTagData(data);
     if (ref === 'DGI') Object.assign(_tags, tagsDGI(data));
@@ -6616,7 +6621,18 @@ async function generateDoc(ref, previewMode) {
     }
     // Nettoyer les lignes vides (apres injection photos)
     if (ref === 'VIS') finalZip = nettoyerDocx(finalZip, data);
-    if (ref === 'VIS' && window.GenVisite && typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire._visite) {
+    if (ref === 'VIS' && typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire._visite) {
+      // [Garde-fou - 10/11, bug trouve par Alain] si gen-visite.js n'est pas
+      // charge (window.GenVisite absent), NE PAS laisser passer le document
+      // du 1er passage generique : il ne connait pas les tags phase/
+      // prochaine/ref_vis/application_pgc et docxtemplater les affichait en
+      // clair "undefined" avant le filet de securite nullGetter ci-dessus.
+      // Mieux vaut bloquer avec une erreur explicite que generer un CR de
+      // Visite incomplet sans le dire.
+      if (!window.GenVisite) {
+        showToast('Erreur : module CR de Visite non charge (gen-visite.js). Rechargez la page (Mettre a jour) avant de regenerer.', 'error');
+        return;
+      }
       finalZip = await crVisiteV3(data, terrainAffaire);
     }
     // 09/11 (demande Alain) : eviter qu'un titre de section se retrouve seul
@@ -9626,6 +9642,9 @@ function pouvoirArretHTML() {
 }
 
 // Balises du signalement DGI : saisie Terrain + pouvoir d'arret du contrat (fiche affaire)
+function typeLabelEntreprise(t) {
+  return t === 'principale' ? 'Entreprise principale' : t === 'sous-traitant' ? 'Sous-traitant' : t === 'prestataire' ? 'Prestataire' : '';
+}
 function tagsDGI(data) {
   function v(id){ var e = document.getElementById(id); return e ? String(e.value || '').trim() : ''; }
   var moa = data.moa || {}, statut = moa.pouvoirArret || '';
@@ -9634,6 +9653,27 @@ function tagsDGI(data) {
   var type = v('dgi-ent-type');
   var m1 = v('dgi-mes1'), m2 = v('dgi-mes2');
   var d = v('dgi-date');
+  // [Multi-entreprises DGI - 10/11, demande d'Alain] un danger grave peut
+  // concerner plusieurs entreprises a la fois (coactivite) -- toutes listees
+  // dans CE MEME signalement (un seul evenement), liste jointe sur une ligne
+  // (" ; "), contrairement au Courrier CSPS qui genere un fichier Word
+  // distinct par destinataire coche.
+  var entrepriseTxt = v('dgi-ent');
+  var typesTxt = (type === 'Entreprise principale' ? '\u2611' : '\u2610') + ' Entreprise principale ' + (type === 'Sous-traitant' ? '\u2611' : '\u2610') + ' Sous-traitant ' + (type === 'Prestataire' ? '\u2611' : '\u2610') + ' Prestataire';
+  var multi = document.getElementById('dgi-multi-toggle');
+  if (multi && multi.checked) {
+    var checked = Array.prototype.slice.call(document.querySelectorAll('.dgi-multi-ent-check:checked'));
+    var ents = (typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire.entreprises) || [];
+    var noms = checked.map(function(c){
+      var e = ents[parseInt(c.value, 10)] || {};
+      var lbl = typeLabelEntreprise(e.type);
+      return (e.nom || '') + (e.lot ? ' (' + e.lot + ')' : '') + (lbl ? ' \u2014 ' + lbl : '');
+    }).filter(Boolean);
+    if (noms.length) {
+      entrepriseTxt = noms.join(' ; ');
+      typesTxt = '(plusieurs entreprises concern\u00e9es, voir ci-contre)';
+    }
+  }
   return {
     dgi_titre: statut === 'oui' ? "Arr\u00eat des travaux dans la zone concern\u00e9e (pouvoir d\u00e9l\u00e9gu\u00e9 par le ma\u00eetre d'ouvrage \u2014 contrat de coordination)"
                                 : "Demande d'arr\u00eat des travaux adress\u00e9e au ma\u00eetre d'ouvrage et \u00e0 l'entreprise",
@@ -9641,9 +9681,9 @@ function tagsDGI(data) {
     dgi_pouvoir: statut === 'oui' ? ('accord\u00e9 par le contrat de coordination' + (moa.pouvoirClause ? ' (' + moa.pouvoirClause + ')' : ''))
                : statut === 'non' ? "non accord\u00e9 \u2014 la d\u00e9cision d'arr\u00eat appartient au ma\u00eetre d'ouvrage" : 'non pr\u00e9cis\u00e9 dans le contrat de coordination',
     dgi_ref: 'CSPS17/DGI-' + (data.num || '') + '-' + String(n).padStart(2, '0'),
-    dgi_types: (type === 'Entreprise principale' ? '\u2611' : '\u2610') + ' Entreprise principale ' + (type === 'Sous-traitant' ? '\u2611' : '\u2610') + ' Sous-traitant ' + (type === 'Prestataire' ? '\u2611' : '\u2610') + ' Prestataire',
+    dgi_types: typesTxt,
     dgi_date: d ? d.split('-').reverse().join('/') : '', dgi_heure: v('dgi-heure'),
-    dgi_entreprise: v('dgi-ent'), dgi_lot: v('dgi-lot'), dgi_zone: v('dgi-zone'), dgi_responsable: v('dgi-resp'),
+    dgi_entreprise: entrepriseTxt, dgi_lot: v('dgi-lot'), dgi_zone: v('dgi-zone'), dgi_responsable: v('dgi-resp'),
     dgi_danger: v('dgi-danger'), dgi_refregl: v('dgi-ref'), dgi_exposes: v('dgi-exposes'),
     dgi_photos: (typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire._photos && terrainAffaire._photos.length) ? terrainAffaire._photos.length + ' photo(s) jointe(s) au registre' : '',
     dgi_mesure1: m1, dgi_mesure2: m2, dgi_aide: (m1 || m2) ? '' : '(Mesure compl\u00e9mentaire \u00e0 pr\u00e9ciser si n\u00e9cessaire)',
@@ -9672,13 +9712,75 @@ function genFormulaireDGI() {
   html2 += '</div>';
   html2 += sectionEnd();
   html2 += sectionHeader('2', 'Entreprise concernee', '&#127970;');
-  html2 += fieldRow('Entreprise', 'dgi-ent', 'text', 'Raison sociale', '');
+  html2 += '<div class="field" style="margin-bottom:10px;"><label>Entreprise enregistrée dans l’affaire (sélection rapide)</label>'
+    + '<select id="dgi-ent-select" onchange="remplirEntrepriseDGI()" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;">'
+    + optionsEntreprisesDGI()
+    + '</select></div>';
+  // [Multi-entreprises DGI - 10/11, demande d'Alain] un danger grave peut
+  // concerner plusieurs entreprises a la fois (coactivite) -- bascule vers
+  // une liste a cocher, toutes listees dans le MEME signalement.
+  html2 += '<div class="field" style="margin-bottom:10px;"><label><input type="checkbox" id="dgi-multi-toggle" onchange="toggleMultiEntDGI()"> Plusieurs entreprises concernées par ce danger</label></div>';
+  html2 += '<div id="dgi-multi-ent-wrap" style="display:none;margin-bottom:10px;padding:10px;border:1px solid var(--border);border-radius:6px;background:#f8fafc;">'
+    + '<div id="dgi-multi-ent-list" style="font-size:13px;"></div></div>';
+  html2 += '<div id="dgi-dest-unique-wrap">';
+  html2 += fieldRow('Entreprise', 'dgi-ent', 'text', 'Raison sociale (ou saisie libre si non enregistrée)', '');
   html2 += '<div class="field" style="margin-bottom:10px;"><label>Type</label>'
     + '<select id="dgi-ent-type" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;">'
     + '<option>Entreprise principale</option><option>Sous-traitant</option><option>Prestataire</option>'
     + '</select></div>';
+  html2 += '</div>';
   html2 += sectionEnd();
   return html2;
+}
+
+function optionsEntreprisesDGI() {
+  var opts = '<option value="">— Choisir une entreprise enregistrée (ou saisie libre ci-dessous) —</option>';
+  var ents = (terrainAffaire && terrainAffaire.entreprises) || [];
+  ents.forEach(function(e, i) {
+    if (e && e.nom) opts += '<option value="' + i + '">' + escHtml(e.nom) + (e.lot ? ' (' + escHtml(e.lot) + ')' : '') + '</option>';
+  });
+  return opts;
+}
+
+function remplirEntrepriseDGI() {
+  var sel = document.getElementById('dgi-ent-select');
+  if (!sel || sel.value === '') return;
+  var idx = parseInt(sel.value, 10);
+  var ents = (terrainAffaire && terrainAffaire.entreprises) || [];
+  var e = ents[idx] || {};
+  var typeLabel = typeLabelEntreprise(e.type);
+  var elEnt = document.getElementById('dgi-ent'); if (elEnt) elEnt.value = e.nom || '';
+  var elLot = document.getElementById('dgi-lot'); if (elLot) elLot.value = e.lot || '';
+  var elType = document.getElementById('dgi-ent-type'); if (elType && typeLabel) elType.value = typeLabel;
+}
+
+// [Multi-entreprises DGI - 10/11, demande d'Alain] bascule entreprise unique
+// / plusieurs entreprises concernees par le meme danger -- toutes listees
+// dans le MEME document (signalement unique), contrairement au Courrier CSPS
+// (toggleMultiDestinataires) qui genere un fichier distinct par destinataire.
+function toggleMultiEntDGI() {
+  var multi = document.getElementById('dgi-multi-toggle');
+  var wrap = document.getElementById('dgi-multi-ent-wrap');
+  var uniqueWrap = document.getElementById('dgi-dest-unique-wrap');
+  var actif = !!(multi && multi.checked);
+  if (wrap) wrap.style.display = actif ? 'block' : 'none';
+  if (uniqueWrap) uniqueWrap.style.display = actif ? 'none' : 'block';
+  if (actif) {
+    var liste = document.getElementById('dgi-multi-ent-list');
+    if (liste && !liste.dataset.rempli) {
+      var ents = (terrainAffaire && terrainAffaire.entreprises) || [];
+      if (!ents.length) {
+        liste.innerHTML = '<p style="color:#991b1b;margin:0;">Aucune entreprise enregistrée dans l’affaire.</p>';
+      } else {
+        liste.innerHTML = ents.map(function (e, i) {
+          if (!e || !e.nom) return '';
+          return '<label style="display:block;margin-bottom:6px;"><input type="checkbox" class="dgi-multi-ent-check" value="' + i + '"> '
+            + escHtml(e.nom) + (e.lot ? ' (' + escHtml(e.lot) + ')' : '') + '</label>';
+        }).join('');
+      }
+      liste.dataset.rempli = '1';
+    }
+  }
 }
 
 function dgiPhotosChange(input) {
