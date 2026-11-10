@@ -5511,24 +5511,67 @@ function empecherOrphelins(zip) {
   if (!docFile) return zip;
   var xmlStr = docFile.asText();
 
+  // 10/11 (audit mise en page, tache 5, v3) : injecterKeepNext doit gerer DEUX
+  // formes de paragraphe-espaceur : auto-ferme (<w:p .../>) ET explicite
+  // (<w:p ...>...</w:p>, meme vide de texte mais avec un <w:pPr> non trivial,
+  // ex. CISSCT_CR_Reunion / CISSCT_Convocation / RFM). La v2 ne reconnaissait
+  // que la forme auto-fermee : ces 3 gabarits restaient donc SANS AUCUNE
+  // protection anti-orphelin, meme pour leurs titres en tableau-bandeau
+  // (cas 1 ci-dessous), qui est pourtant en prod depuis l'origine.
   function injecterKeepNext(p) {
+    var mSelf = p.match(/^(<w:p\b[^>]*?)\/>$/);
+    if (mSelf) return mSelf[1] + '><w:pPr><w:keepNext/></w:pPr></w:p>';
     if (p.indexOf('<w:pPr>') !== -1) {
       return p.indexOf('<w:keepNext') !== -1 ? p : p.replace('<w:pPr>', '<w:pPr><w:keepNext/>');
     }
     return p.replace(/^(<w:p\b[^>]*)>/, '$1><w:pPr><w:keepNext/></w:pPr>');
   }
 
-  // Cas 1 : tableau -> paragraphe-espaceur vide -> tableau suivant (le cas le
-  // plus frequent dans ces gabarits : titre de section puis contenu).
-  var reEspaceur = /(<w:p\b[^>]*>(?:(?!<\/w:p>)[\s\S])*?<\/w:p>)<\/w:tc><\/w:tr><\/w:tbl>(<w:p\b[^>]*?)\/>(<w:tbl>)/g;
-  xmlStr = xmlStr.replace(reEspaceur, function (tout, titreP, espaceurOuvrant, tblSuivant) {
-    return injecterKeepNext(titreP) + '</w:tc></w:tr></w:tbl>' + espaceurOuvrant + '><w:pPr><w:keepNext/></w:pPr></w:p>' + tblSuivant;
+  // Un paragraphe-espaceur, auto-ferme OU explicite (ouvrant...fermant).
+  var SUB_PARA = '(<w:p\\b[^>]*?(?:/>|>(?:(?!<\\/w:p>)[\\s\\S])*?<\\/w:p>))';
+
+  // Cas 1 : tableau -> paragraphe-espaceur (sous l'une des deux formes
+  // ci-dessus) -> tableau suivant (le cas le plus frequent dans ces
+  // gabarits : titre de section puis contenu).
+  var reEspaceur = new RegExp('(<w:p\\b[^>]*>(?:(?!<\\/w:p>)[\\s\\S])*?<\\/w:p>)<\\/w:tc><\\/w:tr><\\/w:tbl>' + SUB_PARA + '(<w:tbl>)', 'g');
+  xmlStr = xmlStr.replace(reEspaceur, function (tout, titreP, espaceur, tblSuivant) {
+    return injecterKeepNext(titreP) + '</w:tc></w:tr></w:tbl>' + injecterKeepNext(espaceur) + tblSuivant;
   });
 
   // Cas 2 (plus rare) : tableau -> tableau suivant directement, sans espaceur.
   var reDirect = /(<w:p\b[^>]*>(?:(?!<\/w:p>)[\s\S])*?<\/w:p>)<\/w:tc><\/w:tr><\/w:tbl>(<w:tbl>)/g;
   xmlStr = xmlStr.replace(reDirect, function (tout, titreP, tblSuivant) {
     return injecterKeepNext(titreP) + '</w:tc></w:tr></w:tbl>' + tblSuivant;
+  });
+
+  // 10/11 (audit mise en page, tache 5) : les cas 1 et 2 ci-dessus ne protegent
+  // que les titres places en derniere ligne d'un tableau-bandeau. Or PGCR,
+  // PGC3R, RFM, CISSCT-CONV, CISSCT-CR et la Fiche IC Cat.3 utilisent des
+  // titres en simple paragraphe (style de titre ou gras), suivi directement
+  // (avec ou sans paragraphe-espaceur, sous l'une des deux formes) d'un
+  // tableau de contenu — motif non couvert par les cas 1/2, donc jusqu'ici
+  // totalement sans protection anti-orphelin sur ces 6 gabarits. On exige du
+  // texte reel dans le paragraphe (aDuTexte) pour ne jamais accrocher un
+  // paragraphe-espaceur vide, et on exclut les cas deja traites ci-dessus
+  // (lookbehind sur </w:tbl>).
+  function aDuTexte(p) {
+    var textes = p.match(/<w:t[^>]*>([^<]*)<\/w:t>/g) || [];
+    for (var i = 0; i < textes.length; i++) {
+      if (textes[i].replace(/<[^>]+>/g, '').trim().length > 0) return true;
+    }
+    return false;
+  }
+
+  var reParaEspaceur = new RegExp('(?<!<\\/w:tbl>)(<w:p\\b[^>]*>(?:(?!<\\/w:p>)[\\s\\S])*?<\\/w:p>)' + SUB_PARA + '(<w:tbl>)', 'g');
+  xmlStr = xmlStr.replace(reParaEspaceur, function (tout, titreP, espaceur, tblSuivant) {
+    if (!aDuTexte(titreP)) return tout;
+    return injecterKeepNext(titreP) + injecterKeepNext(espaceur) + tblSuivant;
+  });
+
+  var reParaDirect = /(?<!<\/w:tbl>)(<w:p\b[^>]*>(?:(?!<\/w:p>)[\s\S])*?<\/w:p>)(<w:tbl>)/g;
+  xmlStr = xmlStr.replace(reParaDirect, function (tout, titreP, tblSuivant) {
+    if (!aDuTexte(titreP)) return tout;
+    return injecterKeepNext(titreP) + tblSuivant;
   });
 
   zip.file('word/document.xml', xmlStr);
