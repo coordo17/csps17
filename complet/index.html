@@ -1195,7 +1195,7 @@ var extractedData = null;
 
 var DOCS = [
   { ref: 'DP',        title: 'Suivi Declaration Prealable', icon: '&#128203;', cats: [1,2] },
-  { ref: 'PGCR',      title: 'PGC SPS — Redaction', icon: '&#128214;', cats: [1,2], lienExterne: 'https://analyse-ppsps-bxam.onrender.com/', externeSeul: true },
+  { ref: 'PGCR',      title: 'PGC SPS — Redaction', icon: '&#128214;', cats: [1,2], lienExterne: 'https://analyse-ppsps-bxam.onrender.com/', genNatif: true },
   { ref: 'PGC3R',     title: 'PGC Simplifie — Redaction (Cat.3)', icon: '&#128214;', cats: [3], lienExterne: 'https://analyse-ppsps-bxam.onrender.com/', externeSeul: true },
   { ref: 'RJC',       title: 'Registre Journal de Coordination', icon: '&#128212;', cats: [1,2,3] },
   { ref: 'DIF',       title: 'Fiche Diffusion PGC', icon: '&#128226;', cats: [1,2] },
@@ -4398,7 +4398,13 @@ function renderDocsGrid() {
       : '';
     // externeSeul (02/10) : aucun modele local dans CSPS17 pour ce document —
     // seuls Inserer (apres Harmo) et l'historique ont un sens ici.
-    var actionsGeneration = doc.externeSeul ? '' :
+    // genNatif (10/11, demande d'Alain) : generation native (sans template
+    // docxtemplater, cf. genererPGCNatif ci-dessus) -- pas d'Apercu dans
+    // cette premiere etape du portage (mammoth/previewDoc attend un .docx
+    // produit via le pipeline docxtemplater existant).
+    var actionsGeneration = doc.genNatif ?
+      '<button class="btn btn-primary btn-sm" onclick="genererPGCNatif()">Generer</button>' + btnTelecharger
+      : doc.externeSeul ? '' :
       '<button class="btn btn-primary btn-sm" onclick="generateDocAvecCheck(\'' + doc.ref + '\')">Generer</button>'
       + '<button class="btn btn-outline btn-sm" onclick="previewDoc(\'' + doc.ref + '\')">Apercu</button>'
       + btnTelecharger;
@@ -5578,6 +5584,259 @@ function empecherOrphelins(zip) {
   return zip;
 }
 
+// ============================================================================
+// 10/11 (demande d'Alain) : generation native d'un PGC dans CSPS17, a partir
+// des donnees deja presentes dans l'affaire (sans import de document, sans IA,
+// sans serveur -- regle du 28/09). Les primitives ci-dessous (escX a wTable)
+// sont portees telles quelles depuis Harmo (analyse-ppsps/public/index.html,
+// lecture seule, Harmo n'est pas modifie) : la construction du .docx s'y fait
+// entierement a la main (ZIP + XML Word bruts, aucun template, aucun
+// docxtemplater), donc sans conflit avec le mecanisme CSPS17 existant. Portage
+// etape 1 (cf. claude/plan_portage_pgc_harmo_vers_csps17.md dans le projet) :
+// page de garde + suivi des revisions + section 1 (renseignements
+// administratifs), a partir des champs deja captures par CSPS17. Les sections
+// suivantes (risques, fiches metier, annexes) viendront aux etapes suivantes.
+function escX(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function crc32(bytes){
+  var t=[]; for(var n=0;n<256;n++){ var c=n; for(var k=0;k<8;k++){ c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1); } t[n]=c>>>0; }
+  var crc=0xFFFFFFFF; for(var i=0;i<bytes.length;i++){ crc=(crc>>>8)^t[(crc^bytes[i])&0xFF]; } return (crc^0xFFFFFFFF)>>>0;
+}
+function zipStore(files){
+  var enc=new TextEncoder();
+  function u16(n){return [n&255,(n>>8)&255];}
+  function u32(n){n=n>>>0;return [n&255,(n>>8)&255,(n>>16)&255,(n>>24)&255];}
+  var chunks=[],central=[],offset=0;
+  files.forEach(function(f){
+    var nb=enc.encode(f.name),d=f.bytes,crc=crc32(d);
+    var loc=[0x50,0x4b,0x03,0x04].concat(u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(d.length),u32(d.length),u16(nb.length),u16(0));
+    chunks.push(new Uint8Array(loc),nb,d);
+    var cen=[0x50,0x4b,0x01,0x02].concat(u16(20),u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(d.length),u32(d.length),u16(nb.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(offset));
+    central.push(new Uint8Array(cen),nb);
+    offset+=loc.length+nb.length+d.length;
+  });
+  var cdSize=0; central.forEach(function(a){cdSize+=a.length;});
+  var end=[0x50,0x4b,0x05,0x06].concat(u16(0),u16(0),u16(files.length),u16(files.length),u32(cdSize),u32(offset),u16(0));
+  var all=chunks.concat(central,[new Uint8Array(end)]);
+  var total=0; all.forEach(function(a){total+=a.length;});
+  var out=new Uint8Array(total),p=0; all.forEach(function(a){out.set(a,p);p+=a.length;});
+  return out;
+}
+var RE_REFS_LEGALES_PARENTHESE = /\s*\((?:articles?\s+)?((?:[RL]\.?\s?\d[\w\-°]*(?:\s*(?:,|et)\s*(?:articles?\s+)?[RL]\.?\s?\d[\w\-°]*)*)\s*(?:du\s+Code\s+d[eu]\s+(?:travail|l['’]environnement|la\s+sant[ée]\s+publique))?[^()]*)\)/gi;
+function _extraireRefsLegalesParenthese(texte){
+  var refs = [];
+  var nettoye = String(texte||'').replace(RE_REFS_LEGALES_PARENTHESE, function(m, interieur){
+    refs.push(interieur.trim());
+    return '';
+  });
+  nettoye = nettoye.replace(/\s+([.,])/g, '$1').replace(/\s{2,}/g, ' ').trim();
+  return { texte: nettoye, refs: refs };
+}
+function wP(txt,opts){
+  opts=opts||{};
+  var estEspaceur = (typeof txt==='string' && txt.trim()==='');
+  if(window._pgcSansRefsLegales && !estEspaceur && typeof txt==='string'){
+    var sepPgc = _extraireRefsLegalesParenthese(txt);
+    if(sepPgc.refs.length) return wP(sepPgc.texte, opts);
+  } else if(!opts.title && !opts.note && !estEspaceur && typeof txt==='string'){
+    var sep = _extraireRefsLegalesParenthese(txt);
+    if(sep.refs.length){
+      var optsPrincipal = {b:opts.b,i:opts.i,color:opts.color,sz:opts.sz,spacing:20,align:opts.align};
+      var optsRefs = {sz:15,spacing:opts.spacing,color:'94a3b8',i:true,note:true};
+      return wP(sep.texte, optsPrincipal) + wP(sep.refs.join(' · '), optsRefs);
+    }
+  }
+  var forcer = window._forcerNoirPGC && !opts.title && !opts.note && !estEspaceur;
+  var couleur = forcer ? '000000' : opts.color;
+  var taille = forcer ? 20 : opts.sz;
+  var pPr='<w:pPr><w:spacing w:after="'+(opts.spacing!=null?opts.spacing:100)+'"/>'+(opts.align?'<w:jc w:val="'+opts.align+'"/>':'')+'</w:pPr>';
+  var rPr='<w:rPr>'+(opts.b?'<w:b/>':'')+(opts.i?'<w:i/>':'')+(couleur?'<w:color w:val="'+couleur+'"/>':'')+(taille?'<w:sz w:val="'+taille+'"/>':'')+'</w:rPr>';
+  return '<w:p>'+pPr+'<w:r>'+rPr+'<w:t xml:space="preserve">'+escX(txt)+'</w:t></w:r></w:p>';
+}
+function wH(txt){ return wP(txt,{b:true,sz:28,spacing:160,title:true}); }
+function wH2(txt){ return wP(txt,{b:true,sz:24,spacing:120,title:true}); }
+function wFL(label,val){
+  if(window._pgcSansRefsLegales){
+    if(typeof label==='string'){ var sepL=_extraireRefsLegalesParenthese(label); label=sepL.texte; }
+    if(typeof val==='string'){ var sepV=_extraireRefsLegalesParenthese(val); val=sepV.texte; }
+  }
+  return '<w:p><w:pPr><w:spacing w:after="60"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="20"/></w:rPr><w:t xml:space="preserve">'+escX(label+' : ')+'</w:t></w:r><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t xml:space="preserve">'+escX(val||'—')+'</w:t></w:r></w:p>'; }
+function wLi(txt,col){
+  var taille = window._forcerNoirPGC ? 20 : 18;
+  var sep = (typeof txt==='string') ? _extraireRefsLegalesParenthese(txt) : {texte:txt,refs:[]};
+  var xml = '<w:p><w:pPr><w:spacing w:after="40"/><w:ind w:left="400"/></w:pPr><w:r><w:rPr><w:sz w:val="'+taille+'"/></w:rPr><w:t xml:space="preserve">• '+escX(sep.texte)+'</w:t></w:r></w:p>';
+  if(sep.refs.length && !window._pgcSansRefsLegales){
+    xml += '<w:p><w:pPr><w:spacing w:after="40"/><w:ind w:left="400"/></w:pPr><w:r><w:rPr><w:i/><w:color w:val="94a3b8"/><w:sz w:val="15"/></w:rPr><w:t xml:space="preserve">'+escX(sep.refs.join(' · '))+'</w:t></w:r></w:p>';
+  }
+  return xml;
+}
+function wSep(){ return '<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:color="2E75B6"/></w:pBdr><w:spacing w:after="80"/></w:pPr></w:p>'; }
+function _footerXmlPagination(){
+  var rpr = '<w:rPr><w:sz w:val="16"/><w:color w:val="64748b"/></w:rPr>';
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+    + '<w:p><w:pPr><w:jc w:val="center"/>' + rpr + '</w:pPr>'
+    + '<w:r>' + rpr + '<w:fldChar w:fldCharType="begin"/></w:r>'
+    + '<w:r>' + rpr + '<w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>'
+    + '<w:r>' + rpr + '<w:fldChar w:fldCharType="separate"/></w:r>'
+    + '<w:r>' + rpr + '<w:t>1</w:t></w:r>'
+    + '<w:r>' + rpr + '<w:fldChar w:fldCharType="end"/></w:r>'
+    + '<w:r>' + rpr + '<w:t xml:space="preserve"> / </w:t></w:r>'
+    + '<w:r>' + rpr + '<w:fldChar w:fldCharType="begin"/></w:r>'
+    + '<w:r>' + rpr + '<w:instrText xml:space="preserve"> NUMPAGES </w:instrText></w:r>'
+    + '<w:r>' + rpr + '<w:fldChar w:fldCharType="separate"/></w:r>'
+    + '<w:r>' + rpr + '<w:t>1</w:t></w:r>'
+    + '<w:r>' + rpr + '<w:fldChar w:fldCharType="end"/></w:r>'
+    + '</w:p></w:ftr>';
+}
+function wTblRow(cells){
+  var forcerTbl = window._forcerNoirPGC;
+  return '<w:tr>'+cells.map(function(c){
+    var tailleC = forcerTbl ? 20 : (c.sz||16);
+    var couleurC = forcerTbl ? '000000' : (c.color||'');
+    var sousP = c.sub ? '<w:p><w:pPr><w:spacing w:after="20"/></w:pPr><w:r><w:rPr><w:i/><w:color w:val="94a3b8"/><w:sz w:val="15"/></w:rPr><w:t xml:space="preserve">'+escX(c.sub)+'</w:t></w:r></w:p>' : '';
+    if(c.paras && c.paras.length){
+      var parasXml = c.paras.map(function(p){
+        var pb = (typeof p === 'object') ? p.b : false;
+        var ptxt = (typeof p === 'object') ? p.text : p;
+        return '<w:p><w:pPr><w:spacing w:after="60"/></w:pPr><w:r><w:rPr>'+(pb?'<w:b/>':'')+(couleurC?'<w:color w:val="'+couleurC+'"/>':'')+'<w:sz w:val="'+tailleC+'"/></w:rPr><w:t xml:space="preserve">'+escX(ptxt||'')+'</w:t></w:r></w:p>';
+      }).join('');
+      return '<w:tc><w:tcPr><w:tcW w:w="'+(c.w||2000)+'" w:type="dxa"/>'+(c.shade?'<w:shd w:val="clear" w:fill="'+c.shade+'"/>':'')+'</w:tcPr>'+parasXml+sousP+'</w:tc>';
+    }
+    return '<w:tc><w:tcPr><w:tcW w:w="'+(c.w||2000)+'" w:type="dxa"/>'+(c.shade?'<w:shd w:val="clear" w:fill="'+c.shade+'"/>':'')+'</w:tcPr>'
+      +'<w:p><w:pPr><w:spacing w:after="20"/></w:pPr><w:r><w:rPr>'+(c.b?'<w:b/>':'')+(couleurC?'<w:color w:val="'+couleurC+'"/>':'')+'<w:sz w:val="'+tailleC+'"/></w:rPr><w:t xml:space="preserve">'+escX(c.text||'')+'</w:t></w:r></w:p>'+sousP+'</w:tc>';
+  }).join('')+'</w:tr>';
+}
+function wTable(headers,rows,widths){
+  widths = widths || headers.map(function(){ return Math.floor(9000/headers.length); });
+  var _totalTbl = widths.reduce(function(s,w){ return s+w; },0);
+  var head = wTblRow(headers.map(function(h,i){ return {text:h,b:true,w:widths[i],shade:'D9E2F3',sz:16}; }));
+  var body = rows.map(function(r){ return wTblRow(r.map(function(v,i){
+    if(v && typeof v === 'object'){ return {text:v.text,sub:v.sub,paras:v.paras,w:widths[i],sz:16,b:v.b,color:v.color}; }
+    return {text:v,w:widths[i],sz:16};
+  })); }).join('');
+  return '<w:tbl><w:tblPr><w:tblW w:w="'+_totalTbl+'" w:type="dxa"/><w:tblBorders>'
+    +'<w:top w:val="single" w:sz="4" w:color="999999"/><w:left w:val="single" w:sz="4" w:color="999999"/>'
+    +'<w:bottom w:val="single" w:sz="4" w:color="999999"/><w:right w:val="single" w:sz="4" w:color="999999"/>'
+    +'<w:insideH w:val="single" w:sz="4" w:color="CCCCCC"/><w:insideV w:val="single" w:sz="4" w:color="CCCCCC"/>'
+    +'</w:tblBorders></w:tblPr><w:tblGrid>'+widths.map(function(w){ return '<w:gridCol w:w="'+w+'"/>'; }).join('')+'</w:tblGrid>'
+    +head+body+'</w:tbl>'+wP(' ',{sz:8});
+}
+
+// Construit le corps (section 1 uniquement, etape 1 du portage) + assemble et
+// declenche le telechargement du .docx. Reutilise les champs deja saisis dans
+// l'affaire -- aucun champ n'est invente : un champ absent est simplement omis
+// (meme logique que les documents docxtemplater existants de CSPS17).
+function genererPGCNatif(){
+  var affaire = currentAffaireObj();
+  if(!affaire){ showToast('Sauvegardez d\'abord l\'affaire', 'error'); return; }
+  var data = collectFormData();
+  if(!data.chantier || !data.chantier.nom){ showToast('Renseignez le chantier avant de generer', 'error'); return; }
+
+  window._forcerNoirPGC = true;
+  window._pgcSansRefsLegales = true;
+  try {
+    var c = data.chantier || {};
+    var today = new Date().toLocaleDateString('fr-FR');
+    var body = '';
+    body += wP('PLAN GÉNÉRAL DE COORDINATION',{b:true,sz:36,align:'center',spacing:80,title:true});
+    body += wP('Sécurité et Protection de la Santé',{sz:22,align:'center',spacing:60,color:'2E75B6',title:true});
+    body += wP('Établi le : '+today,{sz:20,align:'center',spacing:200,color:'64748b'});
+    body += wSep();
+
+    body += wH2('Suivi des révisions');
+    body += wTable(['Indice','Date','Nature de la modification','Motif'],
+      [['A', today, 'Création initiale du PGC', 'Élaboration']],
+      [1000,1800,3800,2400]);
+
+    body += wH('1. Renseignements administratifs');
+    if(c.nom) body += wFL('Opération', c.nom);
+    if(c.adresse) body += wFL('Adresse du chantier', c.adresse);
+    if(data.moa && data.moa.nom) body += wFL('Maître d\'ouvrage', data.moa.nom + (data.moa.adresse ? ' — '+data.moa.adresse : ''));
+    if(data.moe && data.moe.nom) body += wFL('Maîtrise d\'œuvre', data.moe.nom + (data.moe.adresse ? ' — '+data.moe.adresse : ''));
+    if(data.cspsc && data.cspsc.nom) body += wFL('Coordonnateur SPS — Conception', data.cspsc.nom);
+    if(data.cspsr && data.cspsr.nom) body += wFL('Coordonnateur SPS — Réalisation', data.cspsr.nom);
+    body += wFL('Catégorie de l\'opération', data.cat ? ('Catégorie '+data.cat) : 'à définir');
+    if(c.debut) body += wFL('Début prévisionnel des travaux', formatDateFR(c.debut));
+    if(c.duree) body += wFL('Durée prévisionnelle', c.duree);
+    if(c.hj) body += wFL('Effectif prévisionnel (hommes-jours)', c.hj);
+
+    var lignesEnt = (data.entreprises||[]).filter(function(e){ return e.nom; }).map(function(e){
+      return [e.lot||'—', e.nom, (e.dateInterv||'')+(e.duree?' ('+e.duree+')':'')];
+    });
+    if(lignesEnt.length){
+      body += wP('Liste des lots — Entreprises retenues',{b:true,sz:20,spacing:60});
+      body += wTable(['Lot','Entreprise','Intervention'], lignesEnt, [3000,3600,2400]);
+    }
+
+    var org = data.organismes || {};
+    var lignesOrg = [];
+    if(org.dreets && org.dreets.nom) lignesOrg.push('Inspection du travail : '+org.dreets.nom+(org.dreets.adresse?' — '+org.dreets.adresse:''));
+    if(org.carsat && org.carsat.nom) lignesOrg.push('CARSAT : '+org.carsat.nom+(org.carsat.adresse?' — '+org.carsat.adresse:''));
+    if(org.oppbtp && org.oppbtp.nom) lignesOrg.push('OPPBTP : '+org.oppbtp.nom+(org.oppbtp.adresse?' — '+org.oppbtp.adresse:''));
+    if(org.ct && org.ct.nom) lignesOrg.push('Contrôleur technique : '+org.ct.nom);
+    if(org.medecin) lignesOrg.push('Médecin du travail : '+org.medecin);
+    if(lignesOrg.length){
+      body += wP('Organismes de prévention',{b:true,sz:20,spacing:60});
+      lignesOrg.forEach(function(l){ body += wLi(l); });
+    }
+
+    var doc='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      +'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>'
+      +body
+      +'<w:sectPr><w:footerReference w:type="default" r:id="rId3"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134"/></w:sectPr>'
+      +'</w:body></w:document>';
+    var ct='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>';
+    var rels='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>';
+    var stylesXml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:lang w:val="fr-FR" w:eastAsia="fr-FR" w:bidi="ar-SA"/></w:rPr></w:rPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style></w:styles>';
+    var relsDoc='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/></Relationships>';
+    var settingsXml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:proofState w:spelling="dirty" w:grammar="dirty"/></w:settings>';
+    var enc=new TextEncoder();
+    var zip=zipStore([
+      {name:'[Content_Types].xml',bytes:enc.encode(ct)},
+      {name:'_rels/.rels',bytes:enc.encode(rels)},
+      {name:'word/document.xml',bytes:enc.encode(doc)},
+      {name:'word/styles.xml',bytes:enc.encode(stylesXml)},
+      {name:'word/settings.xml',bytes:enc.encode(settingsXml)},
+      {name:'word/footer1.xml',bytes:enc.encode(_footerXmlPagination())},
+      {name:'word/_rels/document.xml.rels',bytes:enc.encode(relsDoc)}
+    ]);
+    var out = new Blob([zip], {type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+    var blobUrl = URL.createObjectURL(out);
+    var a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = blobUrl;
+    var now = new Date();
+    var pad = function(n){ return (n<10?'0':'')+n; };
+    var stamp = now.getFullYear()+pad(now.getMonth()+1)+pad(now.getDate())+'-'+pad(now.getHours())+pad(now.getMinutes());
+    a.download = 'CSPS17_PGCR_'+(data.num||'doc')+'_'+stamp+'.docx';
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(blobUrl); }, 1000);
+
+    // Auto-log RJC (meme principe que generateDoc()).
+    var affaireRJC = affaires.find(function(x){ return x.id === currentAffaireId; });
+    if (affaireRJC) {
+      if (!affaireRJC.rjc) affaireRJC.rjc = [];
+      affaireRJC.rjc.push({
+        id: 'rjc-'+Date.now(),
+        date: now.toISOString().slice(0,10),
+        nature: RJC_NATURE_PAR_REF['PGCR'] || DOC_TITRES['PGCR'] || 'PGCR',
+        intervenants: '',
+        titre: DOC_TITRES['PGCR'] || 'PGC',
+        docRef: 'PGCR',
+        fichierNom: a.download,
+      });
+      persistAffaires();
+      try { renderRJCTab(); } catch(er){}
+      try { renderDocsGrid(); } catch(er2){}
+    }
+    showToast('PGC genere (etape 1 : renseignements administratifs)', 'success');
+  } finally {
+    window._forcerNoirPGC = false;
+    window._pgcSansRefsLegales = false;
+  }
+}
+// ============================================================================
+
 function cocherCategorie(xmlStr, cat) {
   if (!cat) return xmlStr;
   // Case a cocher APRES le libelle (31/10, demande d'Alain), cf. bloc ci-dessus.
@@ -6546,6 +6805,7 @@ var RJC_NATURE_PAR_REF = {
 };
 
 var DOC_TITRES = {
+  'PGCR': 'Plan General de Coordination',
   'FIC': 'Fiche IC — Inspection Commune',
   'VIS': 'CR Visite de Chantier',
   'IC':  'Courrier CSPS',
