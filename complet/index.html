@@ -5826,6 +5826,89 @@ function genererPGCNatif(ref){
       lignesOrg.forEach(function(l){ body += wLi(l); });
     }
 
+    // [10/11, demande d'Alain, Etape 2 du portage PGC Harmo -> CSPS17] :
+    // organisation generale / diagnostics / clauses, construits a partir
+    // des fiches de faits DEJA remplies dans l'affaire (affaireFaits) --
+    // au depot d'une piece ou via "Relire le chantier". Rien n'est
+    // redemande ici, rien n'est invente : si une fiche n'a jamais ete
+    // remplie, la sous-section correspondante est simplement absente.
+    var faits = affaireFaits(affaire);
+    var sectionsVides = true;
+
+    // 2.1 Diagnostics amiante / plomb
+    var am = faits.amiante || {}, pb = faits.plomb || {};
+    var lignesDiag = [];
+    if (am.source) {
+      lignesDiag.push('Amiante : ' + (am.presence ? 'repéré' : 'non repéré')
+        + (am.localisation ? ' — ' + am.localisation : '')
+        + (am.raat_date ? ' — RAAT du ' + am.raat_date : '')
+        + (am.bureau ? ' — ' + am.bureau : '')
+        + (am.ss4_obligatoire ? ' — Sous-section 4 (SS4) obligatoire' : '')
+        + (am.fin_desamiantage ? ' — fin de désamiantage prévue le ' + am.fin_desamiantage : ''));
+    }
+    if (pb.source) {
+      lignesDiag.push('Plomb : ' + (pb.presence ? 'détecté' : 'non détecté')
+        + (pb.localisation ? ' — ' + pb.localisation : '')
+        + (pb.date_rapport ? ' — rapport du ' + pb.date_rapport : '')
+        + (pb.bureau ? ' — ' + pb.bureau : ''));
+    }
+    if (lignesDiag.length) {
+      if (sectionsVides) { body += wH('2. Organisation générale, diagnostics et contraintes'); sectionsVides = false; }
+      body += wP('Diagnostics', {b:true,sz:20,spacing:60});
+      lignesDiag.forEach(function(l){ body += wLi(l); });
+    }
+
+    // 2.2 Reseaux (DT/DICT) et contraintes du site
+    var rz = faits.reseaux || {}, ctr = faits.contraintes || {};
+    var lignesRz = [];
+    if (rz.source) {
+      var etatsRz = [];
+      if (rz.dt_recue) etatsRz.push('DT reçue');
+      if (rz.dict_envoyee) etatsRz.push('DICT envoyée');
+      if (rz.dict_recue) etatsRz.push('récépissés DICT reçus');
+      lignesRz.push('Réseaux (DT/DICT) : ' + (etatsRz.length ? etatsRz.join(', ') : 'en cours')
+        + (rz.date ? ' — ' + rz.date : '') + (rz.observation ? ' — ' + rz.observation : ''));
+    }
+    if (ctr.synthese) lignesRz.push('Contraintes du site : ' + ctr.synthese + (ctr.arrete_voirie ? ' — ' + ctr.arrete_voirie : ''));
+    if (lignesRz.length) {
+      if (sectionsVides) { body += wH('2. Organisation générale, diagnostics et contraintes'); sectionsVides = false; }
+      body += wP('Réseaux et contraintes du site', {b:true,sz:20,spacing:60});
+      lignesRz.forEach(function(l){ body += wLi(l); });
+    }
+
+    // 2.3 Dechets et installations de chantier (CBT : infos communes a toutes
+    // les entreprises, cf. ouvrirFaitsCBT)
+    var cbt = faits.cbt || {};
+    if (cbt.dechets || cbt.base_vie) {
+      if (sectionsVides) { body += wH('2. Organisation générale, diagnostics et contraintes'); sectionsVides = false; }
+      body += wP('Déchets et installations de chantier', {b:true,sz:20,spacing:60});
+      if (cbt.dechets) body += wLi('Gestion des déchets : ' + cbt.dechets);
+      if (cbt.base_vie) body += wLi('Base vie / installations de chantier : ' + cbt.base_vie);
+    }
+
+    // 2.4 Acces et cloture du chantier (Plans/PIC, cf. ouvrirFaitsPlans)
+    var pl = faits.plans || {};
+    if (pl.acces || pl.cloture) {
+      if (sectionsVides) { body += wH('2. Organisation générale, diagnostics et contraintes'); sectionsVides = false; }
+      body += wP('Accès et clôture du chantier', {b:true,sz:20,spacing:60});
+      if (pl.acces) body += wLi('Accès chantier : ' + pl.acces);
+      if (pl.cloture) body += wLi('Clôture / périmètre : ' + pl.cloture);
+    }
+
+    // 2.5 Phasage et co-activite (planning, cf. ouvrirFaitsPlanning) --
+    // les alertes critiques du planning sont distinguees car elles
+    // appellent des mesures de prevention specifiques.
+    var coact = faits.coactivites || [], alertes = faits.alertesPlanning || [];
+    if (coact.length || alertes.length) {
+      if (sectionsVides) { body += wH('2. Organisation générale, diagnostics et contraintes'); sectionsVides = false; }
+      body += wP('Phasage et co-activité', {b:true,sz:20,spacing:60});
+      coact.forEach(function(c){ var txt = c.description || c; if (txt) body += wLi(txt); });
+      if (alertes.length) {
+        body += wP('Alertes critiques du planning', {b:true,sz:18,color:'B91C1C',spacing:40});
+        alertes.forEach(function(a){ if (a) body += wLi(a); });
+      }
+    }
+
     var doc='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
       +'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>'
       +body
