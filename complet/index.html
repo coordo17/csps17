@@ -6191,7 +6191,13 @@ async function generateDoc(ref, previewMode) {
           : '';
         // Courrier CSPS / Observation : reflete la vraie nature choisie et le
         // vrai destinataire, plutot que le libelle generique du bouton.
-        var natureAuto = DOC_TITRES[ref] || ref;
+        // 10/11 (audit coherence) : la nature auto-journalisee doit utiliser le
+        // vocabulaire canonique de RJC_NATURES (celui que buildTagsRFM().compte()
+        // filtre pour le bilan quantitatif du RFM), pas le libelle d'affichage
+        // DOC_TITRES — sinon rfm_nb_visites / rfm_nb_reunions_coord / rfm_nb_cissct /
+        // rfm_nb_ic / rfm_nb_dgi ressortent a 0 meme sur une affaire bien remplie,
+        // car aucune entree RJC auto-creee ne correspond jamais a la chaine filtree.
+        var natureAuto = RJC_NATURE_PAR_REF[ref] || DOC_TITRES[ref] || ref;
         var intervAuto = entLabelAuto;
         var objetAuto = (DOC_TITRES[ref] || ref) + (entLabelAuto ? ' — ' + entLabelAuto : '');
         if ((ref === 'IC' || ref === 'OBS') && data._courrier) {
@@ -6482,6 +6488,19 @@ if (document.getElementById('page-terrain') && document.getElementById('page-ter
 var terrainAffaire = null;
 var currentTerrainDoc = null;
 var sigData = { ent: null, csps: TAMPON_CSPS_DATAURL, eu: null };
+
+// Nature canonique a journaliser au RJC pour les documents dont le type
+// correspond a une des categories comptees par buildTagsRFM() (bilan
+// quantitatif du RFM). Doit rester strictement identique aux libelles de
+// RJC_NATURES utilises par compte() — toute difference (accent, majuscule,
+// mot ajoute) fait retomber le compteur correspondant a 0 silencieusement.
+var RJC_NATURE_PAR_REF = {
+  'FIC':        'Inspection commune',
+  'VIS':        'Visite de chantier',
+  'RCO':        'CR Réunion de coordination',
+  'DGI':        'Danger grave et imminent',
+  'CISSCT-CR':  'Réunion CISSCT',
+};
 
 var DOC_TITRES = {
   'FIC': 'Fiche IC — Inspection Commune',
