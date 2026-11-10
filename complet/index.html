@@ -4419,8 +4419,13 @@ function renderDocsGrid() {
       + '</div></div>';
   }
   var SECTIONS = [
-    { titre: 'Conception', couleur: '#1e40af', fond: '#eff6ff', pieces: ['CONTRAT', 'PGC', 'DIAG', 'CONTRAINTES', 'PLANS'], docs: ['DP', 'PGCR', 'PGC3R', 'DIF', 'PV-PC'] },
-    { titre: 'R\u00e9alisation', couleur: '#166534', fond: '#f0fdf4', pieces: ['ICR', 'PLAN', 'PPSPS', 'CBT', 'CRMOA'], docs: ['RJC', 'FIC', 'IC', 'PPP', 'HARMOP', 'VIS', 'OBS', 'DGI', 'RCO', 'RFM'] },
+    // CBT deplace de Realisation vers Conception (10/11, demande d'Alain) :
+    // les CBT (Cahier des besoins techniques) de chaque lot lui servent a
+    // rediger le PGC, qui se fait en phase Conception -- il les cherchait
+    // au mauvais endroit (Realisation, ou ils avaient ete ranges le 06/11
+    // faute d'avoir precise la phase).
+    { titre: 'Conception', couleur: '#1e40af', fond: '#eff6ff', pieces: ['CONTRAT', 'PGC', 'DIAG', 'CONTRAINTES', 'PLANS', 'CBT'], docs: ['DP', 'PGCR', 'PGC3R', 'DIF', 'PV-PC'] },
+    { titre: 'R\u00e9alisation', couleur: '#166534', fond: '#f0fdf4', pieces: ['ICR', 'PLAN', 'PPSPS', 'CRMOA'], docs: ['RJC', 'FIC', 'IC', 'PPP', 'HARMOP', 'VIS', 'OBS', 'DGI', 'RCO', 'RFM'] },
     { titre: 'CISSCT', couleur: '#7c2d12', fond: '#fff7ed', pieces: [], docs: ['CISSCT-RI', 'CISSCT-CONV', 'CISSCT-CR'] },
     { titre: 'DIUO', couleur: '#4c1d95', fond: '#f5f3ff', pieces: [], docs: ['DIUO', 'PV-DIUO'] }
   ];
