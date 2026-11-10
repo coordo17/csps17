@@ -1196,7 +1196,7 @@ var extractedData = null;
 var DOCS = [
   { ref: 'DP',        title: 'Suivi Declaration Prealable', icon: '&#128203;', cats: [1,2] },
   { ref: 'PGCR',      title: 'PGC SPS — Redaction', icon: '&#128214;', cats: [1,2], lienExterne: 'https://analyse-ppsps-bxam.onrender.com/', genNatif: 'genererPGCNatif' },
-  { ref: 'PGC3R',     title: 'PGC Simplifie — Redaction (Cat.3)', icon: '&#128214;', cats: [3], lienExterne: 'https://analyse-ppsps-bxam.onrender.com/', externeSeul: true },
+  { ref: 'PGC3R',     title: 'PGC Simplifie — Redaction (Cat.3)', icon: '&#128214;', cats: [3], lienExterne: 'https://analyse-ppsps-bxam.onrender.com/', genNatif: 'genererPGCNatif' },
   { ref: 'RJC',       title: 'Registre Journal de Coordination', icon: '&#128212;', cats: [1,2,3] },
   { ref: 'DIF',       title: 'Fiche Diffusion PGC', icon: '&#128226;', cats: [1,2] },
   { ref: 'FIC',       title: 'Fiche d’inspection commune', icon: '&#128269;', cats: [1,2,3] },
@@ -4404,7 +4404,7 @@ function renderDocsGrid() {
     // du portage (mammoth/previewDoc attend un .docx produit via le pipeline
     // docxtemplater existant).
     var actionsGeneration = doc.genNatif ?
-      '<button class="btn btn-primary btn-sm" onclick="' + doc.genNatif + '()">Generer</button>' + btnTelecharger
+      '<button class="btn btn-primary btn-sm" onclick="' + doc.genNatif + '(\'' + doc.ref + '\')">Generer</button>' + btnTelecharger
       : doc.externeSeul ? '' :
       '<button class="btn btn-primary btn-sm" onclick="generateDocAvecCheck(\'' + doc.ref + '\')">Generer</button>'
       + '<button class="btn btn-outline btn-sm" onclick="previewDoc(\'' + doc.ref + '\')">Apercu</button>'
@@ -5732,7 +5732,17 @@ function wTable(headers,rows,widths){
 // declenche le telechargement du .docx. Reutilise les champs deja saisis dans
 // l'affaire -- aucun champ n'est invente : un champ absent est simplement omis
 // (meme logique que les documents docxtemplater existants de CSPS17).
-function genererPGCNatif(){
+// genererPGCNatif(ref) : ref vaut 'PGCR' (PGC complet, Cat.1-2) ou 'PGC3R'
+// (PGC simplifie, Cat.3). [Portage PGC3R - 10/11, demande d'Alain] Verifie
+// dans Harmo : il n'existe pas de generateur distinct pour le PGC simplifie
+// Cat.3, exporterPGCWord() produit le meme document quelle que soit la
+// categorie (seul un paragraphe de texte mentionne la version simplifiee,
+// R.4532-52/54, sans que ce soit reellement implemente cote structure). On
+// reste donc fidele a ce que fait reellement Harmo : meme contenu, seuls le
+// nom de fichier et l'entree RJC (nature/titre/ref) different selon le bouton
+// utilise.
+function genererPGCNatif(ref){
+  ref = ref || 'PGCR';
   var affaire = currentAffaireObj();
   if(!affaire){ showToast('Sauvegardez d\'abord l\'affaire', 'error'); return; }
   var data = collectFormData();
@@ -5814,7 +5824,7 @@ function genererPGCNatif(){
     var now = new Date();
     var pad = function(n){ return (n<10?'0':'')+n; };
     var stamp = now.getFullYear()+pad(now.getMonth()+1)+pad(now.getDate())+'-'+pad(now.getHours())+pad(now.getMinutes());
-    a.download = 'CSPS17_PGCR_'+(data.num||'doc')+'_'+stamp+'.docx';
+    a.download = 'CSPS17_'+ref+'_'+(data.num||'doc')+'_'+stamp+'.docx';
     document.body.appendChild(a); a.click();
     setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(blobUrl); }, 1000);
 
@@ -5825,10 +5835,10 @@ function genererPGCNatif(){
       affaireRJC.rjc.push({
         id: 'rjc-'+Date.now(),
         date: now.toISOString().slice(0,10),
-        nature: RJC_NATURE_PAR_REF['PGCR'] || DOC_TITRES['PGCR'] || 'PGCR',
+        nature: RJC_NATURE_PAR_REF[ref] || DOC_TITRES[ref] || ref,
         intervenants: '',
-        titre: DOC_TITRES['PGCR'] || 'PGC',
-        docRef: 'PGCR',
+        titre: DOC_TITRES[ref] || 'PGC',
+        docRef: ref,
         fichierNom: a.download,
       });
       persistAffaires();
@@ -6973,6 +6983,7 @@ var RJC_NATURE_PAR_REF = {
 
 var DOC_TITRES = {
   'PGCR': 'Plan General de Coordination',
+  'PGC3R': 'Plan General de Coordination Simplifie (Cat.3)',
   'HARMOP': 'Note d\'Harmonisation PPSPS',
   'FIC': 'Fiche IC — Inspection Commune',
   'VIS': 'CR Visite de Chantier',
