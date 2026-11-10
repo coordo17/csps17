@@ -6137,7 +6137,7 @@ function buildTagsRFM() {
   return {
     rfm_nb_visites:        compte('Visite de chantier'),
     rfm_nb_reunions_coord: compte('CR Réunion de coordination'),
-    rfm_nb_cissct:         compte('Réunion CISSCT'),
+    rfm_nb_cissct:         compte('CISSCT Compte rendu'),
     rfm_nb_ic:             compte('Inspection commune'),
     rfm_nb_entreprises:    ((ta && ta.entreprises) || []).length,
     rfm_nb_ppsps_analyses: ((ta && ta.ppspsAnalyses) || []).length,
@@ -6974,11 +6974,22 @@ var sigData = { ent: null, csps: TAMPON_CSPS_DATAURL, eu: null };
 // RJC_NATURES utilises par compte() — toute difference (accent, majuscule,
 // mot ajoute) fait retomber le compteur correspondant a 0 silencieusement.
 var RJC_NATURE_PAR_REF = {
-  'FIC':        'Inspection commune',
-  'VIS':        'Visite de chantier',
-  'RCO':        'CR Réunion de coordination',
-  'DGI':        'Danger grave et imminent',
-  'CISSCT-CR':  'Réunion CISSCT',
+  'FIC':          'Inspection commune',
+  'VIS':          'Visite de chantier',
+  'RCO':          'CR Réunion de coordination',
+  'DGI':          'Danger grave et imminent',
+  'CISSCT-CR':    'CISSCT Compte rendu',
+  // [Completion natures RJC - 10/11, demande d'Alain] les 8 documents
+  // ci-dessous retombaient sur leur code brut ('DP', 'PV-PC'...) dans la
+  // colonne Nature du registre, faute d'entree ici ou dans DOC_TITRES.
+  'CISSCT-CONV':  'CISSCT Convocation',
+  'PV-DIUO':      'Transmission DIUO',
+  'PV-PC':        'Passation de consignes',
+  'DIF':          'Transmission de documents',
+  'RFM':          'Réception / Clôture de mission',
+  'DP':           'Déclaration préalable',
+  'DIUO':         'Établissement du DIUO',
+  'CISSCT-RI':    'Règlement intérieur CISSCT',
 };
 
 var DOC_TITRES = {
@@ -10152,8 +10163,10 @@ var RJC_NATURES = [
   'Ouverture de mission', 'Transmission de documents', 'Inspection commune',
   'Réception PPSPS entreprise', 'Harmonisation / Analyse PPSPS',
   'Visite de chantier', 'Observation', 'Notification', 'Danger grave et imminent',
-  'Déclaration sous-traitant', 'CR Réunion de coordination', 'Réunion CISSCT', 'Passation de consignes',
-  'Transmission DIUO', 'Réception / Clôture de mission', 'Autre',
+  'Déclaration sous-traitant', 'CR Réunion de coordination', 'CISSCT Compte rendu',
+  'CISSCT Convocation', 'Passation de consignes', 'Transmission DIUO',
+  'Réception / Clôture de mission', 'Déclaration préalable', 'Établissement du DIUO',
+  'Règlement intérieur CISSCT', 'Autre',
 ];
 
 function genFormulaireRJC() {
