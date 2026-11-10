@@ -3312,8 +3312,12 @@ function repererClauseCBT(texte, motsCles) {
     while (true) {
       var p = texteMin.indexOf(mc, posDepart);
       if (p === -1) break;
-      var apresCheck = texte.slice(p + mc.length, Math.min(texte.length, p + mc.length + 200));
-      var ressembleSommaire = !/[a-zàâäéèêëïîôöùûüç]{3,}/.test(apresCheck.slice(0, 80));
+      // Fenetre resserree (50 car., pas 80+) : si le vrai passage suit de
+      // pres le sommaire dans le document, une fenetre trop large peut
+      // "voir" cette vraie phrase depuis l'occurrence du sommaire et la
+      // laisser passer a tort (verifie sur un cas simule 10/11).
+      var apresCheck = texte.slice(p + mc.length, Math.min(texte.length, p + mc.length + 50));
+      var ressembleSommaire = !/[a-zàâäéèêëïîôöùûüç]{3,}/.test(apresCheck);
       if (ressembleSommaire) { posDepart = p + mc.length; continue; }
       pos = p;
       break;
@@ -6977,9 +6981,27 @@ function dateFRversISO(txt) {
 function reperePourMotsCles(texte, motsCles) {
   var texteMin = texte.toLowerCase();
   for (var i = 0; i < motsCles.length; i++) {
-    var pos = texteMin.indexOf(motsCles[i].toLowerCase());
+    var mc = motsCles[i].toLowerCase();
+    // 10/11 (meme bug que repererClauseCBT, trouve par Alain sur le CBT de
+    // Pont l'Abbe) : un PPSPS a lui aussi un sommaire listant ses rubriques
+    // ("VIII -- PLAN DE CIRCULATION", "VI -- MODE OPERATOIRE"...), qui
+    // matchent les memes mots-cles que la vraie rubrique plus loin dans le
+    // document. On saute une occurrence si rien de minuscule (une vraie
+    // phrase) ne suit dans une fenetre resserree (50 car., pas plus large --
+    // sinon, si le vrai passage suit de pres le sommaire, on "voit" cette
+    // phrase depuis le sommaire et on le laisse passer a tort).
+    var posDepart = 0, pos = -1;
+    while (true) {
+      var p = texteMin.indexOf(mc, posDepart);
+      if (p === -1) break;
+      var apresCheck = texte.slice(p + mc.length, Math.min(texte.length, p + mc.length + 50));
+      var ressembleSommaire = !/[a-zàâäéèêëïîôöùûüç]{3,}/.test(apresCheck);
+      if (ressembleSommaire) { posDepart = p + mc.length; continue; }
+      pos = p;
+      break;
+    }
     if (pos === -1) continue;
-    var debut = Math.max(0, pos - 60), fin = Math.min(texte.length, pos + motsCles[i].length + 90);
+    var debut = Math.max(0, pos - 60), fin = Math.min(texte.length, pos + mc.length + 90);
     var extrait = texte.slice(debut, fin).replace(/\s+/g, ' ').trim();
     if (debut > 0) extrait = '…' + extrait;
     if (fin < texte.length) extrait = extrait + '…';
