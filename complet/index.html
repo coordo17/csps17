@@ -3300,7 +3300,24 @@ var CBT_BASEVIE_MOTS = ['installations de chantier', 'installation de chantier',
 function repererClauseCBT(texte, motsCles) {
   var texteMin = texte.toLowerCase();
   for (var i = 0; i < motsCles.length; i++) {
-    var pos = texteMin.indexOf(motsCles[i].toLowerCase());
+    var mc = motsCles[i].toLowerCase();
+    var posDepart = 0, pos = -1;
+    // 10/11 (bug trouve par Alain sur le CBT de Pont l'Abbe) : le document a
+    // DEUX occurrences du mot-cle -- une dans le SOMMAIRE ("III -- NETTOYAGE
+    // DU CHANTIER" liste avec les autres titres) et une sur la vraie clause
+    // plus loin. indexOf() prenait toujours la premiere (le sommaire), dont
+    // le texte qui suit n'est qu'une liste d'autres titres en MAJUSCULES --
+    // jamais une phrase. On verifie qu'une vraie phrase (minuscules) suit
+    // avant d'accepter l'occurrence, sinon on cherche la suivante.
+    while (true) {
+      var p = texteMin.indexOf(mc, posDepart);
+      if (p === -1) break;
+      var apresCheck = texte.slice(p + mc.length, Math.min(texte.length, p + mc.length + 200));
+      var ressembleSommaire = !/[a-zàâäéèêëïîôöùûüç]{3,}/.test(apresCheck.slice(0, 80));
+      if (ressembleSommaire) { posDepart = p + mc.length; continue; }
+      pos = p;
+      break;
+    }
     if (pos === -1) continue;
     var debut = Math.max(0, pos - 40);
     // 09/11 (bug trouve par Alain, 1ere FIC produite CSPS-2026-0001) : une
