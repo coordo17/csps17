@@ -1195,7 +1195,7 @@ var extractedData = null;
 
 var DOCS = [
   { ref: 'DP',        title: 'Suivi Declaration Prealable', icon: '&#128203;', cats: [1,2] },
-  { ref: 'PGCR',      title: 'PGC SPS — Redaction', icon: '&#128214;', cats: [1,2], lienExterne: 'https://analyse-ppsps-bxam.onrender.com/', genNatif: true },
+  { ref: 'PGCR',      title: 'PGC SPS — Redaction', icon: '&#128214;', cats: [1,2], lienExterne: 'https://analyse-ppsps-bxam.onrender.com/', genNatif: 'genererPGCNatif' },
   { ref: 'PGC3R',     title: 'PGC Simplifie — Redaction (Cat.3)', icon: '&#128214;', cats: [3], lienExterne: 'https://analyse-ppsps-bxam.onrender.com/', externeSeul: true },
   { ref: 'RJC',       title: 'Registre Journal de Coordination', icon: '&#128212;', cats: [1,2,3] },
   { ref: 'DIF',       title: 'Fiche Diffusion PGC', icon: '&#128226;', cats: [1,2] },
@@ -1213,7 +1213,7 @@ var DOCS = [
   { ref: 'CISSCT-CONV', title: 'CISSCT Convocation', icon: '&#128233;', cats: [1] },
   { ref: 'CISSCT-CR', title: 'CISSCT CR Reunion', icon: '&#127963;', cats: [1] },
   { ref: 'RFM',       title: 'Rapport Fin de Mission', icon: '&#127919;', cats: [1,2,3] },
-  { ref: 'HARMOP',    title: 'Harmonisation PPSPS (via Harmo)', icon: '&#9878;', cats: [1,2,3], lienExterne: 'https://analyse-ppsps-bxam.onrender.com/', externeSeul: true },
+  { ref: 'HARMOP',    title: 'Harmonisation PPSPS', icon: '&#9878;', cats: [1,2,3], lienExterne: 'https://analyse-ppsps-bxam.onrender.com/', genNatif: 'genererHarmonisationNative' },
 ];
 
 function showPage(id) {
@@ -4399,11 +4399,12 @@ function renderDocsGrid() {
     // externeSeul (02/10) : aucun modele local dans CSPS17 pour ce document —
     // seuls Inserer (apres Harmo) et l'historique ont un sens ici.
     // genNatif (10/11, demande d'Alain) : generation native (sans template
-    // docxtemplater, cf. genererPGCNatif ci-dessus) -- pas d'Apercu dans
-    // cette premiere etape du portage (mammoth/previewDoc attend un .docx
-    // produit via le pipeline docxtemplater existant).
+    // docxtemplater, cf. genererPGCNatif/genererHarmonisationNative ci-dessus)
+    // -- nom de la fonction a appeler, pas d'Apercu dans cette premiere etape
+    // du portage (mammoth/previewDoc attend un .docx produit via le pipeline
+    // docxtemplater existant).
     var actionsGeneration = doc.genNatif ?
-      '<button class="btn btn-primary btn-sm" onclick="genererPGCNatif()">Generer</button>' + btnTelecharger
+      '<button class="btn btn-primary btn-sm" onclick="' + doc.genNatif + '()">Generer</button>' + btnTelecharger
       : doc.externeSeul ? '' :
       '<button class="btn btn-primary btn-sm" onclick="generateDocAvecCheck(\'' + doc.ref + '\')">Generer</button>'
       + '<button class="btn btn-outline btn-sm" onclick="previewDoc(\'' + doc.ref + '\')">Apercu</button>'
@@ -5840,6 +5841,167 @@ function genererPGCNatif(){
     window._pgcSansRefsLegales = false;
   }
 }
+
+// 10/11 (demande d'Alain, "fais pareil que pour le PGC") : note d'harmonisation
+// PPSPS generee nativement dans CSPS17, a partir des analyses deja faites avec
+// la Grille Analyse PPSPS (affaire.ppspsAnalyses[], alimentee par le bouton
+// Generer de la carte PPP -- cf. ligne ~6520). Contrairement au PGC, la "vraie"
+// harmonisation d'Harmo s'appuie sur une lecture IA de chaque PPSPS (extraction
+// de champs, synthese, alertes de coactivite calculees sur un planning date) --
+// deux choses que CSPS17 n'a pas (regle du 28/09 : pas d'IA ; pas de planning
+// date par lot, seulement une date de debut + une duree en texte libre, donc
+// pas de calcul de chevauchement fiable). Cette version native reprend ce que
+// CSPS17 a deja de solide et deterministe : les statuts C/I/A/SO et observations
+// que le CSPS a lui-meme saisis pour chaque entreprise analysee, organises dans
+// le meme ordre thematique (R.4532-63 a 67) que la grille PPSPS elle-meme. Pas
+// d'alerte de coactivite par dates dans cette premiere etape (lacune connue,
+// cf. plan_portage_pgc_harmo_vers_csps17.md dans le projet).
+function genererHarmonisationNative(){
+  var affaire = (typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire.id === currentAffaireId)
+    ? terrainAffaire
+    : affaires.find(function(x){ return x.id === currentAffaireId; });
+  if(!affaire){ showToast('Sauvegardez d\'abord l\'affaire', 'error'); return; }
+  var analyses = (affaire.ppspsAnalyses || []).slice().sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
+  if(!analyses.length){ showToast('Analysez d\'abord au moins un PPSPS (carte Grille Analyse PPSPS)', 'error'); return; }
+  var data = collectFormData();
+
+  // Categorie PPSPS_GRID par numero d'item (1-indexe, meme ordre que PPSPS_ITEM_LABELS).
+  var catParItem = {};
+  (function(){
+    var n = 1;
+    PPSPS_GRID.forEach(function(bloc){ bloc.items.forEach(function(){ catParItem[n] = bloc.cat; n++; }); });
+  })();
+  var avisLabels = { favorable: 'Favorable', reserve: 'Favorable sous réserve', defavorable: 'Défavorable' };
+
+  // A la difference de genererPGCNatif(), on ne force pas _forcerNoirPGC ni
+  // _pgcSansRefsLegales ici : comme exporterWord() (harmonisation) cote Harmo,
+  // la note d'harmonisation garde ses couleurs (alertes rouge/vert) et ses
+  // references legales (deplacees en petite note sous le texte par wP/wLi,
+  // comportement par defaut), contrairement a l'export PGC qui les supprime
+  // (decision d'Alain du 19/10, specifique au PGC).
+  try {
+    var c = data.chantier || {};
+    var today = new Date().toLocaleDateString('fr-FR');
+    var body = '';
+    body += wP('NOTE D\'HARMONISATION DES PPSPS',{b:true,sz:36,align:'center',spacing:80,title:true});
+    body += wP('Coordonnateur SPS — Mission d\'harmonisation (R.4532-48)',{sz:22,align:'center',spacing:60,color:'2E75B6',title:true});
+    body += wP('Établie le : '+today,{sz:20,align:'center',spacing:200,color:'64748b'});
+    body += wSep();
+
+    body += wH('1. Contexte du chantier');
+    if(c.nom) body += wFL('Chantier', c.nom);
+    if(data.moa && data.moa.nom) body += wFL('Maître d\'ouvrage', data.moa.nom);
+    body += wFL('PPSPS analysés', analyses.length+' entreprise(s)');
+    if(data.risques && (data.risques.amiante || data.risques.plomb)){
+      body += wP(' ',{sz:8});
+      if(data.risques.amiante) body += wLi('Amiante : signalé sur ce chantier — voir diagnostic/repérage et mesures associées dans les PPSPS concernés.');
+      if(data.risques.plomb) body += wLi('Plomb : signalé sur ce chantier — voir diagnostic/repérage et mesures associées dans les PPSPS concernés.');
+    }
+
+    body += wH('2. Récapitulatif des PPSPS analysés');
+    body += wTable(['Entreprise','Lot','Date','Avis','Points à corriger'],
+      analyses.map(function(a){
+        var nbNonConforme = (a.items||[]).filter(function(it){ return it.statut === 'I' || it.statut === 'A'; }).length;
+        return [a.entNom||'—', a.entLot||'—', formatDateFR(a.date), avisLabels[a.avis]||'—', nbNonConforme ? String(nbNonConforme) : '0'];
+      }), [2400,2000,1400,2200,1800]);
+
+    var alertesTransverses = [];
+    analyses.forEach(function(a){
+      (a.items||[]).forEach(function(it){
+        if(PPSPS_ITEMS_TRANSVERSES.indexOf(it.n) !== -1 && (it.statut === 'I' || it.statut === 'A')){
+          alertesTransverses.push({ent:a.entNom||'Entreprise', label:it.label, statut:it.statut, obs:it.obs});
+        }
+      });
+    });
+    if(alertesTransverses.length){
+      body += wH('3. Points transverses à vérifier entre entreprises');
+      body += wP('Points de coordination (circulation, approvisionnements, cohérence avec le PGC) restés Incomplet ou Absent chez au moins une entreprise — à vérifier pour cohérence avec les PPSPS des autres entreprises du chantier.',{sz:18,spacing:80,color:'64748b'});
+      alertesTransverses.forEach(function(al){
+        body += wLi(al.ent+' — '+al.label+' ('+al.statut+')'+(al.obs?' : '+al.obs:''));
+      });
+    }
+
+    body += wH('4. Détail des points relevés par entreprise');
+    var actionsTxt = [];
+    analyses.forEach(function(a){
+      var nonConformes = (a.items||[]).filter(function(it){ return it.statut === 'I' || it.statut === 'A'; });
+      body += wH2((a.entNom||'Entreprise')+(a.entLot?' — '+a.entLot:''));
+      if(!nonConformes.length){
+        body += wP('Aucun point Incomplet ou Absent relevé.',{sz:18,spacing:60,color:'166534'});
+        return;
+      }
+      var parCat = {};
+      nonConformes.forEach(function(it){
+        var cat = catParItem[it.n] || '';
+        (parCat[cat] = parCat[cat] || []).push(it);
+      });
+      Object.keys(parCat).forEach(function(cat){
+        if(cat) body += wP(cat,{b:true,sz:19,spacing:40});
+        parCat[cat].forEach(function(it){
+          var statutLabel = it.statut === 'I' ? 'Incomplet' : 'Absent';
+          body += wLi(it.label+' — '+statutLabel+(it.obs?' : '+it.obs:''));
+          actionsTxt.push({ent:a.entNom||'Entreprise', demande:'Compléter le PPSPS sur « '+it.label+' »'+(it.obs?' ('+it.obs+')':'')});
+        });
+      });
+    });
+
+    if(actionsTxt.length){
+      body += wH('5. Actions demandées aux entreprises');
+      actionsTxt.forEach(function(ac){ body += wLi(ac.ent+' — '+ac.demande); });
+    }
+
+    var doc='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      +'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>'
+      +body
+      +'<w:sectPr><w:footerReference w:type="default" r:id="rId3"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134"/></w:sectPr>'
+      +'</w:body></w:document>';
+    var ct='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>';
+    var rels='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>';
+    var stylesXml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:lang w:val="fr-FR" w:eastAsia="fr-FR" w:bidi="ar-SA"/></w:rPr></w:rPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style></w:styles>';
+    var relsDoc='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/></Relationships>';
+    var settingsXml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:proofState w:spelling="dirty" w:grammar="dirty"/></w:settings>';
+    var enc=new TextEncoder();
+    var zip=zipStore([
+      {name:'[Content_Types].xml',bytes:enc.encode(ct)},
+      {name:'_rels/.rels',bytes:enc.encode(rels)},
+      {name:'word/document.xml',bytes:enc.encode(doc)},
+      {name:'word/styles.xml',bytes:enc.encode(stylesXml)},
+      {name:'word/settings.xml',bytes:enc.encode(settingsXml)},
+      {name:'word/footer1.xml',bytes:enc.encode(_footerXmlPagination())},
+      {name:'word/_rels/document.xml.rels',bytes:enc.encode(relsDoc)}
+    ]);
+    var out = new Blob([zip], {type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+    var blobUrl = URL.createObjectURL(out);
+    var a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = blobUrl;
+    var now = new Date();
+    var pad = function(n){ return (n<10?'0':'')+n; };
+    var stamp = now.getFullYear()+pad(now.getMonth()+1)+pad(now.getDate())+'-'+pad(now.getHours())+pad(now.getMinutes());
+    a.download = 'CSPS17_HARMOP_'+(data.num||'doc')+'_'+stamp+'.docx';
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(blobUrl); }, 1000);
+
+    var affaireRJC = affaire;
+    if (!affaireRJC.rjc) affaireRJC.rjc = [];
+    affaireRJC.rjc.push({
+      id: 'rjc-'+Date.now(),
+      date: now.toISOString().slice(0,10),
+      nature: RJC_NATURE_PAR_REF['HARMOP'] || DOC_TITRES['HARMOP'] || 'HARMOP',
+      intervenants: '',
+      titre: DOC_TITRES['HARMOP'] || 'Harmonisation PPSPS',
+      docRef: 'HARMOP',
+      fichierNom: a.download,
+    });
+    persistAffaires();
+    try { renderRJCTab(); } catch(er){}
+    try { renderDocsGrid(); } catch(er2){}
+    showToast('Note d\'harmonisation generee ('+analyses.length+' PPSPS)', 'success');
+  } catch(err) {
+    showToast('Erreur lors de la generation de la note d\'harmonisation', 'error');
+    throw err;
+  }
+}
 // ============================================================================
 
 function cocherCategorie(xmlStr, cat) {
@@ -6811,6 +6973,7 @@ var RJC_NATURE_PAR_REF = {
 
 var DOC_TITRES = {
   'PGCR': 'Plan General de Coordination',
+  'HARMOP': 'Note d\'Harmonisation PPSPS',
   'FIC': 'Fiche IC — Inspection Commune',
   'VIS': 'CR Visite de Chantier',
   'IC':  'Courrier CSPS',
