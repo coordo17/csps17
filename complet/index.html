@@ -7187,7 +7187,7 @@ var DOC_FILES = {
   'PGCR':        'CSPS17_PGC_v1.docx',
   'PGC3R':       'CSPS17_PGC_Simplifie_Cat3_v1.docx',
   'DIF':         'CSPS17_Fiche_Diffusion_PGC_v3.docx',
-  'FIC':         'Fiche_IC_CSPS17_v18.docx',
+  'FIC':         'Fiche_IC_CSPS17_v19.docx',
   'FIC3':        'Fiche_IC_Cat3_CSPS17_v6.docx',
   'IC':          'CSPS17_Courrier_CSPS_v2.docx',
   'PPP':         'CSPS17_Grille_Analyse_PPSPS_v5.docx',
@@ -9385,6 +9385,67 @@ function icPrestatairesHtml() {
 
 // 7D : risques propres a l'entreprise (R.4532-66 2°)
 var IC_ORIGINES = ['Mode op\u00e9ratoire', 'Mat\u00e9riels / installations', 'Produits', 'D\u00e9placements', 'Organisation du chantier'];
+// Points de coordination propres au lot, a verifier/discuter lors de l'IC
+// -- distincts des RISQUES (IC_METIERS_RISQUES) : ce sont des points de
+// methode/organisation issus du PGC, pas des risques avec gravite.
+// Demande d'Alain du 12/11 (comparaison avec la section III des PV IC de
+// Fred/MC2 -- B1-B9 par lot), adaptee au PGC natif CSPS17 (sections 1 a 6,
+// pas de sous-numerotation par metier dans le PGC genere -- on reference
+// donc la section generale, jamais un numero invente qui n'existe pas
+// dans le document reellement produit). Catalogue demarre sur les metiers
+// du chantier Auray (12/11) ; a completer au fil des chantiers comme
+// IC_METIERS_RISQUES.
+var IC_POINTS_PGC_LOT = {
+'démolition_désamiantage': [
+  { point: 'Diagnostic amiante avant travaux consulté et pris en compte avant toute intervention.', ref: 'PGC §2' },
+  { point: 'Méthode de déconstruction confirmée (ordre des opérations, sapement interdit) et périmètre de sécurité balisé.', ref: 'PGC §3' },
+  { point: 'Consignation effective des réseaux concernés avant démarrage (attestations à fournir au CSPS).', ref: 'PGC §3' },
+  { point: 'Mode d’évacuation des gravats/déchets confirmé (tri, filière le cas échéant pour terres polluées).', ref: 'PGC §5' },
+],
+'terrassement_vrd': [
+  { point: 'DT/DICT déposées et plans de récolement des réseaux existants disponibles.', ref: 'PGC §2' },
+  { point: 'Phasage VRD confirmé par rapport aux autres lots présents (coactivité, croisements d’engins).', ref: 'PGC §4' },
+  { point: 'Mode d’évacuation des terres polluées précisé le cas échéant (filière agréée).', ref: 'PGC §5' },
+],
+'gros_oeuvre': [
+  { point: 'Phasage des coulages béton et zone de rotation des engins (toupies, pompe) confirmés.', ref: 'PGC §4' },
+  { point: 'Protections collectives contre les chutes de hauteur sur coffrage/décoffrage vérifiées.', ref: 'PGC §3' },
+],
+'charpente_couverture': [
+  { point: 'Conditions météo limites (vent) pour le levage et les travaux en toiture rappelées.', ref: 'PGC §3' },
+  { point: 'Périmètre de sécurité sous la zone de travaux en hauteur (chutes d’objets) confirmé.', ref: 'PGC §4' },
+],
+'serrurerie_metallerie': [
+  { point: 'Habilitations/qualifications soudage vérifiées ; permis de feu points chauds requis.', ref: 'PGC §3' },
+],
+'étanchéité_isolation': [
+  { point: 'Permis de feu (chalumeau) et moyens d’extinction sur poste vérifiés.', ref: 'PGC §3' },
+],
+'dallage': [
+  { point: 'Zone de coulage/toupies confirmée hors circulation des autres lots.', ref: 'PGC §4' },
+],
+'vitrerie_miroiterie': [
+  { point: 'Plan de manutention/levage des éléments vitrés lourds vérifié.', ref: 'PGC §3' },
+],
+'électricité': [
+  { point: 'Habilitations électriques du personnel vérifiées ; procédure de consignation avant intervention sur réseau existant confirmée.', ref: 'PGC §3' },
+],
+'plomberie_cvc': [
+  { point: 'FDS des produits utilisés (colles, fluides) disponibles ; ventilation des locaux vérifiée.', ref: 'PGC §3' },
+],
+'second_oeuvre': [
+  { point: 'Phasage avec les autres lots présents dans les mêmes zones confirmé (coactivité cloisons/carrelage).', ref: 'PGC §4' },
+],
+'montage_rayonnage': [
+  { point: 'Plan de levage et calage/ancrage des structures avant mise en charge vérifiés.', ref: 'PGC §3' },
+],
+'cloture_portail': [
+  { point: 'Périmètre de sécurité pendant la pose à proximité des accès/circulations confirmé.', ref: 'PGC §4' },
+],
+'peinture': [
+  { point: 'FDS des produits utilisés disponibles ; ventilation en espace confiné vérifiée.', ref: 'PGC §3' },
+],
+};
 var icRpCount = 0;
 function icNormTxt(x) { // = _normTxt d'Harmo
   return String(x || '').toLowerCase().replace(/\u0153/g, 'oe').replace(/\u0152/g, 'oe').replace(/\u00e6/g, 'ae').replace(/\u00c6/g, 'ae')
@@ -9454,6 +9515,57 @@ function ic7dCollecter() {
     return r.querySelector('.ic7d-ok').checked && r.querySelector('.ic7d-lab').value.trim();
   }).map(function (r) {
     return { label: r.querySelector('.ic7d-lab').value.trim(), origine: r.querySelector('.ic7d-orig').value, mesure: r.querySelector('.ic7d-mes').value.trim(), gravite: parseInt(r.getAttribute('data-g'), 10) || 0 };
+  });
+}
+
+// Points de coordination propres au lot (PGC) -- meme principe que 7D
+// (ic7d*) mais catalogue distinct (IC_POINTS_PGC_LOT), pas de gravite/gestion
+// origine : juste un point a verifier, sa reference PGC, et une case
+// "vu" + observation libre, remplis pendant l'IC.
+function icLotHtml() {
+  return sectionHeader('D', 'Points de coordination propres au lot (PGC)', '&#128203;')
+    + '<p style="font-size:12px;color:var(--text-light);margin-bottom:8px;">Points de méthode/organisation issus du PGC, propres au lot détecté -- à vérifier ou discuter lors de l’IC, non exhaustif.</p>'
+    + '<div id="icLot-liste"></div>'
+    + '<button type="button" class="btn btn-outline btn-sm" onclick="icLotAjouter(\'\', \'\', false, true)">+ Ajouter un point</button> '
+    + '<button type="button" class="btn btn-outline btn-sm" onclick="icLotProposer(true)">&#128260; Proposer les points du lot</button>'
+    + sectionEnd();
+}
+function icLotAjouter(point, ref, vu, proposition) {
+  var liste = document.getElementById('icLot-liste'); if (!liste) return;
+  var d = document.createElement('div');
+  d.className = 'icLot-row'; if (proposition) d.setAttribute('data-prop', '1');
+  d.style.cssText = 'padding:6px 0;border-bottom:1px solid var(--border);' + (proposition ? 'background:#f8fafc;' : '');
+  d.innerHTML = '<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;">'
+    + '<input type="checkbox" class="icLot-ok" title="Vu / discuté avec l’entreprise"' + (vu ? ' checked' : '') + ' style="width:18px;height:18px;">'
+    + '<textarea class="icLot-pt" rows="2" placeholder="Point à vérifier / discuter" style="flex:1;min-width:0;padding:6px;border:1px solid var(--border);border-radius:5px;font-size:13px;font-family:inherit;resize:vertical;">' + icEscAttr(point || '') + '</textarea>'
+    + '<input type="text" class="icLot-ref" placeholder="Réf. PGC" value="' + icEscAttr(ref || '') + '" style="width:90px;padding:6px;border:1px solid var(--border);border-radius:5px;font-size:12px;">'
+    + '<button type="button" class="btn-remove-ent" onclick="this.closest(\'.icLot-row\').remove()">x</button></div>'
+    + '<input type="text" class="icLot-obs" placeholder="Observations" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:5px;font-size:12px;">';
+  liste.appendChild(d);
+}
+function icLotProposer(depuisBouton) {
+  var liste = document.getElementById('icLot-liste'); if (!liste) return;
+  Array.prototype.slice.call(liste.querySelectorAll('.icLot-row[data-prop="1"]')).forEach(function (r) {
+    if (!r.querySelector('.icLot-ok').checked) r.remove();
+  });
+  var deja = Array.prototype.slice.call(liste.querySelectorAll('.icLot-pt')).map(function (i) { return i.value; });
+  var lot = getVal('fic-ent-lot');
+  var n = 0;
+  icMetiersDuLot(lot).forEach(function (k) {
+    (IC_POINTS_PGC_LOT[k] || []).forEach(function (p) {
+      if (deja.indexOf(p.point) !== -1) return;
+      deja.push(p.point);
+      icLotAjouter(p.point, p.ref, false, true); n++;
+    });
+  });
+  var noms = icMetiersDuLot(lot).map(function (k) { return icTexteHarmo((IC_METIERS_RISQUES[k] || {}).label || k); });
+  if (depuisBouton) showToast(n ? n + ' point(s) proposé(s) (' + noms.join(', ') + ')' : 'Aucun point de coordination catalogué pour ce lot', n ? 'success' : 'error');
+}
+function icLotCollecter() {
+  return Array.prototype.slice.call(document.querySelectorAll('#icLot-liste .icLot-row')).filter(function (r) {
+    return r.querySelector('.icLot-pt').value.trim();
+  }).map(function (r) {
+    return { point: r.querySelector('.icLot-pt').value.trim(), ref: r.querySelector('.icLot-ref').value.trim(), vu: r.querySelector('.icLot-ok').checked, observation: r.querySelector('.icLot-obs').value.trim() };
   });
 }
 
@@ -9786,6 +9898,11 @@ function icApresChoixEntreprise(ent) {
   var liste7d = document.getElementById('ic7d-liste');
   if (liste7d) liste7d.innerHTML = '';
   ic7dProposer(false);
+  // Meme vidage/re-proposition pour les points de coordination par lot
+  // (sinon accumulation entre entreprises -- meme bug que 7D, cf. note ci-dessus).
+  var listeLot = document.getElementById('icLot-liste');
+  if (listeLot) listeLot.innerHTML = '';
+  if (typeof icLotProposer === 'function') icLotProposer(false);
 }
 
 // Point 13 : compagnon sans delegation -> pas d'IC, notification du report
@@ -9830,6 +9947,7 @@ function icCompleterFicData(d) {
   d.donneurOrdre = donneur ? donneur.nom : ''; d.donneurPresent = getCheck('ic-do-present');
   d.prestataires = getVal('ic-prestataires');
   d.risquesPropres = ic7dCollecter();
+  d.pointsPGCLot = icLotCollecter();
   d.presents = icCollecterPresents();
   d.pointsPPSPS = getVal('ic-points-ppsps');
   d.diffusion = { moa: getCheck('ic-diff-moa'), moe: getCheck('ic-diff-moe'), ent: getCheck('ic-diff-ent'), rjc: getCheck('ic-diff-rjc') };
@@ -10109,6 +10227,19 @@ function injecterICComplete(zip, d, isCat3) {
     var debut7d = icEnfantsW(t7d, 'tr').length === 2 ? 1 : 2;
     icRemplirLignes(doc, t7d, debut7d, rp.length ? rp : [['Aucun risque propre relev\u00e9 lors de l\u2019IC', '', '']]);
   }
+  // Points de coordination propres au lot (PGC) -- nouvelle table ajoutee
+  // au modele v19, juste apres la table Section C (meme principe de
+  // detection icMetiersDuLot que 7D, cf. IC_POINTS_PGC_LOT). Les points
+  // non "vus" restent affiches (c'est une checklist a traiter, pas un
+  // historique de ce qui a deja ete fait) ; seule l'observation libre
+  // distingue le traitement reel pendant l'IC.
+  var lotPts = (d.pointsPGCLot || []).map(function (p) {
+    return [(p.vu ? '✓ ' : '') + p.point, p.ref || '', p.observation || ''];
+  });
+  var tLot = icTable(doc, 'Point à vérifier / discuter');
+  if (tLot) {
+    icRemplirLignes(doc, tLot, 2, lotPts.length ? lotPts : [['Aucun point catalogué pour ce lot', '', '']]);
+  }
   // Points a reporter dans le PPSPS : les risques reglementaires coches en
   // §6 (loi:true -- arrete 25/02/2003, les plus graves : hauteur, amiante,
   // demolition, HTB...) doivent y figurer explicitement, pas seulement les
@@ -10313,6 +10444,9 @@ function genFormulaireFIC() {
 
   // 7D risques propres a l'entreprise
   html2 += ic7dHtml();
+
+  // Points de coordination propres au lot (PGC)
+  html2 += icLotHtml();
 
   // Section I Cat.3 - Explications PGC (visible seulement si cat=3)
   if (terrainAffaire.cat === 3) {
