@@ -2946,7 +2946,7 @@ var PIECES_DOSSIER = [
   { ref: 'PGC',  title: 'PGC \u2014 Plan General de Coordination', icon: '&#128216;', note: 'PGC recu / diffuse' },
   { ref: 'ICR',  title: 'Inspection commune realisee', icon: '&#128221;', note: 'IC signee deposee \u2014 analyse au depot (R.4532-14 a 19)' },
   { ref: 'DIAG', title: 'Rapports & diagnostics', icon: '&#129514;', note: 'RAAT, CREP, geotech... — analyse IA au depot' },
-  { ref: 'PLAN', title: 'Plannings (entreprises)', icon: '&#128197;', note: 'Deposez les plannings des entreprises — analyse coordination (co-activite, phases critiques, alertes) a chaque depot' },
+  { ref: 'PLAN', title: 'Plannings (entreprises)', icon: '&#128197;', note: 'Deposez le planning de phasage (Gantt) — alertes mots-cles + chevauchements de dates par lot calcules au depot, pour la fiche IC (pas d\'IA)' },
   { ref: 'CONTRAINTES', title: 'Contraintes du site', icon: '&#9888;', note: 'Fichier OU texte libre — servitudes, reseaux, voisinage, exploitation, acces... — analyse IA (element du PGC)' },
   { ref: 'PLANS', title: 'Plans (masse, PIC, coupes)', icon: '&#128506;', note: 'Deposez les plans (PDF/DOCX) — extraction du texte + analyse IA (element du PGC)' },
   { ref: 'PPSPS', title: 'PPSPS entreprises (harmonisation)', icon: '&#128203;', note: 'Deposez le PPSPS de chaque entreprise — analyse d\'harmonisation au depot : coherence PGC, coactivite, risques importes/exportes (R.4532-48)' },
@@ -3678,6 +3678,142 @@ function repererPassagesMultiples(texte, motsCles, maxResultats) {
 // Appelee au depot d'un planning : lit le PDF (pdf.js, deterministe, pas
 // d'IA) et propose les passages reperes dans le champ "Alertes" -- jamais
 // ecrit directement dans l'affaire.
+// Planning de phasage -- extraction deterministe de la hierarchie par
+// colonne (13/11, suite a la decouverte du vrai planning Gantt d'Auray,
+// absent du dossier donne a Harmo) : meme principe que le parseur planning
+// d'Harmo (pdftotext + "le plus grand vide ENTRE deux colonnes" pour
+// retrouver la hierarchie phase > lot > tache), jamais d'IA. On ne garde
+// que le niveau "lot" (2e colonne la plus a gauche, sous la colonne
+// "PHASE") avec sa date de debut et sa duree, pour calculer les
+// chevauchements de dates entre lots -- la co-activite reelle, datee,
+// que les CBT (generiques sur ce chantier, cf. 13/11) ne contiennent pas.
+function parserPlanningPhasage(texte) {
+  var lignes = String(texte || '').split(/\r?\n/);
+  var reRowStart = /^(\s*)(\d+)\s+(\S.*)$/;
+  var reJours = /(\d+(?:[.,]\d+)?)\s*jours?/i;
+  var reDate = /(Lun|Mar|Mer|Jeu|Ven|Sam|Dim)\.?\s*(\d{2})\/(\d{2})\/(\d{2})/i;
+  var lignesLogiques = [], cur = null;
+  lignes.forEach(function (ligne) {
+    var m = reRowStart.exec(ligne);
+    if (m) {
+      if (cur) lignesLogiques.push(cur);
+      var avantLabel = ligne.slice(0, ligne.length - m[3].length);
+      cur = { num: m[2], col: avantLabel.length, corps: m[3], extra: [] };
+    } else if (cur && ligne.trim()) {
+      cur.extra.push(ligne.trim());
+    }
+  });
+  if (cur) lignesLogiques.push(cur);
+  var taches = [];
+  // Un Gantt large est souvent imprime sur plusieurs pages, chacune
+  // repetant TOUTES les lignes (memes N° de ligne) avec juste une fenetre
+  // de dates differente -- sans dedoublonner par N°, chaque tache serait
+  // comptee 2 ou 3 fois (fausse le reperage du niveau "lot" par comptage).
+  // On garde la 1ere occurrence de chaque N° de ligne (date/duree deja
+  // capturees sur la premiere page ou la tache apparait).
+  var numsVus = {};
+  lignesLogiques.forEach(function (r) {
+    if (numsVus[r.num]) return;
+    numsVus[r.num] = true;
+    var full = r.corps + ' ' + r.extra.join(' ');
+    var jm = reJours.exec(full);
+    if (!jm) return;
+    var label = full.slice(0, jm.index).replace(/\s+/g, ' ').trim();
+    var reste = full.slice(jm.index + jm[0].length);
+    var dm = reDate.exec(reste);
+    var debut = dm ? new Date(2000 + parseInt(dm[4], 10), parseInt(dm[3], 10) - 1, parseInt(dm[2], 10)) : null;
+    taches.push({ col: r.col, label: label, dureeJ: parseFloat(jm[1].replace(',', '.')), debut: debut });
+  });
+  var colonnes = [], compteParCol = {};
+  taches.forEach(function (t) {
+    if (colonnes.indexOf(t.col) === -1) colonnes.push(t.col);
+    compteParCol[t.col] = (compteParCol[t.col] || 0) + 1;
+  });
+  colonnes.sort(function (a, b) { return a - b; });
+  // Niveau "lot" = la 1ere colonne, SAUF si elle ressemble a un habillage
+  // "PHASE X" (tres peu de lignes, ex. 3 phases sur tout le planning) et
+  // qu'il existe une colonne suivante -- auquel cas le vrai niveau "lot"
+  // est la colonne d'apres (cas du planning principal d'Auray, avec PHASE
+  // 1/2/3 au-dessus des lots). Sans habillage "PHASE" (cas du planning du
+  // lot interieur, 2 niveaux seulement), la 1ere colonne EST le niveau lot.
+  var colLot = colonnes[0];
+  if (colonnes.length > 1 && compteParCol[colonnes[0]] <= 3) colLot = colonnes[1];
+  var colTacheIdx = colonnes.indexOf(colLot) + 1;
+  var colTache = colonnes.length > colTacheIdx ? colonnes[colTacheIdx] : null;
+  var lots = [];
+  taches.forEach(function (t, i) {
+    if (t.col !== colLot) return;
+    var debut = t.debut;
+    // Si la date n'a pas ete captee sur la ligne du lot (libelle replie sur
+    // 2 lignes dans le PDF), on prend celle de la 1ere sous-tache trouvee.
+    if (!debut && colTache) {
+      for (var j = i + 1; j < taches.length; j++) {
+        if (taches[j].col < colTache) break;
+        if (taches[j].col === colTache && taches[j].debut) { debut = taches[j].debut; break; }
+      }
+    }
+    if (!debut) return;
+    var fin = new Date(debut.getTime());
+    fin.setDate(fin.getDate() + Math.ceil(t.dureeJ * 7 / 5)); // approx jours ouvres -> jours calendaires
+    lots.push({ label: t.label, debut: debut, fin: fin });
+  });
+  return lots;
+}
+function detecterCoactivitesPlanning(lots) {
+  var res = [];
+  for (var i = 0; i < lots.length; i++) {
+    for (var j = i + 1; j < lots.length; j++) {
+      var a = lots[i], b = lots[j];
+      if (icNormTxt(a.label) === icNormTxt(b.label)) continue;
+      var debutChev = a.debut > b.debut ? a.debut : b.debut;
+      var finChev = a.fin < b.fin ? a.fin : b.fin;
+      if (debutChev <= finChev) res.push({ a: a.label, b: b.label, debut: debutChev, fin: finChev });
+    }
+  }
+  return res;
+}
+// Correspondance texte libre (lot saisi en fiche IC / nom entreprise) <->
+// libelle du planning -- par mots communs (>=2 car., hors mots-outils),
+// pour retrouver un groupe nomme par entreprise (ex. "BJ BRESTATIONS" au
+// planning vs "BJ Prestation" saisi par Alain), en plus de la correspondance
+// par metier (icMetiersDuLot) qui couvre deja les lots nommes par corps
+// d'etat (VRD, GROS OEUVRE...).
+// Mots-outils + termes BTP trop generiques pour servir de signal de
+// correspondance (sinon "Gros Oeuvre" matche a tort "Second-Oeuvre" via le
+// seul mot "oeuvre" -- bug trouve en testant sur le planning reel d'Auray).
+var IC_MOTS_OUTILS = ['de', 'du', 'la', 'le', 'les', 'des', 'et', 'en', 'sur', 'au', 'aux', 'un', 'une', 'ou', 'a',
+  'oeuvre', 'lot', 'lots', 'travaux', 'chantier', 'phase', 'batiment', 'stockage'];
+function planningLabelCorrespond(label, texteSaisi) {
+  var m1 = icNormTxt(label).split(' ').filter(function (m) { return m.length >= 2 && IC_MOTS_OUTILS.indexOf(m) === -1; });
+  var m2 = icNormTxt(texteSaisi).split(' ').filter(function (m) { return m.length >= 2 && IC_MOTS_OUTILS.indexOf(m) === -1; });
+  return m1.some(function (m) { return m2.indexOf(m) !== -1; });
+}
+async function extraireEtStockerPlanningPhasage(file) {
+  var affaire = currentAffaireObj();
+  if (!affaire) return;
+  var texte;
+  try { texte = await extraireTexteFichier(file); } catch (err) { return; }
+  if (!texte || texte.replace(/\s/g, '').length < 30) return;
+  var lots = parserPlanningPhasage(texte);
+  if (lots.length < 2) return; // pas un planning Gantt exploitable (ou format non reconnu)
+  var coactivites = detecterCoactivitesPlanning(lots);
+  var f = affaireFaits(affaire);
+  // Accumulation (pas d'ecrasement) : un chantier peut avoir plusieurs
+  // plannings (ex. Gantt principal + planning du lot interieur separe,
+  // cas reel d'Auray) -- chaque depot ajoute ses lots/co-activites sans
+  // effacer ceux deja reperes dans un planning depose avant.
+  if (!f.planningLots) f.planningLots = [];
+  if (!f.planningCoactivites) f.planningCoactivites = [];
+  lots.forEach(function (l) {
+    var existe = f.planningLots.some(function (x) { return x.label === l.label && x.debut === l.debut.toISOString(); });
+    if (!existe) f.planningLots.push({ label: l.label, debut: l.debut.toISOString(), fin: l.fin.toISOString(), source: file.name });
+  });
+  coactivites.forEach(function (c) {
+    var existe = f.planningCoactivites.some(function (x) { return x.a === c.a && x.b === c.b && x.debut === c.debut.toISOString(); });
+    if (!existe) f.planningCoactivites.push({ a: c.a, b: c.b, debut: c.debut.toISOString(), fin: c.fin.toISOString(), source: file.name });
+  });
+  persistAffaires();
+}
 async function ouvrirFaitsPlanningDepuisFichier(file) {
   var affaire = currentAffaireObj();
   if (!affaire) { showToast('Ouvrez une affaire avant de deposer un planning', 'error'); return; }
@@ -3869,6 +4005,9 @@ async function deposerPieceDossier(affaire, file, type, bulk) {
     // interromprait un depot de plusieurs fichiers. Relus plus tard par
     // Alain au moment de l'IC (section D, bouton "Proposer les points du lot").
     if (type === 'CBT') extraireEtStockerPointsCBTParLot(file);
+    // Co-activites datees reperees dans le planning de phasage (13/11) :
+    // meme principe, silencieux (bulk ou pas), relu plus tard en fiche IC.
+    if (type === 'PLAN') extraireEtStockerPlanningPhasage(file);
     return 'ok';
   } catch (err) {
     showToast('Erreur depot : ' + err.message, 'error');
@@ -4311,7 +4450,12 @@ function faitsVierges() {
     // cle = metier (IC_METIER_MOTS), valeur = liste de {theme, texte, source}.
     // Jamais injectes directement : proposes en fiche IC (section D) pour
     // relecture/validation par Alain, au meme titre que IC_POINTS_PGC_LOT.
-    cbtPoints: {}
+    cbtPoints: {},
+    // Co-activites reperees dans le planning de phasage depose (13/11) --
+    // calcul deterministe des chevauchements de dates entre lots (cf.
+    // parserPlanningPhasage), jamais invente. Memes garde-fous que cbtPoints :
+    // proposees en fiche IC (section D), jamais injectees directement.
+    planningLots: [], planningCoactivites: []
   };
 }
 function faitsMigrer(affaire) {
@@ -4382,6 +4526,8 @@ function affaireFaits(affaire) {
   if (!affaire.faits.alertesPlanning) affaire.faits.alertesPlanning = [];
   if (!affaire.faits.plans) affaire.faits.plans = faitsVierges().plans;
   if (!affaire.faits.cbtPoints) affaire.faits.cbtPoints = {};
+  if (!affaire.faits.planningLots) affaire.faits.planningLots = [];
+  if (!affaire.faits.planningCoactivites) affaire.faits.planningCoactivites = [];
   return affaire.faits;
 }
 
@@ -9585,7 +9731,7 @@ function ic7dCollecter() {
 // "vu" + observation libre, remplis pendant l'IC.
 function icLotHtml() {
   return sectionHeader('D', 'Points de coordination propres au lot (PGC)', '&#128203;')
-    + '<p style="font-size:12px;color:var(--text-light);margin-bottom:8px;">Points de méthode/organisation issus du PGC, propres au lot détecté -- à vérifier ou discuter lors de l’IC, non exhaustif. Les points marqués « CBT » viennent d’un passage repéré automatiquement dans le CBT déposé pour ce lot (texte réel, à vérifier).</p>'
+    + '<p style="font-size:12px;color:var(--text-light);margin-bottom:8px;">Points de méthode/organisation issus du PGC, propres au lot détecté -- à vérifier ou discuter lors de l’IC, non exhaustif. Les points marqués « CBT » viennent d’un passage repéré automatiquement dans le CBT déposé pour ce lot (texte réel, à vérifier). Les points marqués « Planning » viennent d’un chevauchement de dates calculé depuis le planning de phasage déposé (à coordonner, pas une mesure décidée à votre place).</p>'
     + '<div id="icLot-liste"></div>'
     + '<button type="button" class="btn btn-outline btn-sm" onclick="icLotAjouter(\'\', \'\', false, true)">+ Ajouter un point</button> '
     + '<button type="button" class="btn btn-outline btn-sm" onclick="icLotProposer(true)">&#128260; Proposer les points du lot</button>'
@@ -9629,8 +9775,27 @@ function icLotProposer(depuisBouton) {
       icLotAjouter(lib, 'CBT', false, true); n++; nCbt++;
     });
   });
+  // Co-activités datées, calculées depuis le planning de phasage déposé
+  // (13/11) -- correspondance par métier OU par mots communs avec le lot/nom
+  // d'entreprise saisis (ex. "BJ BRESTATIONS" au planning <-> "BJ Prestation"
+  // saisi), car le planning nomme parfois les groupes par entreprise plutôt
+  // que par corps d'état.
+  var nomEnt = getVal('fic-ent-nom');
+  var coactivitesLot = affaireLot ? (affaireFaits(affaireLot).planningCoactivites || []) : [];
+  var nPlanning = 0;
+  coactivitesLot.forEach(function (c) {
+    var aCorrespond = planningLabelCorrespond(c.a, lot) || planningLabelCorrespond(c.a, nomEnt);
+    var bCorrespond = planningLabelCorrespond(c.b, lot) || planningLabelCorrespond(c.b, nomEnt);
+    if (!aCorrespond && !bCorrespond) return;
+    var autre = aCorrespond ? c.b : c.a;
+    var debut = new Date(c.debut), fin = new Date(c.fin);
+    var lib = 'Co-activité avec « ' + autre + ' » (planning de phasage) du ' + debut.toLocaleDateString('fr-FR') + ' au ' + fin.toLocaleDateString('fr-FR') + ' -- à coordonner.';
+    if (deja.indexOf(lib) !== -1) return;
+    deja.push(lib);
+    icLotAjouter(lib, 'Planning', false, true); n++; nPlanning++;
+  });
   var noms = icMetiersDuLot(lot).map(function (k) { return icTexteHarmo((IC_METIERS_RISQUES[k] || {}).label || k); });
-  if (depuisBouton) showToast(n ? n + ' point(s) proposé(s) (' + noms.join(', ') + ')' + (nCbt ? ' dont ' + nCbt + ' repéré(s) dans le CBT' : '') : 'Aucun point de coordination catalogué pour ce lot', n ? 'success' : 'error');
+  if (depuisBouton) showToast(n ? n + ' point(s) proposé(s) (' + noms.join(', ') + ')' + (nCbt ? ' dont ' + nCbt + ' repéré(s) dans le CBT' : '') + (nPlanning ? ' dont ' + nPlanning + ' co-activité(s) du planning' : '') : 'Aucun point de coordination catalogué pour ce lot', n ? 'success' : 'error');
 }
 function icLotCollecter() {
   return Array.prototype.slice.call(document.querySelectorAll('#icLot-liste .icLot-row')).filter(function (r) {
