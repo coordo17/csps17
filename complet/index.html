@@ -3046,8 +3046,7 @@ async function texteRapideClassement(file) {
   } catch (e) { /* fichier illisible (scanne sans OCR, .doc binaire...) : classement par contenu abandonne */ }
   return '';
 }
-async function deviserTypeParContenu(file) {
-  var texte = await texteRapideClassement(file);
+function classerTexteParContenu(texte) {
   var n = normFichierClassement(texte);
   if (!n) return null;
   for (var i = 0; i < TYPE_MOTS_CLES_CONTENU.length; i++) {
@@ -3055,6 +3054,139 @@ async function deviserTypeParContenu(file) {
     for (var j = 0; j < mots.length; j++) { if (n.indexOf(normFichierClassement(mots[j])) >= 0) return ref; }
   }
   return null;
+}
+
+// 13/11 (demande d'Alain, suite au classement par contenu ci-dessus) :
+// pre-remplir "Identification de l'operation" (designation, adresse, maitre
+// d'ouvrage, nature des travaux) quand le PGC et/ou une "Fiche affaire"
+// (document de passation type MC2) font partie du lot importe -- meme
+// principe que le bouton "Importer depuis la Convention SPS" : jamais un
+// champ deja rempli n'est ecrase, et tout est signale "a verifier".
+//
+// Piege particulier a ces 2 documents : leur en-tete est un TABLEAU a 2
+// colonnes (ex. PGC : "Projet / Site : CHAUSSON AURAY" a gauche, "Indice /
+// Date : Indice 00" a droite, sur la MEME ligne visuelle). Une lecture
+// lineaire du texte PDF (comme repererClauseCBT/texteRapideClassement plus
+// haut) entrelace ces 2 colonnes et donne un charabia inexploitable (verifie
+// sur le PGC reel d'Auray). On reconstitue donc 2 colonnes separees a partir
+// de la position horizontale (x) de chaque item de texte PDF, en detectant
+// le plus grand "trou" horizontal pres du milieu de page : un paragraphe
+// pleine largeur (ex. "Nature des travaux" dans la Fiche affaire, qui est
+// EN DESSOUS du tableau, pas dedans) n'a pas ce trou et reste intact.
+// Toujours sans IA, juste de la geometrie du PDF.
+async function lireColonnesPdfPage(page) {
+  var tc = await page.getTextContent();
+  var vp = page.getViewport({ scale: 1 });
+  var milieu = vp.width / 2;
+  var items = tc.items.map(function (it) {
+    var x = it.transform[4], y = it.transform[5];
+    return { str: it.str, x: x, x1: x + (it.width || 0), y: y };
+  }).filter(function (it) { return it.str && it.str.trim(); });
+  items.sort(function (a, b) { return (b.y - a.y) || (a.x - b.x); });
+  var lignes = [], tolY = 3;
+  items.forEach(function (it) {
+    var ligne = lignes[lignes.length - 1];
+    if (ligne && Math.abs(ligne.y - it.y) <= tolY) ligne.items.push(it);
+    else lignes.push({ y: it.y, items: [it] });
+  });
+  var gaucheLignes = [], droiteLignes = [];
+  lignes.forEach(function (ligne) {
+    var mots = ligne.items.slice().sort(function (a, b) { return a.x - b.x; });
+    var meilleurGap = 0, idxCoupe = -1;
+    for (var i = 0; i < mots.length - 1; i++) {
+      var gap = mots[i + 1].x - mots[i].x1;
+      var centreGap = (mots[i + 1].x + mots[i].x1) / 2;
+      if (gap > 18 && Math.abs(centreGap - milieu) < 80 && gap > meilleurGap) { meilleurGap = gap; idxCoupe = i; }
+    }
+    if (idxCoupe < 0) {
+      gaucheLignes.push(mots.map(function (m) { return m.str; }).join(' '));
+    } else {
+      gaucheLignes.push(mots.slice(0, idxCoupe + 1).map(function (m) { return m.str; }).join(' '));
+      droiteLignes.push(mots.slice(idxCoupe + 1).map(function (m) { return m.str; }).join(' '));
+    }
+  });
+  return { gauche: gaucheLignes.join(' \n '), droite: droiteLignes.join(' \n ') };
+}
+async function lireColonnesPdf(file, maxPages) {
+  if (typeof pdfjsLib === 'undefined') return { gauche: '', droite: '' };
+  var ab = await file.arrayBuffer();
+  var pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+  var n = Math.min(pdf.numPages, maxPages || 2);
+  var gauche = '', droite = '';
+  for (var i = 1; i <= n; i++) {
+    var page = await pdf.getPage(i);
+    var col = await lireColonnesPdfPage(page);
+    gauche += col.gauche + ' \n ';
+    droite += col.droite + ' \n ';
+  }
+  return { gauche: gauche, droite: droite };
+}
+// Capture brute (sans ecraser les \n internes, contrairement a captureEntre)
+// pour pouvoir ensuite re-decouper en lignes (ex: 1re ligne = designation,
+// lignes suivantes = adresse).
+function captureBruteEntre(texte, labelDebut, labelsFin, maxLen) {
+  function reSouple(label) { return label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+').replace(/-/g, '\\s*-\\s*'); }
+  var reDebut = new RegExp(reSouple(labelDebut) + '\\s*:?\\s*', 'i');
+  var mDebut = texte.match(reDebut);
+  if (!mDebut) return '';
+  var start = mDebut.index + mDebut[0].length;
+  var rest = texte.slice(start, start + (maxLen || 300));
+  var endIdx = rest.length;
+  (labelsFin || []).forEach(function (lf) {
+    var reFin = new RegExp(reSouple(lf), 'i');
+    var mFin = rest.match(reFin);
+    if (mFin && mFin.index < endIdx) endIdx = mFin.index;
+  });
+  return rest.slice(0, endIdx);
+}
+function lignesDe(brut) {
+  return brut.split('\n').map(function (l) { return l.replace(/\s+/g, ' ').trim(); }).filter(Boolean);
+}
+function sembleEnTetePGC(texte) { return /plan\s*g[ée]n[ée]ral\s*de\s*coordination|p\s*\.?\s*g\s*\.?\s*c\s*\.?\s*s\s*\.?\s*p\s*\.?\s*s\s*\.?/i.test(texte); }
+function sembleFicheAffaire(texte) { return /fiche\s+affaire/i.test(texte) && /identification\s+de\s+l.op[ée]ration/i.test(texte); }
+
+function extraireIdentificationPGC(col) {
+  var out = {};
+  var brutNomAdr = captureBruteEntre(col.gauche, 'Projet / Site', ['Accès', 'Acces', 'Nature des travaux'], 250)
+    || captureBruteEntre(col.gauche, 'Projet/Site', ['Accès', 'Acces', 'Nature des travaux'], 250);
+  var lignesNomAdr = lignesDe(brutNomAdr);
+  if (lignesNomAdr.length) {
+    out.chantier_nom = lignesNomAdr[0];
+    if (lignesNomAdr.length > 1) out.chantier_adresse = lignesNomAdr.slice(1).join(' ');
+  }
+  var brutMoa = captureBruteEntre(col.gauche, 'Maître d\'Ouvrage', ['CSPS Conception', 'Tél', 'Mail'], 200)
+    || captureBruteEntre(col.gauche, 'Maitre d\'Ouvrage', ['CSPS Conception', 'Tél', 'Mail'], 200);
+  var lignesMoa = lignesDe(brutMoa);
+  if (lignesMoa.length) out.moa_nom = lignesMoa[0];
+  return out;
+}
+function extraireIdentificationFicheAffaire(col, texteComplet) {
+  var out = {};
+  var lignesTitre = lignesDe(captureBruteEntre(col.gauche, 'FICHE AFFAIRE', ['Code affaire', 'CSPS conception'], 120));
+  if (lignesTitre.length) out.chantier_nom = lignesTitre[0];
+  var lignesAdr = lignesDe(captureBruteEntre(col.droite, 'Adresse du chantier', ['Catégorie', 'Categorie', 'Déclaration', 'Declaration'], 200));
+  if (lignesAdr.length) out.chantier_adresse = lignesAdr.join(' ');
+  var lignesMoa = lignesDe(captureBruteEntre(col.gauche, 'Maître d\'ouvrage', ['CSPS conception', 'CSPS réalisation'], 200)
+    || captureBruteEntre(col.gauche, 'Maitre d\'ouvrage', ['CSPS conception', 'CSPS réalisation'], 200));
+  if (lignesMoa.length) out.moa_nom = lignesMoa[0];
+  var t = (texteComplet || '').replace(/\s+/g, ' ');
+  out.chantier_nature = captureEntre(t, 'Nature des travaux', ['Site en exploitation', '2. INTERVENANTS', '2.INTERVENANTS'], 700);
+  return out;
+}
+// Remplit les champs "Identification de l'operation" encore vides -- jamais
+// d'ecrasement d'une valeur deja saisie (meme garde que importerConventionDepuisFichier).
+function remplirIdentificationSiVide(infos) {
+  var n = 0;
+  function remplir(id, val) {
+    if (!val) return;
+    var el = document.getElementById(id);
+    if (el && !el.value) { el.value = val; n++; }
+  }
+  remplir('chantier-nom', infos.chantier_nom);
+  remplir('chantier-adresse', infos.chantier_adresse);
+  remplir('chantier-nature', infos.chantier_nature);
+  remplir('moa-nom', infos.moa_nom);
+  return n;
 }
 
 async function importerDossierVrac(event) {
@@ -3067,20 +3199,50 @@ async function importerDossierVrac(event) {
   // 13/11 : classement en 3 passes -- nom du fichier (fiable), puis contenu
   // en secours si le nom n'a rien donne (moins fiable, signale a part),
   // extensions etrangeres aux pieces du dossier ignorees silencieusement.
+  // Au passage (meme lecture, pas de cout supplementaire pour les fichiers
+  // deja classes par leur nom), on repere aussi un PGC ou une "Fiche
+  // affaire" pour proposer de pre-remplir "Identification de l'operation".
   var parType = {}, ignores = [], nonReconnus = [], parContenu = [];
+  var infosIdent = {}, sourcesIdent = [];
+  function fusionnerIdent(o, nomFichier) {
+    if (!o) return;
+    var ajoute = false;
+    for (var k in o) { if (o[k] && !infosIdent[k]) { infosIdent[k] = o[k]; ajoute = true; } }
+    if (ajoute) sourcesIdent.push(nomFichier);
+  }
   for (var fi = 0; fi < files.length; fi++) {
     var f = files[fi];
     if (normFichierClassement(f.name).indexOf('csps17_') === 0) { ignores.push(f.name); continue; }
     var ext = (/\.[a-z0-9]+$/i.exec(f.name || '') || [''])[0].toLowerCase();
     if (EXT_IGNOREES_VRAC.indexOf(ext) >= 0) { ignores.push(f.name); continue; }
     var t = deviserTypePiece(f.name);
+    var texteRapide = null;
     if (!t) {
-      t = await deviserTypeParContenu(f);
+      texteRapide = await texteRapideClassement(f);
+      t = classerTexteParContenu(texteRapide);
       if (t) parContenu.push(f.name);
     }
+    try {
+      if (t === 'PGC') {
+        fusionnerIdent(extraireIdentificationPGC(await lireColonnesPdf(f, 2)), f.name);
+      } else if (!t && texteRapide && sembleEnTetePGC(texteRapide)) {
+        fusionnerIdent(extraireIdentificationPGC(await lireColonnesPdf(f, 2)), f.name);
+      } else if (texteRapide && sembleFicheAffaire(texteRapide)) {
+        fusionnerIdent(extraireIdentificationFicheAffaire(await lireColonnesPdf(f, 2), await extraireTexteFichier(f)), f.name);
+      }
+    } catch (eIdent) { /* pre-remplissage facultatif : ne doit jamais bloquer le classement/depot */ }
     if (!t) { nonReconnus.push(f.name); continue; }
     (parType[t] = parType[t] || []).push(f);
   }
+
+  // Contrat/Convention SPS : extraction deja eprouvee (bouton dedie), juste
+  // declenchee automatiquement ici si ce document fait partie du lot.
+  if (parType.CONTRAT && parType.CONTRAT.length && typeof importerConventionDepuisFichier === 'function') {
+    for (var ci = 0; ci < parType.CONTRAT.length; ci++) {
+      try { await importerConventionDepuisFichier(parType.CONTRAT[ci]); } catch (eConv) { /* import facultatif */ }
+    }
+  }
+  var nIdent = remplirIdentificationSiVide(infosIdent);
 
   var aTraiter = 0; for (var k in parType) aTraiter += parType[k].length;
   showToast('Import de ' + aTraiter + ' document(s)...', '');
@@ -3111,6 +3273,13 @@ async function importerDossierVrac(event) {
   if (nonReconnus.length) {
     html += '<p style="margin-top:10px;"><strong>' + nonReconnus.length + ' fichier(s) non reconnus</strong>, a deposer a la main dans la bonne categorie :</p>'
       + '<ul style="margin:4px 0 0 18px;font-size:12px;">' + nonReconnus.map(function (n) { return '<li>' + icEscAttr(n) + '</li>'; }).join('') + '</ul>';
+  }
+  // 13/11 (demande d'Alain) : signale les champs "Identification de
+  // l'operation" pre-remplis depuis le PGC/la Fiche affaire repere(e) dans
+  // le lot -- toujours "a verifier avant d'enregistrer", jamais insere sans
+  // le dire (meme garde que la Convention SPS).
+  if (nIdent) {
+    html += '<p style="margin-top:10px;background:#fff8e1;border-radius:6px;padding:8px 12px;font-size:12px;"><strong>' + nIdent + ' champ(s) d\'Identification de l\'opération pré-rempli(s)</strong> depuis ' + icEscAttr(sourcesIdent.join(', ')) + ' — à vérifier avant d\'enregistrer l\'affaire.</p>';
   }
   if (aTraiter - doublons - erreurs > 0) {
     html += '<p style="margin-top:12px;font-size:12px;color:var(--text-light);">Pensez \u00e0 cliquer sur \u00ab Relire le chantier \u00bb pour compl\u00e9ter les fiches de faits (amiante, r\u00e9seaux, planning...) des documents d\u00e9pos\u00e9s.</p>';
