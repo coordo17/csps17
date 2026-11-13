@@ -2954,7 +2954,7 @@ var PIECES_DOSSIER = [
   // CBT (06/11, demande d'Alain) : le type existait deja partout (depot,
   // detection en vrac, fiche de faits dechets/base-vie) mais sans carte dans
   // la grille -- aucun bouton pour deposer un CBT a l'unite.
-  { ref: 'CBT', title: 'Cahier des besoins techniques (CBT)', icon: '&#128203;', note: 'Deposez le CBT de chaque lot/entreprise — lecture dechets/base-vie au depot (pas d\'IA)' },
+  { ref: 'CBT', title: 'Cahier des besoins techniques (CBT)', icon: '&#128203;', note: 'Deposez le CBT de chaque lot/entreprise — lecture dechets/base-vie au depot, et points de coordination repérés par lot pour la fiche IC (pas d\'IA)' },
 ];
 
 // Type de document d'une entree RJC : champ docRef (nouvelles entrees) ou
@@ -3494,6 +3494,56 @@ function repererClauseCBT(texte, motsCles) {
 // Appelee au depot d'un CBT : lit le PDF (pdf.js, cote client, pas d'IA),
 // repere les passages probables, et ouvre la fiche de faits avec ces
 // propositions pre-remplies -- jamais ecrit directement dans l'affaire.
+// Points de coordination par lot, reperes dans le CBT (13/11, suite a la
+// demande d'Alain : "ca pousse" + "c'est ecrit dans les CBT, Harmo le fait
+// sans IA" -- meme principe que repererClauseCBT ci-dessus (mots-cles,
+// fenetre de texte, jamais invente), applique a des themes plus larges que
+// dechets/base-vie, pour alimenter les points de coordination du lot (fiche
+// IC, section D) a partir du contenu reel du CBT -- jamais a la place d'une
+// lecture par Alain, seulement une proposition a verifier.
+var CBT_THEMES_LOT = [
+  { theme: 'Consignation réseaux / énergie', mots: ['consignation', 'mise hors tension', 'coupure du réseau', 'coupure du reseau', 'isolement énergie', 'isolement energie', 'condamnation du réseau', 'condamnation du reseau'] },
+  { theme: 'Périmètre / zone interdite', mots: ['zone interdite', 'périmètre de sécurité', 'perimetre de securite', 'accès interdit', 'acces interdit', 'interdiction de circuler', 'emprise clôturée', 'emprise cloturee'] },
+  { theme: 'Démolition / stabilité', mots: ['étude de démolition', 'etude de demolition', 'sapement', 'stabilité de la structure', 'stabilite de la structure', 'ordre des opérations de démolition', 'ordre des operations de demolition'] },
+  { theme: 'Évacuation gravats / déchets du lot', mots: ['évacuation des gravats', 'evacuation des gravats', 'flux séparés', 'flux separes', 'tri des gravats'] },
+  { theme: 'Stockage / zone de dépôt', mots: ['zone de stockage', 'aire de stockage', 'zone de dépôt', 'zone de depot', 'stockage des matériaux', 'stockage des materiaux'] },
+  { theme: 'Accès en toiture / moyens d’accès', mots: ['échelle à crinoline', 'echelle a crinoline', 'tour d’escalier', 'nacelle', 'pemp', 'sauts de loup', 'cadenas à code', 'cadenas a code', 'plateforme élévatrice', 'plateforme elevatrice'] },
+  { theme: 'Sous-traitance', mots: ['sous-traitance', 'agrément du sous-traitant', 'agrement du sous-traitant', 'plan de sous-traitance'] },
+  { theme: 'Mise sous tension / contrôle initial', mots: ['mise sous tension', 'contrôle initial', 'controle initial', 'vérification initiale', 'verification initiale', 'organisme agréé', 'organisme agree'] },
+];
+function extraireFaitsCBTParLot(texte) {
+  var res = [];
+  CBT_THEMES_LOT.forEach(function (t) {
+    var extrait = repererClauseCBT(texte, t.mots);
+    if (extrait) res.push({ theme: t.theme, texte: extrait });
+  });
+  return res;
+}
+// Lit un CBT depose et range les points reperes par lot (devine depuis le
+// nom du fichier, ex. "CBT Plomberie.pdf" -> plomberie_cvc, meme detecteur
+// que pour le lot saisi en fiche IC) -- silencieux, pas de popup, meme en
+// depot groupe (bulk) des 14 CBT d'un chantier. Relus plus tard par Alain
+// au moment de l'IC (bouton "Proposer les points du lot").
+async function extraireEtStockerPointsCBTParLot(file) {
+  var affaire = currentAffaireObj();
+  if (!affaire) return;
+  var texte;
+  try { texte = await extraireTexteFichier(file); } catch (err) { return; }
+  if (!texte || texte.replace(/\s/g, '').length < 30) return;
+  var metiers = icMetiersDuLot(file.name);
+  if (!metiers.length) return;
+  var points = extraireFaitsCBTParLot(texte);
+  if (!points.length) return;
+  var f = affaireFaits(affaire);
+  metiers.forEach(function (k) {
+    if (!f.cbtPoints[k]) f.cbtPoints[k] = [];
+    points.forEach(function (p) {
+      if (f.cbtPoints[k].some(function (x) { return x.texte === p.texte; })) return;
+      f.cbtPoints[k].push({ theme: p.theme, texte: p.texte, source: file.name });
+    });
+  });
+  persistAffaires();
+}
 async function ouvrirFaitsCBTDepuisFichier(file) {
   var affaire = currentAffaireObj();
   if (!affaire) { showToast('Ouvrez une affaire avant de deposer un CBT', 'error'); return; }
@@ -3814,6 +3864,11 @@ async function deposerPieceDossier(affaire, file, type, bulk) {
       // de faits" du terrain).
       else if (type === 'CONTRAT') importerContratDepuisFichier(file);
     }
+    // Points de coordination par lot reperes dans le CBT (13/11) : silencieux,
+    // y compris en depot groupe (bulk) des CBT -- pas de popup qui
+    // interromprait un depot de plusieurs fichiers. Relus plus tard par
+    // Alain au moment de l'IC (section D, bouton "Proposer les points du lot").
+    if (type === 'CBT') extraireEtStockerPointsCBTParLot(file);
     return 'ok';
   } catch (err) {
     showToast('Erreur depot : ' + err.message, 'error');
@@ -4251,7 +4306,12 @@ function faitsVierges() {
     cbt: { dechets: '', base_vie: '', source: '' },
     // Plans/PIC (05/11) : acces et cloture, reperes dans le plan de masse
     // / PIC depose (cf. ouvrirFaitsPlans) -- meme principe que le CBT.
-    plans: { acces: '', cloture: '', source: '' }
+    plans: { acces: '', cloture: '', source: '' },
+    // Points de coordination par lot reperes dans les CBT deposes (13/11) --
+    // cle = metier (IC_METIER_MOTS), valeur = liste de {theme, texte, source}.
+    // Jamais injectes directement : proposes en fiche IC (section D) pour
+    // relecture/validation par Alain, au meme titre que IC_POINTS_PGC_LOT.
+    cbtPoints: {}
   };
 }
 function faitsMigrer(affaire) {
@@ -4321,6 +4381,7 @@ function affaireFaits(affaire) {
   if (!affaire.faits.cbt) affaire.faits.cbt = faitsVierges().cbt;
   if (!affaire.faits.alertesPlanning) affaire.faits.alertesPlanning = [];
   if (!affaire.faits.plans) affaire.faits.plans = faitsVierges().plans;
+  if (!affaire.faits.cbtPoints) affaire.faits.cbtPoints = {};
   return affaire.faits;
 }
 
@@ -9524,7 +9585,7 @@ function ic7dCollecter() {
 // "vu" + observation libre, remplis pendant l'IC.
 function icLotHtml() {
   return sectionHeader('D', 'Points de coordination propres au lot (PGC)', '&#128203;')
-    + '<p style="font-size:12px;color:var(--text-light);margin-bottom:8px;">Points de méthode/organisation issus du PGC, propres au lot détecté -- à vérifier ou discuter lors de l’IC, non exhaustif.</p>'
+    + '<p style="font-size:12px;color:var(--text-light);margin-bottom:8px;">Points de méthode/organisation issus du PGC, propres au lot détecté -- à vérifier ou discuter lors de l’IC, non exhaustif. Les points marqués « CBT » viennent d’un passage repéré automatiquement dans le CBT déposé pour ce lot (texte réel, à vérifier).</p>'
     + '<div id="icLot-liste"></div>'
     + '<button type="button" class="btn btn-outline btn-sm" onclick="icLotAjouter(\'\', \'\', false, true)">+ Ajouter un point</button> '
     + '<button type="button" class="btn btn-outline btn-sm" onclick="icLotProposer(true)">&#128260; Proposer les points du lot</button>'
@@ -9550,16 +9611,26 @@ function icLotProposer(depuisBouton) {
   });
   var deja = Array.prototype.slice.call(liste.querySelectorAll('.icLot-pt')).map(function (i) { return i.value; });
   var lot = getVal('fic-ent-lot');
-  var n = 0;
+  var n = 0, nCbt = 0;
+  var affaireLot = currentAffaireObj();
+  var cbtPointsLot = affaireLot ? (affaireFaits(affaireLot).cbtPoints || {}) : {};
   icMetiersDuLot(lot).forEach(function (k) {
     (IC_POINTS_PGC_LOT[k] || []).forEach(function (p) {
       if (deja.indexOf(p.point) !== -1) return;
       deja.push(p.point);
       icLotAjouter(p.point, p.ref, false, true); n++;
     });
+    // Points repérés automatiquement dans le CBT déposé pour ce lot (13/11) --
+    // texte réel du document, jamais inventé, toujours à vérifier/relire.
+    (cbtPointsLot[k] || []).forEach(function (p) {
+      var lib = p.theme + ' : ' + p.texte;
+      if (deja.indexOf(lib) !== -1) return;
+      deja.push(lib);
+      icLotAjouter(lib, 'CBT', false, true); n++; nCbt++;
+    });
   });
   var noms = icMetiersDuLot(lot).map(function (k) { return icTexteHarmo((IC_METIERS_RISQUES[k] || {}).label || k); });
-  if (depuisBouton) showToast(n ? n + ' point(s) proposé(s) (' + noms.join(', ') + ')' : 'Aucun point de coordination catalogué pour ce lot', n ? 'success' : 'error');
+  if (depuisBouton) showToast(n ? n + ' point(s) proposé(s) (' + noms.join(', ') + ')' + (nCbt ? ' dont ' + nCbt + ' repéré(s) dans le CBT' : '') : 'Aucun point de coordination catalogué pour ce lot', n ? 'success' : 'error');
 }
 function icLotCollecter() {
   return Array.prototype.slice.call(document.querySelectorAll('#icLot-liste .icLot-row')).filter(function (r) {
