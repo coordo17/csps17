@@ -3986,6 +3986,15 @@ async function deposerPieceDossier(affaire, file, type, bulk) {
       else if (type === 'CBT') ouvrirFaitsCBTDepuisFichier(file);
       // Plans/PIC (05/11) : meme lecture deterministe que le CBT.
       else if (type === 'PLANS') ouvrirFaitsPlansDepuisFichier(file);
+      // PGC (13/11, repere par Alain sur le chantier Auray) : les CBT par
+      // lot sont souvent de simples trames generiques qui ne disent rien
+      // sur l'exploitation/l'energie/les stockages du chantier -- alors que
+      // le corps du PGC lui-meme en parle explicitement (c'est d'ailleurs
+      // la source que Fred relit a la main pour remplir ces rubriques). On
+      // applique donc la meme lecture deterministe (mots-cles) sur le PGC
+      // depose, en complement du CBT : si un champ est deja rempli (CBT ou
+      // saisie manuelle), il n'est jamais ecrase (cf. ouvrirFaitsCBT).
+      else if (type === 'PGC') ouvrirFaitsCBTDepuisFichier(file);
       // Contrat de coordination SPS (05/11) : repere un eventuel co-traitant
       // CSPS (conception), remplit directement les champs Chantier si
       // trouves (pas de modale -- champs deja a l'ecran, pas une "fiche
