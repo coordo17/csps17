@@ -3194,6 +3194,48 @@ function extraireIdentificationFicheAffaire(col, texteComplet) {
   out.chantier_nature = captureEntre(t, 'Nature des travaux', ['Site en exploitation', '2. INTERVENANTS', '2.INTERVENANTS'], 700);
   return out;
 }
+// 13/11 (demande d'Alain : "je veux pouvoir creer une affaire sans PGC,
+// donc il faut extraire des documents que tu as") -- a defaut de PGC/Fiche
+// affaire (pas toujours transmis a ce stade), le CBT (en-tete Chausson
+// recurrent : raison sociale + adresse MOA, nature des travaux, puis
+// adresse du chantier au format "Lieu-dit – CP – Commune") et le
+// devis d'honoraires MC2 (ligne "<chantier> M. Ouvrage : <moa>",
+// "Description Travaux : <nature>") donnent souvent l'essentiel. Mise en
+// page moins stable qu'un vrai PGC -> signale "a verifier" comme le reste,
+// jamais d'ecrasement (remplirIdentificationSiVide, meme garde partout).
+function extraireIdentificationCBT(texte) {
+  var infos = {};
+  if (!texte) return infos;
+  var t = texte.replace(/\s+/g, ' ').trim();
+  if (!/cahier\s+des\s+besoins\s+techniques/i.test(t)) return infos;
+  // Adresse chantier : seule une suite de mots en casse "Titre" (ex. "La
+  // Pecardiere") est acceptee comme lieu-dit, pour ne pas avaler le texte
+  // TOUT EN MAJUSCULES de la nature des travaux qui precede (meme tiret).
+  var reAdr = /((?:[A-ZÀ-ÿ][a-zà-ÿ'’]+\s+)*[A-ZÀ-ÿ][a-zà-ÿ'’]+)\s*[–\-]\s*(\d{2}\s?\d{3})\s*[–\-]\s*([A-Za-zÀ-ÿ\- ]{3,50}?)(?=\s+CAHIER)/;
+  var mAdr = reAdr.exec(t);
+  if (mAdr) infos.chantier_adresse = mAdr[1].trim() + ', ' + mAdr[2].replace(/\s+/g, '') + ' ' + mAdr[3].trim();
+  var mMoaPostal = /\d{5}\s+[A-ZÀ-ÿ\-]+(?:\s+CEDEX)?/.exec(t);
+  if (mMoaPostal) {
+    var mNom = /^\s*\d*\s*([A-ZÀ-ÿ][A-ZÀ-ÿ0-9'’.\- ]{2,39}?)\s+\d/.exec(t.slice(0, mMoaPostal.index));
+    if (mNom) infos.moa_nom = mNom[1].trim();
+    if (mAdr) {
+      var apres = t.slice(mMoaPostal.index + mMoaPostal[0].length, mAdr.index).replace(/\s+/g, ' ').trim();
+      if (apres) infos.chantier_nature = apres;
+    }
+  }
+  return infos;
+}
+function extraireIdentificationDevis(texte) {
+  var infos = {};
+  if (!texte) return infos;
+  var t = texte.replace(/\s+/g, ' ').trim();
+  if (!sembleDevisHonoraires(t)) return infos;
+  var m = /S\.?\s*P\.?\s*S\.?\s+([A-Za-zÀ-ÿ0-9'’.\- ]{3,70}?)\s+M\.?\s*Ouvrage\s*:\s*([A-Za-zÀ-ÿ0-9'’.\- ]{2,50}?)\s+Description/i.exec(t);
+  if (m) { infos.chantier_nom = m[1].trim(); infos.moa_nom = m[2].trim(); }
+  var mNat = /Description\s+Travaux\s*:\s*([^:]+?)\s+Montant\s+des\s+travaux/i.exec(t);
+  if (mNat) infos.chantier_nature = mNat[1].trim();
+  return infos;
+}
 // Remplit les champs "Identification de l'operation" encore vides -- jamais
 // d'ecrasement d'une valeur deja saisie (meme garde que importerConventionDepuisFichier).
 function remplirIdentificationSiVide(infos) {
@@ -3267,7 +3309,18 @@ async function importerDossierVrac(event) {
         fusionnerIdent(extraireIdentificationPGC(await lireColonnesPdf(f, 2)), f.name);
       } else if (texteRapide && sembleFicheAffaire(texteRapide)) {
         fusionnerIdent(extraireIdentificationFicheAffaire(await lireColonnesPdf(f, 2), await extraireTexteFichier(f)), f.name);
+      } else if (t === 'CBT') {
+        // 13/11 : le CBT est deja classe par son nom de fichier (pas besoin
+        // de contenu pour ca), mais sert aussi de source d'identification
+        // a defaut de PGC -- on lit alors son contenu ici seulement.
+        if (!texteRapide) texteRapide = await texteRapideClassement(f);
+        fusionnerIdent(extraireIdentificationCBT(texteRapide), f.name);
       }
+      // 13/11 : devis d'honoraires MC2 -- toujours tente en secours quand le
+      // fichier n'a ete classe dans aucune piece connue (sans cout : ne lit
+      // rien de plus, extraireIdentificationDevis se reconnait lui-meme via
+      // sembleDevisHonoraires et renvoie {} sinon).
+      if (!t && texteRapide) fusionnerIdent(extraireIdentificationDevis(texteRapide), f.name);
     } catch (eIdent) { /* pre-remplissage facultatif : ne doit jamais bloquer le classement/depot */ }
     if (!t) { nonReconnus.push(f.name); continue; }
     (parType[t] = parType[t] || []).push(f);
