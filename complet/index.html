@@ -3428,6 +3428,16 @@ function repererClauseCBT(texte, motsCles) {
       var apresCheck = texte.slice(p + mc.length, Math.min(texte.length, p + mc.length + 50));
       var ressembleSommaire = !/[a-zàâäéèêëïîôöùûüç]{3,}/.test(apresCheck);
       if (ressembleSommaire) { posDepart = p + mc.length; continue; }
+      // 13/11 (bug trouve par Alain sur les plans du chantier Auray, mot-cle
+      // "portail") : un plan de masse/PIC a souvent un cartouche (indices de
+      // revision "JC E 08/04/2026 Modif du portail...") ou un extrait
+      // cadastral (cadastre.gouv.fr, "Section C parcelle n°...") qui peut
+      // contenir le mot-cle sans etre une vraie clause. On regarde une
+      // fenetre plus large (400 car. avant/apres) pour ces marqueurs et on
+      // saute a l'occurrence suivante si elle ressemble a un cartouche.
+      var fenCartouche = texte.slice(Math.max(0, p - 400), Math.min(texte.length, p + mc.length + 400)).toLowerCase();
+      var ressembleCartouche = /cadastre\.gouv\.fr|extrait du plan|unit[ée] fonci[èe]re|parcelle n[°o]/.test(fenCartouche);
+      if (ressembleCartouche) { posDepart = p + mc.length; continue; }
       pos = p;
       break;
     }
