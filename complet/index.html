@@ -7187,7 +7187,7 @@ var DOC_FILES = {
   'PGCR':        'CSPS17_PGC_v1.docx',
   'PGC3R':       'CSPS17_PGC_Simplifie_Cat3_v1.docx',
   'DIF':         'CSPS17_Fiche_Diffusion_PGC_v3.docx',
-  'FIC':         'Fiche_IC_CSPS17_v19.docx',
+  'FIC':         'Fiche_IC_CSPS17_v20.docx',
   'FIC3':        'Fiche_IC_Cat3_CSPS17_v6.docx',
   'IC':          'CSPS17_Courrier_CSPS_v2.docx',
   'PPP':         'CSPS17_Grille_Analyse_PPSPS_v5.docx',
@@ -9572,6 +9572,25 @@ function icLotCollecter() {
 // Emargement, points PPSPS, diffusion, formalites (Cat. 3)
 var icPresCount = 0;
 var IC_FORMALITES = ['PPSPS simplifi\u00e9', 'Habilitations \u00e9lectriques', 'Autorisations de conduite', 'Attestations de formation au travail en hauteur', 'Fiches de Donn\u00e9es de S\u00e9curit\u00e9'];
+// Formalites typiquement requises par metier (indices dans IC_FORMALITES),
+// pour pre-cocher a la proposition -- jamais pour decider a la place du
+// CSPS, juste un point de depart (icFormProposer). Demarre sur les metiers
+// d'Auray (13/11), a completer comme les deux autres catalogues.
+var IC_FORMALITES_LOT = {
+'démolition_désamiantage': [0, 2],
+'terrassement_vrd': [2],
+'gros_oeuvre': [0, 2],
+'charpente_couverture': [0, 3],
+'serrurerie_metallerie': [3],
+'étanchéité_isolation': [3, 4],
+'dallage': [2],
+'vitrerie_miroiterie': [3],
+'électricité': [1],
+'plomberie_cvc': [4],
+'second_oeuvre': [3, 4],
+'montage_rayonnage': [0, 2, 3],
+'peinture': [4],
+};
 function icFinHtml() {
   var h = sectionHeader('6 bis', 'Personnes pr\u00e9sentes (\u00e9margement)', '&#9997;');
   h += '<div id="ic-pres-liste"></div>';
@@ -9579,15 +9598,27 @@ function icFinHtml() {
   h += sectionEnd();
   h += sectionHeader('7', 'PPSPS et diffusion', '&#128228;');
   h += fieldRow('Autres points \u00e0 reporter dans le PPSPS (les risques 7D y sont repris automatiquement)', 'ic-points-ppsps', 'textarea', '', '');
-  if (terrainAffaire && terrainAffaire.cat === 3) {
-    h += '<p style="font-size:12px;font-weight:600;margin:8px 0 4px;">Formalit\u00e9s exig\u00e9es avant d\u00e9marrage</p>';
-    IC_FORMALITES.forEach(function (f, i) { h += checkRow(f, 'ic-form-' + i, false); });
-  }
+  h += '<p style="font-size:12px;font-weight:600;margin:8px 0 4px;">Formalit\u00e9s exig\u00e9es avant d\u00e9marrage</p>';
+  IC_FORMALITES.forEach(function (f, i) { h += checkRow(f, 'ic-form-' + i, false); });
   h += '<p style="font-size:12px;font-weight:600;margin:8px 0 4px;">Diffusion de la fiche</p>';
   [['moa', 'Ma\u00eetre d\u2019ouvrage'], ['moe', 'Ma\u00eetre d\u2019\u0153uvre'], ['ent', 'Entreprise'], ['rjc', 'Registre-journal de la coordination']].forEach(function (x) {
     h += checkRow(x[1], 'ic-diff-' + x[0], true);
   });
   return h + sectionEnd();
+}
+// Pre-coche les formalites catalogues pour le(s) metier(s) du lot en
+// cours -- memes limites que le reste (jamais une liste exhaustive, un
+// point de depart que le CSPS doit valider/completer).
+function icFormProposer() {
+  var lot = getVal('fic-ent-lot');
+  var set = {};
+  icMetiersDuLot(lot).forEach(function (k) {
+    (IC_FORMALITES_LOT[k] || []).forEach(function (i) { set[i] = true; });
+  });
+  IC_FORMALITES.forEach(function (f, i) {
+    var el = document.getElementById('ic-form-' + i);
+    if (el) el.checked = !!set[i];
+  });
 }
 function icPresAjouter(nom, qualite, role) {
   var liste = document.getElementById('ic-pres-liste'); if (!liste) return;
@@ -9903,6 +9934,7 @@ function icApresChoixEntreprise(ent) {
   var listeLot = document.getElementById('icLot-liste');
   if (listeLot) listeLot.innerHTML = '';
   if (typeof icLotProposer === 'function') icLotProposer(false);
+  if (typeof icFormProposer === 'function') icFormProposer();
 }
 
 // Point 13 : compagnon sans delegation -> pas d'IC, notification du report
@@ -10200,15 +10232,17 @@ function injecterICComplete(zip, d, isCat3) {
     var vide = ['Aucun risque relev\u00e9 lors de l\u2019IC', '', ''];
     icRemplirLignes(doc, icTable(doc, '6A — Risques importés'), 2, l7.b.length ? l7.b : [vide]);
     icRemplirLignes(doc, icTable(doc, '6B — Risques exportés'), 2, l7.c.length ? l7.c : [vide]);
-  } else {
-    // Cat. 3 : formalites exigees
-    var tF = icTable(doc, 'Document exigé');
-    if (tF) {
-      var trsF = icEnfantsW(tF, 'tr');
-      for (var fi = 1; fi < trsF.length && fi <= 5; fi++) {
-        var tcsF = icEnfantsW(trsF[fi], 'tc');
-        if (tcsF[1]) icCellText(doc, tcsF[1], (d.formalites || [])[fi - 1] ? '\u2611 Requis' : '\u2610 Non requis');
-      }
+  }
+  // Formalites exigees avant demarrage : desormais commun a toutes les
+  // categories (ecart trouve le 12/11 en comparant avec les PV IC de Fred --
+  // seule la Cat.3 les avait). Le modele Cat.1/2 (v20) porte maintenant la
+  // meme table "Document exige" que le modele Cat.3.
+  var tF = icTable(doc, 'Document exigé');
+  if (tF) {
+    var trsF = icEnfantsW(tF, 'tr');
+    for (var fi = 1; fi < trsF.length && fi <= 5; fi++) {
+      var tcsF = icEnfantsW(trsF[fi], 'tc');
+      if (tcsF[1]) icCellText(doc, tcsF[1], (d.formalites || [])[fi - 1] ? '\u2611 Requis' : '\u2610 Non requis');
     }
   }
 
@@ -10466,14 +10500,25 @@ function genFormulaireFIC() {
   }
 
   // Section 11 - Secours
+  var cChantierFic = terrainAffaire.chantier || {};
   var secoursPgc = terrainAffaire.secours_pgc || window._secoursPGC || {};
-  var secAlerteDefault = [secoursPgc.urgences, (secoursPgc.hopital ? secoursPgc.hopital + (secoursPgc.distance ? ' (' + secoursPgc.distance + ')' : '') : '')].filter(Boolean).join(' — ');
+  // L'hopital le plus proche peut venir de l'ancien mecanisme (secours_pgc,
+  // lecture de plan IA, desormais obsolete) ou -- depuis le portage PGC natif
+  // Etape 5 -- du champ chantier.hopitalProche saisi dans la fiche affaire.
+  // On privilegie secoursPgc.hopital s'il existe deja (affaire ancienne),
+  // sinon on retombe sur le champ natif.
+  var hopitalDefault = secoursPgc.hopital ? (secoursPgc.hopital + (secoursPgc.distance ? ' (' + secoursPgc.distance + ')' : '')) : (cChantierFic.hopitalProche || '');
+  var secAlerteDefault = [secoursPgc.urgences, hopitalDefault].filter(Boolean).join(' — ');
   html2 += sectionHeader('4', 'Organisation des secours', '&#128657;');
   html2 += fieldRow('SST present(s) — Nom(s)', 'fic-sec-sst', 'text', 'Nom du SST', '');
   html2 += fieldRow('Trousse de secours — emplacement', 'fic-sec-trousse', 'text', 'Ex: Base vie', secoursPgc.trousse || '');
   html2 += fieldRow('DAE — emplacement', 'fic-sec-dae', 'text', 'Ex: Entree base vie', secoursPgc.dae || '');
   html2 += fieldRow('Moyen alerte (tel / radio / DATI)', 'fic-sec-alerte', 'text', 'Ex: Tel portable', secAlerteDefault);
-  html2 += fieldRow('Point de rassemblement / acces pompiers', 'fic-sec-rdv', 'text', 'Ex: Parking nord', '');
+  // Point de rassemblement : repris directement du champ chantier (meme
+  // donnee que celle injectee dans l'annexe urgence du PGC natif), au lieu
+  // de rester vide comme avant -- trouve en comparant la fiche IC generee
+  // le 12/11 (GM BTP) avec le PV IC de Fred.
+  html2 += fieldRow('Point de rassemblement / acces pompiers', 'fic-sec-rdv', 'text', 'Ex: Parking nord', cChantierFic.pointRassemblement || '');
   html2 += sectionEnd();
 
   // Section 12 - Observations CSPS
