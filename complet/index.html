@@ -1121,8 +1121,8 @@
           <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsCR()">CR de réunion</button>
           <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsCBT()">Déchets / Base vie / Exploitation (CBT)</button>
           <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsPlans()">Accès / Clôture (Plans)</button>
-          <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="document.getElementById('import-vrac-input').click()">&#128193; Importer un dossier</button>
-          <input type="file" id="import-vrac-input" multiple style="display:none;" onchange="importerDossierVrac(event)">
+          <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="document.getElementById('import-vrac-input').click()" title="Selectionnez un dossier entier (sous-dossiers compris) : CSPS17 classe chaque fichier automatiquement">&#128193; Importer un dossier</button>
+          <input type="file" id="import-vrac-input" webkitdirectory directory multiple style="display:none;" onchange="importerDossierVrac(event)">
           <button type="button" class="btn btn-primary btn-sm" style="margin-left:8px;" onclick="relireChantier()">&#128269; Relire le chantier</button>
         </div>
         <div id="pieces-section" style="display:none;margin-bottom:20px;">
@@ -2988,6 +2988,75 @@ function deviserTypePiece(nomFichier) {
   }
   return null;
 }
+
+// 13/11 (demande d'Alain, suite a l'import du dossier "envoie fred" ou tous
+// les fichiers n'ont pas un nom explicite) : extensions clairement etrangeres
+// aux pieces du dossier CSPS (images, CAO, archives, video...) -- ignorees
+// silencieusement plutot que listees en "non reconnus", pour qu'un import de
+// dossier entier (avec sous-dossiers) ne noie pas Alain sous des fichiers qui
+// ne le concernent pas (ex: .dwg, plans camera/wifi en image, zip d'archives).
+var EXT_IGNOREES_VRAC = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tif', '.tiff', '.dwg', '.dxf', '.zip', '.rar', '.7z', '.mp4', '.mov', '.avi'];
+
+// 13/11 (demande d'Alain) : quand le NOM du fichier ne dit rien (export
+// OneDrive, piece jointe mail renommee au hasard...), on tente une lecture
+// rapide du DEBUT du contenu (2 premieres pages PDF / debut du texte DOCX ou
+// TXT, sans OCR -- trop lent pour un classement en vrac, l'OCR complet se
+// fera si besoin au depot reel) et on cherche des phrases caracteristiques
+// de chaque type de piece. Toujours sans IA, juste des mots-cles -- et ces
+// fichiers sont signales a part dans le bilan pour qu'Alain verifie le
+// classement (moins fiable qu'un nom de fichier clair).
+var TYPE_MOTS_CLES_CONTENU = [
+  ['CONTRAT', ['contrat de coordination', 'mission de coordination sps']],
+  ['ICR', ['proces-verbal d\'inspection commune', 'inspection commune prealable']],
+  ['PGC', ['plan general de coordination', 'p.g.c.s.p.s']],
+  ['DIAG', ['diagnostic amiante', 'diagnostic plomb', 'rapport de reperage', 'etude geotechnique']],
+  ['PLAN', ['planning previsionnel', 'planning des travaux', 'diagramme de gantt']],
+  ['CONTRAINTES', ['arrete de voirie', 'declaration prealable', 'servitude']],
+  ['PLANS', ['plan de masse', 'plan d\'implantation', 'plan d\'installation de chantier']],
+  ['PPSPS', ['plan particulier de securite et de protection de la sante']],
+  ['CRMOA', ['compte rendu de reunion']],
+  ['CBT', ['cahier des besoins techniques', 'cahier des clauses techniques particulieres']]
+];
+// Lecture allegee (pas d'OCR, debut du document seulement) : destinee au
+// classement, pas a l'extraction des faits (qui relit le fichier en entier
+// ensuite, via extraireTexteFichier, une fois le type determine).
+async function texteRapideClassement(file) {
+  var nom = (file.name || '').toLowerCase();
+  try {
+    if (nom.endsWith('.pdf')) {
+      if (typeof pdfjsLib === 'undefined') return '';
+      var ab = await file.arrayBuffer();
+      var pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+      var maxPages = Math.min(pdf.numPages, 2);
+      var t = '';
+      for (var i = 1; i <= maxPages; i++) {
+        var page = await pdf.getPage(i);
+        var tc = await page.getTextContent();
+        t += tc.items.map(function (it) { return it.str; }).join(' ') + '\n';
+      }
+      return t;
+    }
+    if (nom.endsWith('.docx')) {
+      if (typeof mammoth === 'undefined') return '';
+      var buf = await file.arrayBuffer();
+      var res = await mammoth.extractRawText({ arrayBuffer: buf });
+      return (res.value || '').slice(0, 4000);
+    }
+    if (nom.endsWith('.txt') || nom.endsWith('.eml')) return (await file.text()).slice(0, 4000);
+  } catch (e) { /* fichier illisible (scanne sans OCR, .doc binaire...) : classement par contenu abandonne */ }
+  return '';
+}
+async function deviserTypeParContenu(file) {
+  var texte = await texteRapideClassement(file);
+  var n = normFichierClassement(texte);
+  if (!n) return null;
+  for (var i = 0; i < TYPE_MOTS_CLES_CONTENU.length; i++) {
+    var ref = TYPE_MOTS_CLES_CONTENU[i][0], mots = TYPE_MOTS_CLES_CONTENU[i][1];
+    for (var j = 0; j < mots.length; j++) { if (n.indexOf(normFichierClassement(mots[j])) >= 0) return ref; }
+  }
+  return null;
+}
+
 async function importerDossierVrac(event) {
   var affaire = currentAffaireObj();
   var files = Array.prototype.slice.call(event.target.files || []);
@@ -2995,13 +3064,23 @@ async function importerDossierVrac(event) {
   if (!affaire) { showToast('Ouvrez une affaire avant d\'importer un dossier', 'error'); return; }
   if (!files.length) return;
 
-  var parType = {}, ignores = [], nonReconnus = [];
-  files.forEach(function (f) {
-    if (normFichierClassement(f.name).indexOf('csps17_') === 0) { ignores.push(f.name); return; }
+  // 13/11 : classement en 3 passes -- nom du fichier (fiable), puis contenu
+  // en secours si le nom n'a rien donne (moins fiable, signale a part),
+  // extensions etrangeres aux pieces du dossier ignorees silencieusement.
+  var parType = {}, ignores = [], nonReconnus = [], parContenu = [];
+  for (var fi = 0; fi < files.length; fi++) {
+    var f = files[fi];
+    if (normFichierClassement(f.name).indexOf('csps17_') === 0) { ignores.push(f.name); continue; }
+    var ext = (/\.[a-z0-9]+$/i.exec(f.name || '') || [''])[0].toLowerCase();
+    if (EXT_IGNOREES_VRAC.indexOf(ext) >= 0) { ignores.push(f.name); continue; }
     var t = deviserTypePiece(f.name);
-    if (!t) { nonReconnus.push(f.name); return; }
+    if (!t) {
+      t = await deviserTypeParContenu(f);
+      if (t) parContenu.push(f.name);
+    }
+    if (!t) { nonReconnus.push(f.name); continue; }
     (parType[t] = parType[t] || []).push(f);
-  });
+  }
 
   var aTraiter = 0; for (var k in parType) aTraiter += parType[k].length;
   showToast('Import de ' + aTraiter + ' document(s)...', '');
@@ -3020,17 +3099,21 @@ async function importerDossierVrac(event) {
   var html = '<p style="margin-bottom:8px;">Import termine : <strong>' + (aTraiter - doublons - erreurs) + '</strong> document(s) ajoute(s) au registre.</p>';
   var lignesBilan = Object.keys(bilan).filter(function (t) { return bilan[t] > 0; }).map(function (t) {
     var def = PIECES_DOSSIER.filter(function (p) { return p.ref === t; })[0];
-    return '<li>' + icEscAttr(def ? def.title : t) + ' — ' + bilan[t] + '</li>';
+    return '<li>' + icEscAttr(def ? def.title : t) + ' \u2014 ' + bilan[t] + '</li>';
   }).join('');
   if (lignesBilan) html += '<ul style="margin:0 0 10px 18px;font-size:13px;">' + lignesBilan + '</ul>';
   if (doublons) html += '<p style="font-size:12px;color:var(--text-light);">' + doublons + ' fichier(s) deja au dossier (ignores, pas de doublon cree).</p>';
-  if (ignores.length) html += '<p style="font-size:12px;color:var(--text-light);">' + ignores.length + ' fichier(s) ignore(s) (generes par CSPS17 lui-meme, pas des pieces recues).</p>';
+  if (ignores.length) html += '<p style="font-size:12px;color:var(--text-light);">' + ignores.length + ' fichier(s) ignore(s) (generes par CSPS17, ou sans rapport avec le dossier : images, plans CAO, archives...).</p>';
+  if (parContenu.length) {
+    html += '<p style="margin-top:10px;"><strong>' + parContenu.length + ' fichier(s) classe(s) d\'apres leur contenu</strong> (nom de fichier peu explicite) \u2014 a verifier :</p>'
+      + '<ul style="margin:4px 0 0 18px;font-size:12px;">' + parContenu.map(function (n) { return '<li>' + icEscAttr(n) + '</li>'; }).join('') + '</ul>';
+  }
   if (nonReconnus.length) {
     html += '<p style="margin-top:10px;"><strong>' + nonReconnus.length + ' fichier(s) non reconnus</strong>, a deposer a la main dans la bonne categorie :</p>'
       + '<ul style="margin:4px 0 0 18px;font-size:12px;">' + nonReconnus.map(function (n) { return '<li>' + icEscAttr(n) + '</li>'; }).join('') + '</ul>';
   }
   if (aTraiter - doublons - erreurs > 0) {
-    html += '<p style="margin-top:12px;font-size:12px;color:var(--text-light);">Pensez à cliquer sur « Relire le chantier » pour compléter les fiches de faits (amiante, réseaux, planning...) des documents déposés.</p>';
+    html += '<p style="margin-top:12px;font-size:12px;color:var(--text-light);">Pensez \u00e0 cliquer sur \u00ab Relire le chantier \u00bb pour compl\u00e9ter les fiches de faits (amiante, r\u00e9seaux, planning...) des documents d\u00e9pos\u00e9s.</p>';
   }
   openDocModal('Import en lot', html, null, null);
   renderDocsGrid();
