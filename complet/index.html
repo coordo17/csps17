@@ -741,6 +741,14 @@
                 <button type="button" class="btn btn-outline btn-sm" onclick="conventionChoisirFichier()">&#128220; Importer depuis la Convention SPS (fichier)</button>
                 <input type="file" id="convention-import-input" accept=".pdf,.docx,.txt" style="display:none;" onchange="conventionFichierChoisi(event)">
                 <p style="font-size:11px;color:var(--text-light);margin-top:4px;">Pré-remplit chantier, MOA et CSPS conception à partir de la convention de coordination déposée, par repérage de motifs (aucune IA). À vérifier avant d'enregistrer.</p>
+                <!-- 13/11 (demande d'Alain) : meme bouton que dans l'onglet Documents
+                     (id partage, un seul input), mais accessible ICI pour pouvoir
+                     importer tout un dossier (PGC, Fiche affaire, CBT...) DES
+                     l'ecran "Nouvelle affaire", sans passer d'abord par un
+                     enregistrement manuel -- l'affaire est creee automatiquement
+                     au moment de l'import si elle n'existe pas encore. -->
+                <button type="button" class="btn btn-outline btn-sm" style="margin-top:6px;" onclick="document.getElementById('import-vrac-input').click()" title="Selectionnez un dossier entier (sous-dossiers compris) : CSPS17 classe chaque fichier et pre-remplit cette fiche automatiquement">&#128193; Importer un dossier (tout d'un coup)</button>
+                <p style="font-size:11px;color:var(--text-light);margin-top:4px;">Sélectionnez tout le dossier de l'affaire (PGC, Fiche affaire, CBT, plans...) — CSPS17 classe chaque document ET pré-remplit cette fiche. L'affaire est créée automatiquement si elle ne l'est pas encore.</p>
               </div>
             </div>
             <div class="form-row">
@@ -3189,11 +3197,28 @@ function remplirIdentificationSiVide(infos) {
   return n;
 }
 
+// 13/11 (demande d'Alain) : cree et enregistre une affaire minimale si aucune
+// n'existe encore (cas du bouton utilise depuis "Nouvelle affaire", avant
+// tout clic sur "Enregistrer") -- pour pouvoir y rattacher immediatement les
+// documents importes. Categorie JAMAIS devinee (laissee a choisir par
+// Alain) ; le reste vient des champs du formulaire, deja pre-remplis par
+// l'identification reperee dans le dossier au moment de l'appel.
+function creerAffaireMinimaleSiAbsente() {
+  var existante = currentAffaireObj();
+  if (existante) return existante;
+  var data = collectFormData();
+  currentAffaireId = 'aff-' + Date.now();
+  var nouvelle = Object.assign({ id: currentAffaireId }, data);
+  affaires.push(nouvelle);
+  localStorage.setItem('csps17_affaires', JSON.stringify(affaires));
+  majSyncIndic('local');
+  renderAffaireList();
+  return nouvelle;
+}
+
 async function importerDossierVrac(event) {
-  var affaire = currentAffaireObj();
   var files = Array.prototype.slice.call(event.target.files || []);
   event.target.value = '';
-  if (!affaire) { showToast('Ouvrez une affaire avant d\'importer un dossier', 'error'); return; }
   if (!files.length) return;
 
   // 13/11 : classement en 3 passes -- nom du fichier (fiable), puis contenu
@@ -3244,6 +3269,19 @@ async function importerDossierVrac(event) {
   }
   var nIdent = remplirIdentificationSiVide(infosIdent);
 
+  // 13/11 : si aucun nom de chantier n'a ete repere dans les documents
+  // (pas de PGC/Fiche affaire dans ce lot) ET que le champ est toujours
+  // vide, on se rabat sur le nom du dossier Windows selectionne (ex:
+  // "st-mars-la-briere") -- toujours mieux qu'un champ vide qui empecherait
+  // la creation de l'affaire ci-dessous ; a renseigner/corriger ensuite.
+  var champNom = document.getElementById('chantier-nom');
+  if (champNom && !champNom.value && files[0] && files[0].webkitRelativePath) {
+    var nomDossier = files[0].webkitRelativePath.split('/')[0];
+    if (nomDossier) champNom.value = nomDossier;
+  }
+  var etaitSansAffaire = !currentAffaireObj();
+  var affaire = creerAffaireMinimaleSiAbsente();
+
   var aTraiter = 0; for (var k in parType) aTraiter += parType[k].length;
   showToast('Import de ' + aTraiter + ' document(s)...', '');
 
@@ -3258,7 +3296,11 @@ async function importerDossierVrac(event) {
     }
   }
 
-  var html = '<p style="margin-bottom:8px;">Import termine : <strong>' + (aTraiter - doublons - erreurs) + '</strong> document(s) ajoute(s) au registre.</p>';
+  var html = '';
+  if (etaitSansAffaire) {
+    html += '<p style="margin-bottom:8px;background:#e8f5e9;border-radius:6px;padding:8px 12px;font-size:12px;"><strong>Nouvelle affaire créée</strong> (n° ' + icEscAttr(affaire.num || '') + ') pour accueillir ces documents — vérifiez et complétez sa fiche (catégorie notamment) avant de la considérer finalisée.</p>';
+  }
+  html += '<p style="margin-bottom:8px;">Import termine : <strong>' + (aTraiter - doublons - erreurs) + '</strong> document(s) ajoute(s) au registre.</p>';
   var lignesBilan = Object.keys(bilan).filter(function (t) { return bilan[t] > 0; }).map(function (t) {
     var def = PIECES_DOSSIER.filter(function (p) { return p.ref === t; })[0];
     return '<li>' + icEscAttr(def ? def.title : t) + ' \u2014 ' + bilan[t] + '</li>';
