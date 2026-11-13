@@ -212,7 +212,18 @@
     var btn = document.getElementById('btn-sync-drive'); if (btn) btn.disabled = true;
     showToast('Synchronisation en cours...');
     try {
-      var b = await synchroniser();
+      // 13/11 (consolidation) : filet de securite global. Les appels Drive
+      // (chercher/creerDossier/lireFichierDrive/envoyerFichier) sont de
+      // simples fetch() sans aucun delai -- si le reseau cale en plein
+      // echange, l'appel restait bloque indefiniment et le bouton restait
+      // grise jusqu'a une mise a jour forcee. On borne maintenant toute la
+      // synchro a 45 s, avec un message clair plutot qu'un blocage muet.
+      var b = await Promise.race([
+        synchroniser(),
+        new Promise(function(_, ko){
+          setTimeout(function(){ ko(new Error('delai depasse (45 s) -- reseau trop lent ou instable, reessayez')); }, 45000);
+        })
+      ]);
       renderAffaireList(); if (typeof renderDashboard === 'function') { try { renderDashboard(); } catch (e) {} }
       // L'ecran Terrain garde l'affaire choisie dans une reference qui devient
       // perimee quand la synchro remplace tout le tableau affaires (voir
@@ -220,6 +231,10 @@
       // sur l'autre appareil n'apparaissait jamais dans la liste Terrain.
       if (typeof terrainRafraichir === 'function') { try { terrainRafraichir(); } catch (e) {} }
       etat('');
+      // 13/11 (consolidation) : l'indicateur du header reflete maintenant la
+      // vraie synchro Drive -- vert "Synchronise" juste apres, avec la date
+      // en infobulle (cf. majSyncIndic dans index.html).
+      if (typeof majSyncIndic === 'function') { try { majSyncIndic('synced'); } catch (e) {} }
       showToast('Synchronisé : ' + b.recues + ' affaire(s) reçue(s) ou mise(s) à jour, ' + b.envoyees + ' envoyée(s) ; fichiers : '
         + b.fichiersEnvoyes + ' envoyé(s), ' + b.fichiersRecus + ' reçu(s)' + (b.nettoyes ? ', ' + b.nettoyes + ' retiré(s) du Drive' : ''), 'success');
     } catch (e) {
