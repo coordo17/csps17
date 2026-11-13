@@ -3057,8 +3057,10 @@ async function texteRapideClassement(file) {
 function classerTexteParContenu(texte) {
   var n = normFichierClassement(texte);
   if (!n) return null;
+  var estDevis = sembleDevisHonoraires(texte);
   for (var i = 0; i < TYPE_MOTS_CLES_CONTENU.length; i++) {
     var ref = TYPE_MOTS_CLES_CONTENU[i][0], mots = TYPE_MOTS_CLES_CONTENU[i][1];
+    if (ref === 'PGC' && estDevis) continue; // devis d'honoraires MC2 : parle du PGC sans en etre un
     for (var j = 0; j < mots.length; j++) { if (n.indexOf(normFichierClassement(mots[j])) >= 0) return ref; }
   }
   return null;
@@ -3150,7 +3152,18 @@ function captureBruteEntre(texte, labelDebut, labelsFin, maxLen) {
 function lignesDe(brut) {
   return brut.split('\n').map(function (l) { return l.replace(/\s+/g, ' ').trim(); }).filter(Boolean);
 }
-function sembleEnTetePGC(texte) { return /plan\s*g[ée]n[ée]ral\s*de\s*coordination|p\s*\.?\s*g\s*\.?\s*c\s*\.?\s*s\s*\.?\s*p\s*\.?\s*s\s*\.?/i.test(texte); }
+// 13/11 (constate sur St-Mars-la-Briere) : un DEVIS d'honoraires MC2 decrit
+// les taches du coordonnateur ("Elaboration du Plan General de Coordination",
+// "Tenue a jour... Plan General de Coordination") et declenchait donc a tort
+// la detection "PGC" alors que ce n'est pas le PGC lui-meme (pas d'en-tete
+// "Projet / Site :" / "Maitre d'Ouvrage :") -- l'extraction tombait a plat.
+function sembleDevisHonoraires(texte) {
+  return /devis\s*n[°o]?\s*\d|decomposition\s+financiere|montant\s+total\s+h\s*\.?\s*t|tva\s*20\s*%/i.test(normFichierClassement(texte || ''));
+}
+function sembleEnTetePGC(texte) {
+  if (sembleDevisHonoraires(texte)) return false;
+  return /plan\s*g[ée]n[ée]ral\s*de\s*coordination|p\s*\.?\s*g\s*\.?\s*c\s*\.?\s*s\s*\.?\s*p\s*\.?\s*s\s*\.?/i.test(texte);
+}
 function sembleFicheAffaire(texte) { return /fiche\s+affaire/i.test(texte) && /identification\s+de\s+l.op[ée]ration/i.test(texte); }
 
 function extraireIdentificationPGC(col) {
