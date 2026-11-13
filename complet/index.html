@@ -1439,7 +1439,7 @@ function addEntreprise(type) {
   var div = document.createElement('div');
   div.className = 'entreprise-card';
   div.id = id;
-  var h = '<div class="entreprise-card-head" onclick="toggleEntCard(\''+id+'\')">'    + '<span>' + typeLabel + ' ' + entrepriseCount + '</span>'    + '<span class="ent-type-badge ' + typeBadgeClass + '">' + typeLabel + '</span>'    + '<button class="btn-remove-ent" onclick="removeEntreprise(event,\''+id+'\')">x</button>'    + '</div>'    + '<div class="entreprise-card-body" id="body-'+id+'">'    + '<input type="hidden" class="ent-type" value="'+type+'">'    + '<div class="form-row">'    + '<div class="field"><label>Raison sociale *</label><input type="text" class="ent-nom" placeholder="Ex : SAS Maconnerie Bretagne"></div>'    + '<div class="field"><label>Lot / Travaux confies</label><input type="text" class="ent-lot" placeholder="Ex : Gros oeuvre"></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Adresse</label><input type="text" class="ent-adresse" placeholder="Adresse complete"></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Tel portable</label><input type="tel" class="ent-tel" placeholder="06 xx xx xx xx"></div>'    + '<div class="field"><label>Tel fixe</label><input type="tel" class="ent-tel-fixe" placeholder="02 xx xx xx xx"></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Mail</label><input type="email" class="ent-mail" placeholder="contact@entreprise.fr"></div>'    + '<div class="field"><label>SIRET</label><input type="text" class="ent-siret" placeholder="000 000 000 00000"><button type="button" class="btn btn-outline btn-sm" style="margin-top:6px;width:100%;" onclick="verifierEntreprise(this)">&#128269; Verifier au registre officiel</button></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Signataire (nom + qualite)</label><input type="text" class="ent-contact" placeholder="Ex : COATMEUR Sebastien - Chef chantier"></div>'    + '<div class="field"><label>Effectif prevu</label><input type="number" class="ent-effectif" placeholder="Ex : 4" min="1"></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Date approx. d\'intervention (R.4532-38 3\u00b0)</label><input type="date" class="ent-dateInterv"></div>'    + '<div class="field"><label>Duree prevue des travaux</label><input type="text" class="ent-duree" placeholder="Ex : 3 semaines"></div>'    + '</div>'    + '</div>';
+  var h = '<div class="entreprise-card-head" onclick="toggleEntCard(\''+id+'\')">'    + '<span class="ent-head-label">' + typeLabel + ' ' + entrepriseCount + '</span>'    + '<select class="ent-type ent-type-badge ' + typeBadgeClass + '" onclick="event.stopPropagation()" onchange="icChangerTypeEntreprise(this)" style="border:none;cursor:pointer;" title="Changer le type (principale / sous-traitant / prestataire)">'    + '<option value="principale"' + (type==='principale'?' selected':'') + '>Principale</option>'    + '<option value="sous-traitant"' + (type==='sous-traitant'?' selected':'') + '>Sous-traitant</option>'    + '<option value="prestataire"' + (type==='prestataire'?' selected':'') + '>Prestataire</option>'    + '</select>'    + '<button class="btn-remove-ent" onclick="removeEntreprise(event,\''+id+'\')">x</button>'    + '</div>'    + '<div class="entreprise-card-body" id="body-'+id+'">'    + '<div class="form-row">'    + '<div class="field"><label>Raison sociale *</label><input type="text" class="ent-nom" placeholder="Ex : SAS Maconnerie Bretagne"></div>'    + '<div class="field"><label>Lot / Travaux confies</label><input type="text" class="ent-lot" placeholder="Ex : Gros oeuvre"></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Adresse</label><input type="text" class="ent-adresse" placeholder="Adresse complete"></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Tel portable</label><input type="tel" class="ent-tel" placeholder="06 xx xx xx xx"></div>'    + '<div class="field"><label>Tel fixe</label><input type="tel" class="ent-tel-fixe" placeholder="02 xx xx xx xx"></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Mail</label><input type="email" class="ent-mail" placeholder="contact@entreprise.fr"></div>'    + '<div class="field"><label>SIRET</label><input type="text" class="ent-siret" placeholder="000 000 000 00000"><button type="button" class="btn btn-outline btn-sm" style="margin-top:6px;width:100%;" onclick="verifierEntreprise(this)">&#128269; Verifier au registre officiel</button></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Signataire (nom + qualite)</label><input type="text" class="ent-contact" placeholder="Ex : COATMEUR Sebastien - Chef chantier"></div>'    + '<div class="field"><label>Effectif prevu</label><input type="number" class="ent-effectif" placeholder="Ex : 4" min="1"></div>'    + '</div>'    + '<div class="form-row">'    + '<div class="field"><label>Date approx. d\'intervention (R.4532-38 3\u00b0)</label><input type="date" class="ent-dateInterv"></div>'    + '<div class="field"><label>Duree prevue des travaux</label><input type="text" class="ent-duree" placeholder="Ex : 3 semaines"></div>'    + '</div>'    + '</div>';
   div.innerHTML = h;
   document.getElementById('entreprise-list').appendChild(div);
   if (typeof icCarteEntreprise === 'function') icCarteEntreprise(div, type);
@@ -9474,6 +9474,47 @@ function icCarteEntreprise(div, type) {
   // la derniere carte ajoutee ; on ne reordonne qu'une fois la boucle terminee.
   clearTimeout(window._icRegroupT);
   window._icRegroupT = setTimeout(function () { icMajSelectsParent(); icRegrouperEntreprises(); }, 0);
+}
+
+// 13/11 (bug trouve par Alain sur le chantier Auray : REDSTOCK rattache a
+// BJ PRESTATIONS en tant que principale au lieu de sous-traitant, et rien
+// dans l'appli ne permettait de corriger ce type apres coup) : le type
+// (principale/sous-traitant/prestataire) est desormais un <select> editable
+// (cf. addEntreprise) ; cette fonction reagit a son changement en ajoutant
+// ou retirant la ligne "Pour le compte de" et en rafraichissant l'affichage.
+function icChangerTypeEntreprise(sel) {
+  var card = sel.closest('.entreprise-card');
+  if (!card) return;
+  var nouveauType = sel.value;
+  var classesBadge = { principale: 'type-principale', 'sous-traitant': 'type-sous-traitant', prestataire: 'type-prestataire' };
+  sel.className = 'ent-type ent-type-badge ' + (classesBadge[nouveauType] || 'type-principale');
+  var body = card.querySelector('.entreprise-card-body');
+  var ligneParentSel = body ? body.querySelector('.ent-parent') : null;
+  if (nouveauType === 'principale') {
+    // Une entreprise principale n'a pas de donneur d'ordre : on retire la ligne si presente.
+    if (ligneParentSel) {
+      var row = ligneParentSel.closest('.form-row');
+      if (row) row.parentNode.removeChild(row);
+    }
+  } else if (body && !ligneParentSel) {
+    // Sous-traitant ou prestataire : la ligne "Pour le compte de" doit exister.
+    var hid = body.querySelector('.ent-id');
+    var row2 = document.createElement('div');
+    row2.className = 'form-row';
+    row2.innerHTML = '<div class="field"><label>Pour le compte de (entreprise donneuse d’ordre)</label>'
+      + '<select class="ent-parent" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;"></select></div>';
+    body.insertBefore(row2, hid ? hid.nextSibling : body.firstChild);
+    var selParent = row2.querySelector('select');
+    selParent.addEventListener('focus', function () { icMajSelectsParent(); });
+    selParent.addEventListener('change', function () {
+      var p = icCarteParId(selParent.value);
+      var lot = card.querySelector('.ent-lot');
+      if (p && lot && !lot.value) lot.value = (p.querySelector('.ent-lot') || {}).value || '';
+      icRegrouperEntreprises();
+    });
+  }
+  icMajSelectsParent();
+  icRegrouperEntreprises();
 }
 
 function icCartes() { return Array.prototype.slice.call(document.querySelectorAll('#entreprise-list .entreprise-card')); }
