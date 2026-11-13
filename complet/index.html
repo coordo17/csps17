@@ -1119,7 +1119,7 @@
           <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsContraintes()">Réseaux / contraintes du site</button>
           <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsPlanning()">Planning / co-activités</button>
           <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsCR()">CR de réunion</button>
-          <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsCBT()">Déchets / Base vie (CBT)</button>
+          <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsCBT()">Déchets / Base vie / Exploitation (CBT)</button>
           <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsPlans()">Accès / Clôture (Plans)</button>
           <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="document.getElementById('import-vrac-input').click()">&#128193; Importer un dossier</button>
           <input type="file" id="import-vrac-input" multiple style="display:none;" onchange="importerDossierVrac(event)">
@@ -3440,6 +3440,12 @@ function enregistrerFaitsContraintes(affaire, fichierNom) {
 // ============================================================================
 var CBT_DECHETS_MOTS = ['nettoyage du chantier', 'evacuation des dechets', 'évacuation des déchets', 'dechets de chantier', 'déchets de chantier', 'tri des dechets', 'tri des déchets', 'gestion des dechets', 'gestion des déchets', 'compte prorata'];
 var CBT_BASEVIE_MOTS = ['installations de chantier', 'installation de chantier', 'base vie', 'base-vie', 'vestiaires', 'sanitaires de chantier', 'refectoire', 'réfectoire'];
+// Themes chantier-wide ajoutes le 13/11 (demande d'Alain, "Section I de
+// Fred") : memes garde-fous que dechets/base_vie ci-dessus -- une
+// proposition reperee par mots-cles, jamais injectee sans relecture.
+var CBT_EXPLOITATION_MOTS = ['site en exploitation', 'etablissement en activite', 'établissement en activité', 'maintien de l\'activite', "maintien de l'activité", 'reste ouvert', 'reste ouverte', 'site occupe', 'site occupé', 'plan de prevention', 'plan de prévention', 'coactivite avec le personnel', 'personnel du site', 'clientele', 'clientèle'];
+var CBT_ENERGIE_MOTS = ['energie provisoire', 'énergie provisoire', 'alimentation provisoire', 'raccordement provisoire', 'tableau provisoire', 'armoire electrique de chantier', 'armoire électrique de chantier', 'coffret de chantier', 'branchement provisoire', 'alimentation electrique de chantier', 'alimentation électrique de chantier'];
+var CBT_STOCKAGE_SITE_MOTS = ['zone de stockage', 'aire de stockage', 'zone de depot', 'zone de dépôt', 'aire de depot', 'aire de dépôt', 'stockage des materiaux', 'stockage des matériaux', 'zone logistique', 'zone de stationnement'];
 function repererClauseCBT(texte, motsCles) {
   var texteMin = texte.toLowerCase();
   for (var i = 0; i < motsCles.length; i++) {
@@ -3553,6 +3559,9 @@ async function ouvrirFaitsCBTDepuisFichier(file) {
     if (texte && texte.replace(/\s/g, '').length >= 30) {
       propositions.dechets = repererClauseCBT(texte, CBT_DECHETS_MOTS);
       propositions.base_vie = repererClauseCBT(texte, CBT_BASEVIE_MOTS);
+      propositions.exploitation = repererClauseCBT(texte, CBT_EXPLOITATION_MOTS);
+      propositions.energie = repererClauseCBT(texte, CBT_ENERGIE_MOTS);
+      propositions.stockages = repererClauseCBT(texte, CBT_STOCKAGE_SITE_MOTS);
     }
   } catch (err) {
     // Document scanne/illisible : on ouvre quand meme la fiche, vide --
@@ -3569,16 +3578,26 @@ function ouvrirFaitsCBT(fichierNom, propositions) {
   // valide et enregistre -- seulement un champ encore vide.
   var dechetsVal = f.dechets || prop.dechets || '';
   var baseVieVal = f.base_vie || prop.base_vie || '';
+  var exploitationVal = f.exploitation || prop.exploitation || '';
+  var energieVal = f.energie || prop.energie || '';
+  var stockagesVal = f.stockages || prop.stockages || '';
+  var uneProposition = prop.dechets || prop.base_vie || prop.exploitation || prop.energie || prop.stockages;
   var html = '<p style="margin-bottom:10px;font-size:13px;color:var(--text-light);">'
     + (fichierNom ? 'Document depose : <strong>' + icEscAttr(fichierNom) + '</strong>. ' : '')
-    + 'Info de chantier (valable pour toutes les entreprises) -- alimente la grille de la fiche IC (§4A) et les observations du CSPS (§12). '
-    + (prop.dechets || prop.base_vie ? '<strong>Passage repere automatiquement dans le document (a verifier, rien n\'est jugé à votre place) :</strong> relisez et corrigez avant d\'enregistrer. ' : '')
+    + 'Info de chantier (valable pour toutes les entreprises) -- alimente la grille de la fiche IC (§4A), la Section I et les observations du CSPS (§12). '
+    + (uneProposition ? '<strong>Passage repere automatiquement dans le document (a verifier, rien n\'est jugé à votre place) :</strong> relisez et corrigez avant d\'enregistrer. ' : '')
     + 'Laissez vide si non concerne.</p>'
+    + '<div class="field" style="margin-bottom:10px;"><label>Site en exploitation / plan de prévention</label>'
+    + '<textarea id="faits-cbt-exploitation" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Agence ouverte pendant les travaux, clients/chariots prioritaires.">' + icEscAttr(exploitationVal) + '</textarea></div>'
     + '<div class="field" style="margin-bottom:10px;"><label>Gestion des déchets (qui évacue : chaque entreprise, ou bennes communes au compte prorata ?)</label>'
     + '<textarea id="faits-cbt-dechets" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Chaque entreprise évacue à ses frais ses propres déchets au fur et à mesure.">' + icEscAttr(dechetsVal) + '</textarea></div>'
-    + '<div class="field"><label>Base vie / installations de chantier</label>'
-    + '<textarea id="faits-cbt-basevie" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Vestiaires, sanitaires et réfectoire mis en place par le lot gros oeuvre dès le démarrage.">' + icEscAttr(baseVieVal) + '</textarea></div>';
-  openDocModal('Faits CBT (déchets / base vie)' + (f.source ? ' — source : ' + icEscAttr(f.source) : ''), html, 'Enregistrer', function () {
+    + '<div class="field" style="margin-bottom:10px;"><label>Base vie / installations de chantier</label>'
+    + '<textarea id="faits-cbt-basevie" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Vestiaires, sanitaires et réfectoire mis en place par le lot gros oeuvre dès le démarrage.">' + icEscAttr(baseVieVal) + '</textarea></div>'
+    + '<div class="field" style="margin-bottom:10px;"><label>Énergie provisoire</label>'
+    + '<textarea id="faits-cbt-energie" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Coffret provisoire fourni par le lot électricité, raccordement sur le TGBT existant.">' + icEscAttr(energieVal) + '</textarea></div>'
+    + '<div class="field"><label>Stockages (zone de dépôt matériaux)</label>'
+    + '<textarea id="faits-cbt-stockages" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Zone de stockage délimitée côté cour, pas de stockage sur domaine public.">' + icEscAttr(stockagesVal) + '</textarea></div>';
+  openDocModal('Faits CBT (déchets / base vie / exploitation / énergie / stockages)' + (f.source ? ' — source : ' + icEscAttr(f.source) : ''), html, 'Enregistrer', function () {
     enregistrerFaitsCBT(affaire, fichierNom);
   });
 }
@@ -3587,6 +3606,9 @@ function enregistrerFaitsCBT(affaire, fichierNom) {
   f.cbt = {
     dechets: document.getElementById('faits-cbt-dechets').value.trim(),
     base_vie: document.getElementById('faits-cbt-basevie').value.trim(),
+    exploitation: document.getElementById('faits-cbt-exploitation').value.trim(),
+    energie: document.getElementById('faits-cbt-energie').value.trim(),
+    stockages: document.getElementById('faits-cbt-stockages').value.trim(),
     source: (fichierNom ? fichierNom + ' — ' : '') + 'saisi le ' + new Date().toLocaleDateString('fr-FR')
   };
   persistAffaires();
@@ -4441,8 +4463,9 @@ function faitsVierges() {
     // "dechets" et "base_vie" sont des propositions reperees dans le texte,
     // TOUJOURS relues et validees/corrigees par Alain avant enregistrement
     // (jamais injectees sans verification -- meme logique que l'import
-    // deterministe du PPSPS).
-    cbt: { dechets: '', base_vie: '', source: '' },
+    // deterministe du PPSPS). exploitation/energie/stockages ajoutes le
+    // 13/11 pour alimenter la Section I (meme garde-fou).
+    cbt: { dechets: '', base_vie: '', exploitation: '', energie: '', stockages: '', source: '' },
     // Plans/PIC (05/11) : acces et cloture, reperes dans le plan de masse
     // / PIC depose (cf. ouvrirFaitsPlans) -- meme principe que le CBT.
     plans: { acces: '', cloture: '', source: '' },
@@ -4523,6 +4546,10 @@ function affaireFaits(affaire) {
   if (!affaire.faits) faitsMigrer(affaire);
   // Affaires deja migrees avant l'ajout du CBT (05/11) : pas de cle "cbt".
   if (!affaire.faits.cbt) affaire.faits.cbt = faitsVierges().cbt;
+  // Affaires migrees avant l'ajout d'exploitation/energie/stockages (13/11).
+  if (affaire.faits.cbt.exploitation === undefined) affaire.faits.cbt.exploitation = '';
+  if (affaire.faits.cbt.energie === undefined) affaire.faits.cbt.energie = '';
+  if (affaire.faits.cbt.stockages === undefined) affaire.faits.cbt.stockages = '';
   if (!affaire.faits.alertesPlanning) affaire.faits.alertesPlanning = [];
   if (!affaire.faits.plans) affaire.faits.plans = faitsVierges().plans;
   if (!affaire.faits.cbtPoints) affaire.faits.cbtPoints = {};
@@ -7394,8 +7421,8 @@ var DOC_FILES = {
   'PGCR':        'CSPS17_PGC_v1.docx',
   'PGC3R':       'CSPS17_PGC_Simplifie_Cat3_v1.docx',
   'DIF':         'CSPS17_Fiche_Diffusion_PGC_v3.docx',
-  'FIC':         'Fiche_IC_CSPS17_v20.docx',
-  'FIC3':        'Fiche_IC_Cat3_CSPS17_v6.docx',
+  'FIC':         'Fiche_IC_CSPS17_v21.docx',
+  'FIC3':        'Fiche_IC_Cat3_CSPS17_v7.docx',
   'IC':          'CSPS17_Courrier_CSPS_v2.docx',
   'PPP':         'CSPS17_Grille_Analyse_PPSPS_v5.docx',
   'VIS':         'CR_Visite_Chantier_CSPS17_v5.docx',
@@ -7521,6 +7548,7 @@ function buildTagData(data) {
     ppsps_envoi_organismes:      (data._ppspsData && data._ppspsData.envoiOrganismes) ? data._ppspsData.envoiOrganismes : '',
     ppsps_communique_entreprises: (data._ppspsData && data._ppspsData.communiqueEntreprises) ? data._ppspsData.communiqueEntreprises : '',
     // Tags Cat.3 FIC
+    cat3_exploitation: (data._ficData && data._ficData.cat3_exploitation) ? data._ficData.cat3_exploitation : '',
     cat3_acces:        (data._ficData && data._ficData.cat3_acces) ? data._ficData.cat3_acces : '',
     cat3_securisation: (data._ficData && data._ficData.cat3_securisation) ? data._ficData.cat3_securisation : '',
     cat3_hygiene:      (data._ficData && data._ficData.cat3_hygiene) ? data._ficData.cat3_hygiene : '',
@@ -7795,6 +7823,7 @@ function buildTagsPGC(data) {
     lots: lots,
     // Les tags cat3_* (partages avec la Fiche IC Cat.3) : priorite au formulaire
     // terrain (_ficData), sinon repli sur l'import PGC (cat3_pgc), sinon vide.
+    cat3_exploitation: ou((data._ficData || {}).cat3_exploitation, ou(c3.exploitation, '')),
     cat3_acces:        ou((data._ficData || {}).cat3_acces, ou(c3.acces, '')),
     cat3_securisation: ou((data._ficData || {}).cat3_securisation, ou(c3.securisation, '')),
     cat3_hygiene:      ou((data._ficData || {}).cat3_hygiene, ou(c3.hygiene, '')),
@@ -10718,24 +10747,8 @@ function genFormulaireFIC() {
   // Points de coordination propres au lot (PGC)
   html2 += icLotHtml();
 
-  // Section I Cat.3 - Explications PGC (visible seulement si cat=3)
-  if (terrainAffaire.cat === 3) {
-    var cat3pgc = terrainAffaire.cat3_pgc || window._cat3PGC || {};
-    html2 += '<div class="terrain-section" style="border:2px solid #d97706;">';
-    html2 += '<div class="terrain-section-header" style="background:#d97706;">&#128196; Section I — Explications du PGC & Constats in situ (Cat. 3)</div>';
-    html2 += '<div class="terrain-section-body">';
-    html2 += '<p style="font-size:12px;color:var(--text-light);margin-bottom:12px;">Ces textes seront injectés dans la Fiche IC Cat.3. ' + (cat3pgc.acces || cat3pgc.securisation || cat3pgc.hygiene ? 'Pré-rempli depuis le PGC — verifiez et completez.' : 'Pré-remplissez depuis le PGC.') + '</p>';
-    html2 += fieldRow('🚗 Accès & Véhicules', 'fic-cat3-acces', 'textarea', 'Ex: Accès depuis la voie communale...', cat3pgc.acces || '');
-    html2 += fieldRow('Sécurisation / Clôture', 'fic-cat3-securisation', 'textarea', 'Ex: Site fermé, portail verrouillé...', cat3pgc.securisation || '');
-    html2 += fieldRow('Hygiène & Base vie', 'fic-cat3-hygiene', 'textarea', 'Ex: Utilisation des installations présentes...', cat3pgc.hygiene || '');
-    html2 += fieldRow('Énergie Provisoire', 'fic-cat3-energie', 'textarea', 'Ex: Points électriques protégés par différentiel...', cat3pgc.energie || '');
-    html2 += fieldRow('Stockages', 'fic-cat3-stockages', 'textarea', 'Ex: Stockages dans la cour, pas sur domaine public...', cat3pgc.stockages || '');
-    html2 += fieldRow('Déchets & Bennes', 'fic-cat3-dechets', 'textarea', 'Ex: Pas de bennes communes, nettoyage fin de journée...', cat3pgc.dechets || '');
-    html2 += fieldRow('Secours', 'fic-cat3-secours', 'textarea', 'Ex: SST présent, trousse médicale à charge EE...', cat3pgc.secours || '');
-    html2 += '</div></div>';
-  }
-
-  // Section 11 - Secours
+  // Section 11 - Secours (calcul deplace plus haut, 13/11, pour etre
+  // reutilise par la Section I juste en dessous)
   var cChantierFic = terrainAffaire.chantier || {};
   var secoursPgc = terrainAffaire.secours_pgc || window._secoursPGC || {};
   // L'hopital le plus proche peut venir de l'ancien mecanisme (secours_pgc,
@@ -10745,6 +10758,33 @@ function genFormulaireFIC() {
   // sinon on retombe sur le champ natif.
   var hopitalDefault = secoursPgc.hopital ? (secoursPgc.hopital + (secoursPgc.distance ? ' (' + secoursPgc.distance + ')' : '')) : (cChantierFic.hopitalProche || '');
   var secAlerteDefault = [secoursPgc.urgences, hopitalDefault].filter(Boolean).join(' — ');
+
+  // Section I - Explications du PGC & Constats in situ (13/11, demande
+  // d'Alain : "Section I de Fred"). Jusqu'ici reservee a la Cat.3 et jamais
+  // pre-remplie (cat3_pgc n'est alimente nulle part dans le code -- champ
+  // mort). Fred l'utilise sur TOUTE categorie (vu sur son PV IC Cat.2
+  // d'Auray) : la section s'affiche donc desormais pour toutes les
+  // categories, et chaque theme est pre-rempli depuis les faits deja reperes
+  // de facon deterministe ailleurs dans l'app (CBT, Plans/PIC, Secours) --
+  // jamais invente, toujours a verifier/completer par Alain pendant l'IC.
+  var faitsSectionI = affaireFaits(terrainAffaire);
+  var cbtFaits = faitsSectionI.cbt || {};
+  var plansFaits = faitsSectionI.plans || {};
+  var secoursTexteDefault = [secAlerteDefault, hopitalDefault].filter(Boolean).join(' — ');
+  html2 += '<div class="terrain-section" style="border:2px solid #d97706;">';
+  html2 += '<div class="terrain-section-header" style="background:#d97706;">&#128196; Section I — Explications du PGC & Constats in situ</div>';
+  html2 += '<div class="terrain-section-body">';
+  html2 += '<p style="font-size:12px;color:var(--text-light);margin-bottom:12px;">Dispositions du PGC, par theme -- pre-remplies quand un CBT ou un plan depose en contenait un passage repere (texte reel, a verifier), sinon a completer a la main. La colonne attendue par Fred ("Constat in situ") est le champ lui-meme : relisez et corrigez selon ce que vous observez sur place.</p>';
+  html2 += fieldRow('Site en exploitation / plan de prevention', 'fic-cat3-exploitation', 'textarea', 'Ex: Agence ouverte pendant les travaux, horaires...', cbtFaits.exploitation || '');
+  html2 += fieldRow('🚗 Accès & Véhicules', 'fic-cat3-acces', 'textarea', 'Ex: Accès depuis la voie communale...', plansFaits.acces || '');
+  html2 += fieldRow('Sécurisation / Clôture', 'fic-cat3-securisation', 'textarea', 'Ex: Site fermé, portail verrouillé...', plansFaits.cloture || '');
+  html2 += fieldRow('Hygiène & Base vie', 'fic-cat3-hygiene', 'textarea', 'Ex: Utilisation des installations présentes...', cbtFaits.base_vie || '');
+  html2 += fieldRow('Énergie Provisoire', 'fic-cat3-energie', 'textarea', 'Ex: Points électriques protégés par différentiel...', cbtFaits.energie || '');
+  html2 += fieldRow('Stockages', 'fic-cat3-stockages', 'textarea', 'Ex: Stockages dans la cour, pas sur domaine public...', cbtFaits.stockages || '');
+  html2 += fieldRow('Déchets & Bennes', 'fic-cat3-dechets', 'textarea', 'Ex: Pas de bennes communes, nettoyage fin de journée...', cbtFaits.dechets || '');
+  html2 += fieldRow('Secours', 'fic-cat3-secours', 'textarea', 'Ex: SST présent, trousse médicale à charge EE...', secoursTexteDefault);
+  html2 += '</div></div>';
+
   html2 += sectionHeader('4', 'Organisation des secours', '&#128657;');
   html2 += fieldRow('SST present(s) — Nom(s)', 'fic-sec-sst', 'text', 'Nom du SST', '');
   html2 += fieldRow('Trousse de secours — emplacement', 'fic-sec-trousse', 'text', 'Ex: Base vie', secoursPgc.trousse || '');
@@ -12783,7 +12823,8 @@ async function genererDocTerrain() {
       obsNotif:      getVal('fic-obs-notif'),
       obsDGI:        getVal('fic-obs-dgi'),
       obsDelai:      getVal('fic-obs-delai'),
-      // Section I Cat.3 - Explications PGC
+      // Section I - Explications PGC & constats in situ
+      cat3_exploitation:  getVal('fic-cat3-exploitation'),
       cat3_acces:         getVal('fic-cat3-acces'),
       cat3_securisation:  getVal('fic-cat3-securisation'),
       cat3_hygiene:       getVal('fic-cat3-hygiene'),
