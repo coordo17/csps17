@@ -2994,7 +2994,13 @@ var TYPE_MOTS_CLES_VRAC = [
   ['ICR', ['inspection', 'ic_individuelle', 'ic signee', 'ic_signee']],
   ['DIAG', ['amiante', 'plomb', 'crep', 'raat', 'diagnostic', 'diag_']],
   ['PLAN', ['planning']],
-  ['PLANS', ['plan de masse', 'plan-masse', 'plan masse', 'pic-0', 'pic_0']],
+  // 16/11 (demande d'Alain : plans de coupe/elevation/situation d'AURAY
+  // non reconnus, seul "plan de masse" matchait malgre le titre de la
+  // carte "Plans (masse, PIC, coupes)") : mots-cles elargis aux autres
+  // types de plans de ce jeu de dessins. "securite" volontairement absent
+  // -- trop risque de collision avec les PPSPS ("Plan Particulier de
+  // Securite..."), teste juste apres dans cette liste.
+  ['PLANS', ['plan de masse', 'plan-masse', 'plan masse', 'pic-0', 'pic_0', 'plan de situation', 'plan d\'implantation', 'plan interieur', 'coupe terrain', 'coupe batiment', 'elevation', 'elevations', 'circu stock']],
   ['CONTRAINTES', ['arrete de voirie', 'arrete voirie', 'contrainte']],
   ['PPSPS', ['ppsps']],
   ['CRMOA', ['compte rendu', 'cr reunion', 'cr_reunion', 'reunion de chantier', 'cr n°', 'cr n ']],
@@ -3059,7 +3065,7 @@ var TYPE_MOTS_CLES_CONTENU = [
   ['DIAG', ['diagnostic amiante', 'diagnostic plomb', 'rapport de reperage', 'etude geotechnique']],
   ['PLAN', ['planning previsionnel', 'planning des travaux', 'diagramme de gantt']],
   ['CONTRAINTES', ['arrete de voirie', 'declaration prealable', 'servitude']],
-  ['PLANS', ['plan de masse', 'plan d\'implantation', 'plan d\'installation de chantier']],
+  ['PLANS', ['plan de masse', 'plan d\'implantation', 'plan d\'installation de chantier', 'plan de situation', 'coupe terrain', 'coupe batiment', 'elevation', 'elevations']],
   ['PPSPS', ['plan particulier de securite et de protection de la sante']],
   ['CRMOA', ['compte rendu de reunion']],
   ['CBT', ['cahier des besoins techniques', 'cahier des clauses techniques particulieres']]
