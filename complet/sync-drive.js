@@ -85,13 +85,87 @@
     return drive(API + '?fields=id', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(meta) })
       .then(function(r){ return r.json(); }).then(function(j){ return j.id; });
   }
-  function envoyerFichier(nom, parent, blob, idExistant){
+  // 16/11 (demande d'Alain, suite aux echecs de synchro sur de gros fichiers
+  // depuis la tablette -- "53 secondes" puis plantage) : l'envoi en
+  // "multipart" (ancien envoyerFichier, garde juste en dessous pour les tout
+  // petits fichiers) renvoie TOUT le fichier en une seule requete -- sur un
+  // reseau instable (wifi tablette), une coupure en cours d'envoi d'un PDF
+  // de plusieurs Mo faisait tout perdre et il fallait tout renvoyer depuis
+  // le debut. Google recommande "resumable" au-dela de 5 Mo ou sur reseau
+  // instable : la session connait l'octet exact recu, donc une coupure ne
+  // fait reprendre que depuis cet octet, pas depuis zero.
+  // Reference : https://developers.google.com/drive/manage-uploads
+  var SEUIL_RESUMABLE = 5 * 1024 * 1024; // 5 Mo, seuil recommande par Google
+  function envoyerFichierMultipart(nom, parent, blob, idExistant){
     var meta = idExistant ? {} : { name: nom, parents: [parent] };
     var corps = new FormData();
     corps.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
     corps.append('file', blob);
     var url = idExistant ? UP + '/' + idExistant + '?uploadType=multipart&fields=id' : UP + '?uploadType=multipart&fields=id';
     return drive(url, { method: idExistant ? 'PATCH' : 'POST', body: corps }).then(function(r){ return r.json(); }).then(function(j){ return j.id; });
+  }
+  async function demarrerSessionResumable(nom, parent, idExistant){
+    var meta = idExistant ? {} : { name: nom, parents: [parent] };
+    var url = (idExistant ? UP + '/' + idExistant : UP) + '?uploadType=resumable&fields=id';
+    var r = await drive(url, {
+      method: idExistant ? 'PATCH' : 'POST',
+      headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+      body: JSON.stringify(meta)
+    });
+    var loc = r.headers.get('Location');
+    if (!loc) throw new Error('Drive : session resumable non demarree (pas d\'URL de session renvoyee)');
+    return loc;
+  }
+  // Interroge le serveur pour savoir jusqu'ou l'envoi precedent est arrive
+  // (reponse 308 + en-tete Range) -- permet de reprendre exactement a cet
+  // octet au lieu de tout renvoyer. Renvoie le prochain octet a envoyer, ou
+  // 'termine' si le fichier est en fait deja recu en entier (rare, mais
+  // possible si la confirmation s'est perdue en retour).
+  async function octetDeReprise(sessionUrl, total){
+    var r = await fetch(sessionUrl, { method: 'PUT', headers: { 'Content-Range': 'bytes */' + total } });
+    if (r.status === 200 || r.status === 201) return 'termine';
+    if (r.status === 308) {
+      var range = r.headers.get('Range');
+      var m = range && /bytes=0-(\d+)/.exec(range);
+      return m ? (parseInt(m[1], 10) + 1) : 0;
+    }
+    throw new Error('Drive : statut resumable inattendu (' + r.status + ')');
+  }
+  async function envoyerFichierResumable(nom, parent, blob, idExistant){
+    var total = blob.size, sessionUrl = await demarrerSessionResumable(nom, parent, idExistant);
+    var debut = 0, essai = 0, derniereErreur = null;
+    while (essai < 5) {
+      essai++;
+      try {
+        var tranche = blob.slice(debut);
+        var r = await fetch(sessionUrl, {
+          method: 'PUT',
+          headers: { 'Content-Length': String(tranche.size), 'Content-Range': 'bytes ' + debut + '-' + (total - 1) + '/' + total },
+          body: tranche
+        });
+        if (r.status === 200 || r.status === 201) { var j = await r.json(); return j.id; }
+        if (r.status === 308) { // envoi partiel accepte (rare en un seul bloc, gere quand meme)
+          var range = r.headers.get('Range'); var m = range && /bytes=0-(\d+)/.exec(range);
+          debut = m ? (parseInt(m[1], 10) + 1) : debut;
+          continue;
+        }
+        throw new Error('Drive resumable ' + r.status + ' : ' + (await r.text()).slice(0, 160));
+      } catch (e) {
+        derniereErreur = e;
+        // coupure reseau en plein envoi : on redemande au serveur ou il en
+        // est reellement avant de reprendre, plutot que de rejouer a l'aveugle.
+        try {
+          var reprise = await octetDeReprise(sessionUrl, total);
+          if (reprise === 'termine') return null; // deja recu, rien de plus a faire
+          debut = reprise;
+        } catch (e2) { /* le serveur ne repond pas non plus -- nouvel essai depuis le dernier point connu */ }
+      }
+    }
+    throw derniereErreur || new Error('Drive : envoi resumable echoue apres plusieurs tentatives');
+  }
+  function envoyerFichier(nom, parent, blob, idExistant){
+    if (blob.size <= SEUIL_RESUMABLE) return envoyerFichierMultipart(nom, parent, blob, idExistant);
+    return envoyerFichierResumable(nom, parent, blob, idExistant);
   }
   function lireFichierDrive(id){ return drive(API + '/' + id + '?alt=media'); }
   function effacerFichierDrive(id){ return drive(API + '/' + id, { method: 'DELETE' }).catch(function(){}); }
@@ -128,9 +202,26 @@
   }
   function nomDrive(chemin){ return chemin.replace(/[\\/]/g, '__'); }
 
+  // 16/11 (demande d'Alain, synchro plus rapide + un fichier en echec ne
+  // doit plus bloquer les autres) : execute fn(item) sur chaque element de
+  // "liste", "taille" a la fois en parallele (au lieu d'un par un), et
+  // rattrape l'erreur de chaque appel individuellement -- une piece jointe
+  // qui echoue (meme apres les tentatives de reprise resumable) est notee
+  // dans "erreurs" plutot que de faire planter tout le lot.
+  async function traiterParLots(liste, taille, fn, erreurs){
+    for (var deb = 0; deb < liste.length; deb += taille) {
+      var lot = liste.slice(deb, deb + taille);
+      await Promise.all(lot.map(function(item){
+        return Promise.resolve().then(function(){ return fn(item); }).catch(function(e){
+          erreurs.push((item || '') + ' : ' + (e && e.message || e));
+        });
+      }));
+    }
+  }
+
   // --- synchronisation ---
   async function synchroniser(){
-    var moi = appareil(), bilan = { recues: 0, envoyees: 0, fichiersEnvoyes: 0, fichiersRecus: 0, nettoyes: 0 };
+    var moi = appareil(), bilan = { recues: 0, envoyees: 0, fichiersEnvoyes: 0, fichiersRecus: 0, nettoyes: 0, erreursFichiers: [] };
     etat('Connexion à Google...');
     await obtenirJeton();
     etat('Lecture du Drive...');
@@ -225,27 +316,34 @@
       // pieces jointes propres a CETTE affaire (chemin local toujours de la
       // forme "local/<idAffaire>/..." -- cf. local-api.js) : transferees
       // ici, avant de confirmer l'affaire sur le Drive.
+      //
+      // 16/11 (demande d'Alain, synchro trop lente + plantage total sur un
+      // seul fichier en echec) : les pieces jointes partent maintenant PAR
+      // LOTS DE 3 EN PARALLELE (plus rapide qu'une a la fois) et chaque
+      // fichier est protege par son propre try/catch -- un fichier qui
+      // echoue malgre les tentatives de reprise (voir envoyerFichierResumable
+      // ci-dessus) est signale dans le bilan au lieu de faire planter toute
+      // la synchro et perdre les affaires suivantes.
       var prefixe = 'local/' + id + '/';
       var locauxAffaire = locauxTous.filter(function(k){ return k.indexOf(prefixe) === 0 && aLocal[k]; });
-      for (var i = 0; i < locauxAffaire.length; i++) {
-        var ch = locauxAffaire[i], f = distant.fichiers[ch];
-        if (!f) {
-          etat('Affaire ' + (n + 1) + '/' + tousIds.length + ' — envoi piece jointe ' + (bilan.fichiersEnvoyes + 1) + '...');
-          var don = await FichiersLocaux.lire(ch);
-          var idF = await envoyerFichier(nomDrive(ch), dossierFichiers, new Blob([don], { type: 'text/plain' }));
-          distant.fichiers[ch] = { id: idF, par: [moi.id] }; bilan.fichiersEnvoyes++; changeAffaire = true;
-        } else if (f.par.indexOf(moi.id) === -1) { f.par.push(moi.id); changeAffaire = true; }
-      }
+      var aEnvoyer = locauxAffaire.filter(function(ch){ return !distant.fichiers[ch]; });
+      var dejaConnus = locauxAffaire.filter(function(ch){ var f = distant.fichiers[ch]; return f && f.par.indexOf(moi.id) === -1; });
+      dejaConnus.forEach(function(ch){ distant.fichiers[ch].par.push(moi.id); changeAffaire = true; });
+      await traiterParLots(aEnvoyer, 3, async function(ch){
+        etat('Affaire ' + (n + 1) + '/' + tousIds.length + ' — envoi piece jointe (' + (bilan.fichiersEnvoyes + 1) + '/' + aEnvoyer.length + ')...');
+        var don = await FichiersLocaux.lire(ch);
+        var idF = await envoyerFichier(nomDrive(ch), dossierFichiers, new Blob([don], { type: 'text/plain' }));
+        distant.fichiers[ch] = { id: idF, par: [moi.id] }; bilan.fichiersEnvoyes++; changeAffaire = true;
+      }, bilan.erreursFichiers);
       var cheminsAffaire = Object.keys(distant.fichiers).filter(function(c){ return c.indexOf(prefixe) === 0; });
-      for (var j = 0; j < cheminsAffaire.length; j++) {
-        var c = cheminsAffaire[j], fi = distant.fichiers[c];
-        if (!aLocal[c] && fi.id) {
-          etat('Affaire ' + (n + 1) + '/' + tousIds.length + ' — reception piece jointe ' + (bilan.fichiersRecus + 1) + '...');
-          var contenu = await (await lireFichierDrive(fi.id)).text();
-          await FichiersLocaux.ecrire(c, contenu); aLocal[c] = true;
-          if (fi.par.indexOf(moi.id) === -1) fi.par.push(moi.id); bilan.fichiersRecus++; changeAffaire = true;
-        }
-      }
+      var aRecevoir = cheminsAffaire.filter(function(c){ var fi = distant.fichiers[c]; return !aLocal[c] && fi.id; });
+      await traiterParLots(aRecevoir, 3, async function(c){
+        var fi = distant.fichiers[c];
+        etat('Affaire ' + (n + 1) + '/' + tousIds.length + ' — reception piece jointe (' + (bilan.fichiersRecus + 1) + '/' + aRecevoir.length + ')...');
+        var contenu = await (await lireFichierDrive(fi.id)).text();
+        await FichiersLocaux.ecrire(c, contenu); aLocal[c] = true;
+        if (fi.par.indexOf(moi.id) === -1) fi.par.push(moi.id); bilan.fichiersRecus++; changeAffaire = true;
+      }, bilan.erreursFichiers);
 
       if (!changeAffaire) { etat('Affaire ' + (n + 1) + '/' + tousIds.length + ' deja a jour.'); continue; }
 
@@ -388,8 +486,13 @@
       // vraie synchro Drive -- vert "Synchronise" juste apres, avec la date
       // en infobulle (cf. majSyncIndic dans index.html).
       if (typeof majSyncIndic === 'function') { try { majSyncIndic('synced'); } catch (e) {} }
+      // 16/11 : une ou plusieurs pieces jointes en echec (reseau instable,
+      // meme apres reprise) n'empechent plus le reste de la synchro --
+      // signalees ici plutot que de faire echouer tout le bilan.
       showToast('Synchronisé : ' + b.recues + ' affaire(s) reçue(s) ou mise(s) à jour, ' + b.envoyees + ' envoyée(s) ; fichiers : '
-        + b.fichiersEnvoyes + ' envoyé(s), ' + b.fichiersRecus + ' reçu(s)' + (b.nettoyes ? ', ' + b.nettoyes + ' retiré(s) du Drive' : ''), 'success');
+        + b.fichiersEnvoyes + ' envoyé(s), ' + b.fichiersRecus + ' reçu(s)' + (b.nettoyes ? ', ' + b.nettoyes + ' retiré(s) du Drive' : '')
+        + (b.erreursFichiers.length ? ' ; ' + b.erreursFichiers.length + ' piece(s) en echec (reessayez) : ' + b.erreursFichiers.slice(0, 2).join(' ; ') : ''),
+        b.erreursFichiers.length ? 'error' : 'success');
     } catch (e) {
       etat(''); showToast('Synchronisation impossible : ' + e.message, 'error');
     }
