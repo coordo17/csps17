@@ -310,15 +310,30 @@
     // deja sauvegarde, pas sur les champs du formulaire).
     // Sans danger si aucune affaire n'est ouverte (currentAffaireId vide)
     // ou si rien de nouveau n'a ete saisi : dans ce cas on ne touche a rien.
+    //
+    // 16/11 (bug constate par Alain, St-Mars-la-Briere ecrasee par une
+    // version incomplete) : si l'affaire ouverte a l'ecran est justement
+    // une version INCOMPLETE recue d'une synchro precedente (sans
+    // categorie, sans documents...), re-sauvegarder systematiquement
+    // bumpait son savedAt a "maintenant" -- la faisant gagner la fusion
+    // face a la bonne version complete de l'autre appareil, qui etait
+    // pourtant plus ancienne mais meilleure ! On ne touche donc PLUS au
+    // savedAt (et on n'ecrit rien) si les champs du formulaire sont
+    // identiques a ce qui est deja enregistre : seul un vrai changement
+    // de saisie doit faire gagner cette affaire dans la fusion.
     try {
       if (typeof currentAffaireId !== 'undefined' && currentAffaireId && typeof collectFormData === 'function') {
         var dataAvantSync = collectFormData();
         if (dataAvantSync && dataAvantSync.chantier && dataAvantSync.chantier.nom) {
           var idxAvantSync = affaires.findIndex(function(a){ return a.id === currentAffaireId; });
           if (idxAvantSync >= 0) {
-            affaires[idxAvantSync] = Object.assign({}, affaires[idxAvantSync], dataAvantSync);
-            affaires[idxAvantSync].savedAt = new Date().toISOString();
-            localStorage.setItem('csps17_affaires', JSON.stringify(affaires));
+            var avantSync = {};
+            Object.keys(dataAvantSync).forEach(function(k){ avantSync[k] = affaires[idxAvantSync][k]; });
+            if (JSON.stringify(avantSync) !== JSON.stringify(dataAvantSync)) {
+              affaires[idxAvantSync] = Object.assign({}, affaires[idxAvantSync], dataAvantSync);
+              affaires[idxAvantSync].savedAt = new Date().toISOString();
+              localStorage.setItem('csps17_affaires', JSON.stringify(affaires));
+            }
           }
         }
       }
