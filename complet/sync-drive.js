@@ -216,6 +216,11 @@
       } else if (d && !l) { gagnant = d; bilan.recues++; }
       else { gagnant = l; bilan.envoyees++; }
       affairesMaj.push(gagnant);
+      // 16/11 (demande d'Alain) : une affaire qui n'a pas bouge (meme
+      // contenu des deux cotes) ne doit pas declencher une reecriture
+      // Drive -- seul un vrai changement (fusion differente, ou nouvelle
+      // piece jointe transferee plus bas) justifie de reconfirmer.
+      var changeAffaire = JSON.stringify(gagnant) !== JSON.stringify(l) || JSON.stringify(gagnant) !== JSON.stringify(d);
 
       // pieces jointes propres a CETTE affaire (chemin local toujours de la
       // forme "local/<idAffaire>/..." -- cf. local-api.js) : transferees
@@ -228,8 +233,8 @@
           etat('Affaire ' + (n + 1) + '/' + tousIds.length + ' — envoi piece jointe ' + (bilan.fichiersEnvoyes + 1) + '...');
           var don = await FichiersLocaux.lire(ch);
           var idF = await envoyerFichier(nomDrive(ch), dossierFichiers, new Blob([don], { type: 'text/plain' }));
-          distant.fichiers[ch] = { id: idF, par: [moi.id] }; bilan.fichiersEnvoyes++;
-        } else if (f.par.indexOf(moi.id) === -1) f.par.push(moi.id);
+          distant.fichiers[ch] = { id: idF, par: [moi.id] }; bilan.fichiersEnvoyes++; changeAffaire = true;
+        } else if (f.par.indexOf(moi.id) === -1) { f.par.push(moi.id); changeAffaire = true; }
       }
       var cheminsAffaire = Object.keys(distant.fichiers).filter(function(c){ return c.indexOf(prefixe) === 0; });
       for (var j = 0; j < cheminsAffaire.length; j++) {
@@ -238,9 +243,11 @@
           etat('Affaire ' + (n + 1) + '/' + tousIds.length + ' — reception piece jointe ' + (bilan.fichiersRecus + 1) + '...');
           var contenu = await (await lireFichierDrive(fi.id)).text();
           await FichiersLocaux.ecrire(c, contenu); aLocal[c] = true;
-          if (fi.par.indexOf(moi.id) === -1) fi.par.push(moi.id); bilan.fichiersRecus++;
+          if (fi.par.indexOf(moi.id) === -1) fi.par.push(moi.id); bilan.fichiersRecus++; changeAffaire = true;
         }
       }
+
+      if (!changeAffaire) { etat('Affaire ' + (n + 1) + '/' + tousIds.length + ' deja a jour.'); continue; }
 
       // affaire (et ses pieces) a jour -- confirmee tout de suite sur le
       // Drive avant de passer a la suivante. Les affaires pas encore
