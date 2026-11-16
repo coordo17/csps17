@@ -150,72 +150,120 @@
     var sup = supprimees();
     Object.keys(distant.supprimees).forEach(function(k){ if (!sup[k]) sup[k] = distant.supprimees[k]; });
     localStorage.setItem('csps17_supprimees', JSON.stringify(sup));
-    // 2. fusion : pour chaque affaire, la version la plus recente
-    var avant = {}; affaires.forEach(function(a){ avant[a.id] = a.savedAt || ''; });
-    var fusion = fusionnerAvecRegistre(affaires, distant.affaires).filter(function(a){ return !sup[a.id]; });
-    fusion.forEach(function(a){ if (avant[a.id] === undefined || (a.savedAt || '') > avant[a.id]) bilan.recues++; });
-    var avantDistant = {}; distant.affaires.forEach(function(a){ avantDistant[a.id] = a.savedAt || ''; });
-    fusion.forEach(function(a){ if (avantDistant[a.id] === undefined || (a.savedAt || '') > avantDistant[a.id]) bilan.envoyees++; });
-    affaires = fusion;
-    localStorage.setItem('csps17_affaires', JSON.stringify(affaires));
-
-    // 16/11 (bug constate par Alain : gros import de documents -> l'envoi
-    // des pieces jointes qui suit peut depasser les 45 s -> comme le
-    // fichier partage n'etait reecrit qu'a la toute fin (etape 5), une
-    // nouvelle affaire restait invisible sur l'autre appareil malgre
-    // plusieurs essais, meme si elle avait ete correctement fusionnee ici.
-    // On ecrit donc tout de suite un premier index avec les affaires a
-    // jour -- avant le transfert des pieces jointes, qui peut etre long --
-    // pour que l'affaire (sans forcement toutes ses pieces jointes encore)
-    // arrive des cette etape sur l'autre appareil.
-    etat('Enregistrement des affaires sur le Drive...');
-    distant.affaires = affaires; distant.supprimees = sup; distant.maj = new Date().toISOString(); distant.format = 'csps17-sync';
-    idIndex = await envoyerFichier(NOM_INDEX, dossier, new Blob([JSON.stringify(distant)], { type: 'application/json' }), idIndex);
-
-    // 3. pieces jointes
-    var locaux = await FichiersLocaux.cles(), aLocal = {};
-    locaux.forEach(function(k){ aLocal[k] = true; });
+    // 2. fichiers supprimes (rapide, global -- pas de gros transfert ici)
     var fsup = fichiersSupprimes(); distant.fichiersSupprimes = distant.fichiersSupprimes || {};
     Object.keys(distant.fichiersSupprimes).forEach(function(k){ if (!fsup[k]) fsup[k] = distant.fichiersSupprimes[k]; });
     localStorage.setItem('csps17_fichiers_supprimes', JSON.stringify(fsup));
+    var locauxTous = await FichiersLocaux.cles(), aLocal = {};
+    locauxTous.forEach(function(k){ aLocal[k] = true; });
     for (var z in fsup) {
       if (aLocal[z]) { await FichiersLocaux.effacer(z); delete aLocal[z]; }
       if (distant.fichiers[z]) { if (distant.fichiers[z].id) await effacerFichierDrive(distant.fichiers[z].id); delete distant.fichiers[z]; }
     }
     distant.fichiersSupprimes = fsup;
-    locaux = locaux.filter(function(k){ return aLocal[k]; });
-    for (var i = 0; i < locaux.length; i++) {
-      var ch = locaux[i], f = distant.fichiers[ch];
-      if (!f) {
-        etat('Envoi des fichiers... ' + (bilan.fichiersEnvoyes + 1));
-        var d = await FichiersLocaux.lire(ch);
-        var idF = await envoyerFichier(nomDrive(ch), dossierFichiers, new Blob([d], { type: 'text/plain' }));
-        distant.fichiers[ch] = { id: idF, par: [moi.id] }; bilan.fichiersEnvoyes++;
-      } else if (f.par.indexOf(moi.id) === -1) f.par.push(moi.id);
+
+    // 16/11 (demande d'Alain, suite au bug du 45 s depasse sur un gros
+    // import) : fusion ET transfert des pieces jointes AFFAIRE PAR AFFAIRE
+    // -- chaque affaire traitee est aussitot reconfirmee par une reecriture
+    // du fichier partage sur le Drive avant de passer a la suivante, au
+    // lieu d'un seul gros bloc "tout ou rien" a la fin. Si le delai est
+    // depasse en cours de route, les affaires deja traitees restent
+    // acquises sur le Drive (et donc sur l'autre appareil) ; il ne reste
+    // plus qu'a relancer "Synchroniser" pour reprendre sur les suivantes.
+    var parLocale = {}; affaires.forEach(function(a){ if (a && a.id) parLocale[a.id] = a; });
+    var parDistante = {}; distant.affaires.forEach(function(d){ if (d && d.id) parDistante[d.id] = d; });
+    var tousIds = Object.keys(parLocale).concat(Object.keys(parDistante)).filter(function(id, i, arr){ return arr.indexOf(id) === i; })
+      .filter(function(id){ return !sup[id]; });
+
+    var affairesMaj = [];
+    for (var n = 0; n < tousIds.length; n++) {
+      var id = tousIds[n], l = parLocale[id], d = parDistante[id], gagnant;
+      if (l && d) {
+        gagnant = ((d.savedAt || '') > (l.savedAt || '')) ? d : l;
+        var perdant = gagnant === d ? l : d;
+        var idsRjc = {}; (gagnant.rjc || []).forEach(function(e){ if (e && e.id) idsRjc[e.id] = true; });
+        var ajoutRjc = (perdant.rjc || []).filter(function(e){ return e && e.id && !idsRjc[e.id]; });
+        if (ajoutRjc.length) {
+          gagnant = JSON.parse(JSON.stringify(gagnant));
+          gagnant.rjc = (gagnant.rjc || []).concat(ajoutRjc).sort(function(x, y){ return (x.date || '').localeCompare(y.date || ''); });
+          gagnant.savedAt = new Date().toISOString();
+        }
+        if ((gagnant.savedAt || '') > (l.savedAt || '')) bilan.recues++;
+        if ((gagnant.savedAt || '') > (d.savedAt || '')) bilan.envoyees++;
+      } else if (d && !l) { gagnant = d; bilan.recues++; }
+      else { gagnant = l; bilan.envoyees++; }
+      affairesMaj.push(gagnant);
+
+      // pieces jointes propres a CETTE affaire (chemin local toujours de la
+      // forme "local/<idAffaire>/..." -- cf. local-api.js) : transferees
+      // ici, avant de confirmer l'affaire sur le Drive.
+      var prefixe = 'local/' + id + '/';
+      var locauxAffaire = locauxTous.filter(function(k){ return k.indexOf(prefixe) === 0 && aLocal[k]; });
+      for (var i = 0; i < locauxAffaire.length; i++) {
+        var ch = locauxAffaire[i], f = distant.fichiers[ch];
+        if (!f) {
+          etat('Affaire ' + (n + 1) + '/' + tousIds.length + ' — envoi piece jointe ' + (bilan.fichiersEnvoyes + 1) + '...');
+          var don = await FichiersLocaux.lire(ch);
+          var idF = await envoyerFichier(nomDrive(ch), dossierFichiers, new Blob([don], { type: 'text/plain' }));
+          distant.fichiers[ch] = { id: idF, par: [moi.id] }; bilan.fichiersEnvoyes++;
+        } else if (f.par.indexOf(moi.id) === -1) f.par.push(moi.id);
+      }
+      var cheminsAffaire = Object.keys(distant.fichiers).filter(function(c){ return c.indexOf(prefixe) === 0; });
+      for (var j = 0; j < cheminsAffaire.length; j++) {
+        var c = cheminsAffaire[j], fi = distant.fichiers[c];
+        if (!aLocal[c] && fi.id) {
+          etat('Affaire ' + (n + 1) + '/' + tousIds.length + ' — reception piece jointe ' + (bilan.fichiersRecus + 1) + '...');
+          var contenu = await (await lireFichierDrive(fi.id)).text();
+          await FichiersLocaux.ecrire(c, contenu); aLocal[c] = true;
+          if (fi.par.indexOf(moi.id) === -1) fi.par.push(moi.id); bilan.fichiersRecus++;
+        }
+      }
+
+      // affaire (et ses pieces) a jour -- confirmee tout de suite sur le
+      // Drive avant de passer a la suivante. Les affaires pas encore
+      // traitees sont reportees telles quelles (pas encore fusionnees) :
+      // sans ca le fichier partage les perdrait temporairement si la
+      // synchro s'arretait juste apres cette ecriture.
+      var resteAFaire = tousIds.slice(n + 1).map(function(id2){ return parLocale[id2] || parDistante[id2]; });
+      affaires = affairesMaj.concat(resteAFaire);
+      localStorage.setItem('csps17_affaires', JSON.stringify(affaires));
+      distant.affaires = affairesMaj.concat(resteAFaire); distant.supprimees = sup; distant.maj = new Date().toISOString(); distant.format = 'csps17-sync';
+      etat('Affaire ' + (n + 1) + '/' + tousIds.length + ' synchronisee.');
+      idIndex = await envoyerFichier(NOM_INDEX, dossier, new Blob([JSON.stringify(distant)], { type: 'application/json' }), idIndex);
     }
-    var chemins = Object.keys(distant.fichiers);
-    for (var j = 0; j < chemins.length; j++) {
-      var c = chemins[j], fi = distant.fichiers[c];
-      if (!aLocal[c] && fi.id) {
-        etat('Réception des fichiers... ' + (bilan.fichiersRecus + 1));
-        var contenu = await (await lireFichierDrive(fi.id)).text();
-        await FichiersLocaux.ecrire(c, contenu);
-        if (fi.par.indexOf(moi.id) === -1) fi.par.push(moi.id); bilan.fichiersRecus++;
+    affaires = affairesMaj;
+    localStorage.setItem('csps17_affaires', JSON.stringify(affaires));
+
+    // pieces jointes "orphelines" : pas de affaireId au moment du depot
+    // (ancien format), ou affaire depuis supprimee -- cas rare, traite en
+    // bloc a part pour ne pas compliquer la boucle ci-dessus.
+    var orphelinsLocaux = locauxTous.filter(function(k){
+      if (!aLocal[k]) return false;
+      var mId = /^local\/([^/]+)\//.exec(k);
+      return !mId || tousIds.indexOf(mId[1]) === -1;
+    });
+    for (var o = 0; o < orphelinsLocaux.length; o++) {
+      var cho = orphelinsLocaux[o];
+      if (!distant.fichiers[cho]) {
+        var dono = await FichiersLocaux.lire(cho);
+        var idFo = await envoyerFichier(nomDrive(cho), dossierFichiers, new Blob([dono], { type: 'text/plain' }));
+        distant.fichiers[cho] = { id: idFo, par: [moi.id] }; bilan.fichiersEnvoyes++;
       }
     }
-    // 4. nettoyage : un fichier recupere par tous les appareils quitte le Drive
-    var ids = Object.keys(distant.appareils);
+
+    // nettoyage : un fichier recupere par tous les appareils quitte le Drive
+    var idsApp = Object.keys(distant.appareils);
+    var chemins = Object.keys(distant.fichiers);
     for (var k = 0; k < chemins.length; k++) {
       var fx = distant.fichiers[chemins[k]];
-      if (fx.id && ids.length > 1 && ids.every(function(a){ return fx.par.indexOf(a) !== -1; })) {
+      if (fx.id && idsApp.length > 1 && idsApp.every(function(a){ return fx.par.indexOf(a) !== -1; })) {
         await effacerFichierDrive(fx.id); fx.id = null; bilan.nettoyes++;
       }
     }
-    // 5. ecriture du fichier commun
+    // ecriture finale (comptabilite des fichiers/appareils a jour)
     etat('Enregistrement sur le Drive...');
     distant.affaires = affaires; distant.supprimees = sup; distant.maj = new Date().toISOString(); distant.format = 'csps17-sync';
-    var blobIndex = new Blob([JSON.stringify(distant)], { type: 'application/json' });
-    await envoyerFichier(NOM_INDEX, dossier, blobIndex, idIndex);
+    await envoyerFichier(NOM_INDEX, dossier, new Blob([JSON.stringify(distant)], { type: 'application/json' }), idIndex);
     localStorage.setItem('csps17_derniere_synchro', distant.maj);
     return bilan;
   }
@@ -230,11 +278,21 @@
       // simples fetch() sans aucun delai -- si le reseau cale en plein
       // echange, l'appel restait bloque indefiniment et le bouton restait
       // grise jusqu'a une mise a jour forcee. On borne maintenant toute la
-      // synchro a 45 s, avec un message clair plutot qu'un blocage muet.
+      // synchro a un delai global, avec un message clair plutot qu'un
+      // blocage muet.
+      // 16/11 : la synchro traite maintenant les affaires une par une, en
+      // confirmant chacune sur le Drive avant de passer a la suivante (voir
+      // synchroniser() ci-dessus) -- si ce delai global est quand meme
+      // depasse (beaucoup d'affaires, ou pieces jointes volumineuses), les
+      // affaires deja traitees restent acquises et il suffit de relancer la
+      // synchro pour reprendre sur les suivantes. Le filet est allonge a
+      // 180 s pour laisser le temps a un gros lot d'affaires de passer en
+      // une seule fois sur un reseau simplement lent (pas bloque).
+      var DELAI_SYNCHRO = 180000;
       var b = await Promise.race([
         synchroniser(),
         new Promise(function(_, ko){
-          setTimeout(function(){ ko(new Error('delai depasse (45 s) -- reseau trop lent ou instable, reessayez')); }, 45000);
+          setTimeout(function(){ ko(new Error('delai depasse (' + (DELAI_SYNCHRO / 1000) + ' s) -- reseau trop lent ou instable ; les affaires deja synchronisees sont conservees, relancez pour continuer')); }, DELAI_SYNCHRO);
         })
       ]);
       renderAffaireList(); if (typeof renderDashboard === 'function') { try { renderDashboard(); } catch (e) {} }
