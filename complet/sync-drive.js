@@ -389,3 +389,216 @@
   };
   window.CSPS17Sync = { appareil: appareil };
 })();
+
+// ============================================================================
+// SAUVEGARDE / IMPORT VIA UN DOSSIER LOCAL (16/11, demande d'Alain) : en plus
+// du relais Google Drive (qui synchronise PC <-> tablette), CSPS17 peut aussi
+// lire/ecrire directement dans une arborescence de dossiers Windows/Android
+// du type <racine>/<Client (MOA)>/<Affaire>/ -- celle qu'Alain tient deja a
+// la main sur son PC (C:\...\coordosps17\Chantier Chausson\AURAY, ...).
+// Objectif d'Alain : une sauvegarde lisible sans l'appli, et la possibilite
+// de travailler meme sans reseau (ce dossier ne passe pas par Drive).
+// Repose sur l'API File System Access -- Chrome PC et Chrome Android
+// uniquement (pas Safari/iPad, verifie avec Alain avant de construire).
+// Fichiers de meme nom rencontres plusieurs fois dans le dossier : on ne
+// garde que le plus recent (demande expresse d'Alain).
+// ============================================================================
+(function(){
+  var DBN = 'csps17-config', ST = 'kv', dbp = null;
+  function baseCfg(){
+    if (dbp) return dbp;
+    dbp = new Promise(function(ok, ko){
+      var r = indexedDB.open(DBN, 1);
+      r.onupgradeneeded = function(){ r.result.createObjectStore(ST); };
+      r.onsuccess = function(){ ok(r.result); }; r.onerror = function(){ ko(r.error); };
+    });
+    return dbp;
+  }
+  function cfgOp(mode, fn){
+    return baseCfg().then(function(d){ return new Promise(function(ok, ko){
+      var t = d.transaction(ST, mode), s = t.objectStore(ST), res;
+      var q = fn(s); if (q) q.onsuccess = function(){ res = q.result; };
+      t.oncomplete = function(){ ok(res); }; t.onerror = function(){ ko(t.error); };
+    }); });
+  }
+  var racineHandle = null; // handle garde en memoire pour la session en cours
+
+  function normNom(s) {
+    return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, ' ').trim();
+  }
+  // Rapprochement souple entre un nom de dossier et moa.nom/chantier.nom :
+  // "auray" <-> "chausson materiaux auray", "st mars la briere" <-> "st-mars-
+  // la-briere"... un mot de 4 lettres ou plus en commun suffit.
+  function nomsProches(a, b) {
+    var na = normNom(a), nb = normNom(b);
+    if (!na || !nb) return false;
+    if (na.indexOf(nb) >= 0 || nb.indexOf(na) >= 0) return true;
+    var motsA = na.split(' ').filter(function(m){ return m.length >= 4; });
+    var motsB = nb.split(' ').filter(function(m){ return m.length >= 4; });
+    return motsA.some(function(m){ return nb.indexOf(m) >= 0; }) || motsB.some(function(m){ return na.indexOf(m) >= 0; });
+  }
+
+  function majStatutDossierLocal(texte) {
+    var el = document.getElementById('dossier-local-etat');
+    if (el) el.textContent = texte || '';
+  }
+
+  async function obtenirPermission(handle) {
+    var opts = { mode: 'readwrite' };
+    if ((await handle.queryPermission(opts)) === 'granted') return true;
+    if ((await handle.requestPermission(opts)) === 'granted') return true;
+    return false;
+  }
+
+  window.choisirDossierLocal = async function() {
+    if (!window.showDirectoryPicker) {
+      showToast('Ce navigateur ne permet pas l\'acces direct a un dossier (Chrome PC ou Android uniquement, pas Safari/iPad)', 'error');
+      return;
+    }
+    try {
+      var h = await window.showDirectoryPicker({ id: 'csps17-dossier-local', mode: 'readwrite' });
+      racineHandle = h;
+      await cfgOp('readwrite', function(s){ return s.put(h, 'racineDossierLocal'); });
+      majStatutDossierLocal('Dossier local : ' + h.name);
+      showToast('Dossier local relie : ' + h.name, 'success');
+    } catch (e) { if (e && e.name !== 'AbortError') showToast('Impossible d\'ouvrir le dossier : ' + e.message, 'error'); }
+  };
+
+  async function recupererRacine() {
+    if (racineHandle) return racineHandle;
+    try {
+      var h = await cfgOp('readonly', function(s){ return s.get('racineDossierLocal'); });
+      if (h) racineHandle = h;
+      return h || null;
+    } catch (e) { return null; }
+  }
+
+  // Cherche (ou cree) le sous-dossier <client>/<affaire> correspondant a
+  // l'affaire -- ne cree que si rien n'approche (cas de la tablette, ou rien
+  // n'existe encore la premiere fois).
+  async function dossierAffaire(racine, affaire, creer) {
+    var nomClient = (affaire.moa && affaire.moa.nom) || '';
+    var nomAffaire = (affaire.chantier && affaire.chantier.nom) || '';
+    if (!nomClient && !nomAffaire) return null;
+    var clientHandle = null;
+    for await (var [nom, entry] of racine.entries()) {
+      if (entry.kind !== 'directory') continue;
+      if (nomsProches(nom, nomClient) || nomsProches(nom, nomAffaire)) { clientHandle = entry; break; }
+    }
+    if (!clientHandle) {
+      if (!creer || !nomClient) return null;
+      clientHandle = await racine.getDirectoryHandle(nomClient.replace(/[\\/:*?"<>|]/g, '-'), { create: true });
+    }
+    var affaireHandle = null;
+    for await (var [nom2, entry2] of clientHandle.entries()) {
+      if (entry2.kind !== 'directory') continue;
+      if (nomsProches(nom2, nomAffaire)) { affaireHandle = entry2; break; }
+    }
+    if (!affaireHandle) {
+      if (!creer || !nomAffaire) return null;
+      affaireHandle = await clientHandle.getDirectoryHandle(nomAffaire.replace(/[\\/:*?"<>|]/g, '-'), { create: true });
+    }
+    return affaireHandle;
+  }
+
+  // Parcourt recursivement un dossier d'affaire (profondeur limitee) --
+  // pour un meme nom de fichier rencontre plusieurs fois, ne garde que le
+  // plus recent (demande d'Alain).
+  async function listerFichiers(dirHandle, profondeur) {
+    var parNom = {};
+    async function parcourir(dir, p) {
+      if (p > profondeur) return;
+      for await (var [nom, entry] of dir.entries()) {
+        if (entry.kind === 'file') {
+          var f = await entry.getFile();
+          if (!parNom[nom] || f.lastModified > parNom[nom].lastModified) parNom[nom] = f;
+        } else if (entry.kind === 'directory') {
+          await parcourir(entry, p + 1);
+        }
+      }
+    }
+    await parcourir(dirHandle, 0);
+    return Object.keys(parNom).map(function(n){ return parNom[n]; });
+  }
+
+  // Import : meme classement par mots-cles que "Importer un dossier" (nom
+  // puis contenu en secours), meme detection de doublon (via
+  // deposerPieceDossier) -- en tache de fond, sans jamais interrompre pour
+  // demander quoi que ce soit. Les fichiers non reconnus restent a importer
+  // a la main via "Importer un dossier" (qui, lui, les signale).
+  async function importerDepuisDossierLocal(affaire, dirHandle) {
+    var fichiers = await listerFichiers(dirHandle, 4);
+    var importes = 0;
+    for (var i = 0; i < fichiers.length; i++) {
+      var f = fichiers[i];
+      if (normFichierClassement(f.name).indexOf('csps17_') === 0) continue;
+      var ext = (/\.[a-z0-9]+$/i.exec(f.name || '') || [''])[0].toLowerCase();
+      if (EXT_IGNOREES_VRAC.indexOf(ext) >= 0) continue;
+      var t = deviserTypePiece(f.name);
+      if (!t) {
+        try { var texteRapide = await texteRapideClassement(f); t = classerTexteParContenu(texteRapide); } catch (eT) {}
+      }
+      if (!t) continue;
+      try {
+        var statut = await deposerPieceDossier(affaire, f, t, true);
+        if (statut === 'ok') importes++;
+      } catch (eDep) { /* un fichier en echec ne bloque pas les autres */ }
+    }
+    return importes;
+  }
+
+  // Export : depose a la racine du dossier de l'affaire une copie de chaque
+  // piece/document deja trace au RJC et absent du dossier (meme nom de
+  // fichier = deja present, pas de copie en double).
+  async function exporterVersDossierLocal(affaire, dirHandle, nomsExistants) {
+    var exportes = 0;
+    var entries = (affaire.rjc || []).filter(function(e){ return e.fichierNom && (e.fichierPath || e.fichierData); });
+    for (var i = 0; i < entries.length; i++) {
+      var e = entries[i];
+      if (nomsExistants[e.fichierNom]) continue;
+      try {
+        var d = e.fichierPath ? await FichiersLocaux.lire(e.fichierPath) : e.fichierData;
+        if (!d) continue;
+        var blob = dataUrlVersBlob(d);
+        var fh = await dirHandle.getFileHandle(e.fichierNom, { create: true });
+        var w = await fh.createWritable();
+        await w.write(blob); await w.close();
+        nomsExistants[e.fichierNom] = true;
+        exportes++;
+      } catch (eExp) { /* une piece en echec ne bloque pas les autres */ }
+    }
+    return exportes;
+  }
+
+  window.synchroniserDossierLocal = async function() {
+    if (!window.showDirectoryPicker) {
+      showToast('Fonction indisponible sur ce navigateur (Chrome PC ou Android uniquement)', 'error');
+      return;
+    }
+    var racine = await recupererRacine();
+    if (!racine) { await window.choisirDossierLocal(); racine = racineHandle; }
+    if (!racine) return;
+    var ok = await obtenirPermission(racine);
+    if (!ok) { showToast('Acces au dossier local refuse ou a reconfirmer', 'error'); return; }
+    majStatutDossierLocal('Dossier local : verification en cours...');
+    var bilanImport = 0, bilanExport = 0, sansDossier = 0;
+    for (var i = 0; i < affaires.length; i++) {
+      var affaire = affaires[i];
+      try {
+        var dir = await dossierAffaire(racine, affaire, true);
+        if (!dir) { sansDossier++; continue; }
+        bilanImport += await importerDepuisDossierLocal(affaire, dir);
+        var fichiers = await listerFichiers(dir, 4);
+        var nomsExistants = {}; fichiers.forEach(function(f){ nomsExistants[f.name] = true; });
+        bilanExport += await exporterVersDossierLocal(affaire, dir, nomsExistants);
+      } catch (eAff) { /* une affaire en echec ne bloque pas les autres */ }
+    }
+    persistAffaires();
+    try { renderDocsGrid(); } catch (eR) {}
+    try { renderAffaireList(); } catch (eR2) {}
+    majStatutDossierLocal('Dossier local : ' + racine.name);
+    showToast('Dossier local : ' + bilanImport + ' fichier(s) importe(s), ' + bilanExport + ' copie(s) deposee(s)'
+      + (sansDossier ? ', ' + sansDossier + ' affaire(s) sans dossier correspondant' : ''), 'success');
+  };
+})();
