@@ -159,6 +159,19 @@
     affaires = fusion;
     localStorage.setItem('csps17_affaires', JSON.stringify(affaires));
 
+    // 16/11 (bug constate par Alain : gros import de documents -> l'envoi
+    // des pieces jointes qui suit peut depasser les 45 s -> comme le
+    // fichier partage n'etait reecrit qu'a la toute fin (etape 5), une
+    // nouvelle affaire restait invisible sur l'autre appareil malgre
+    // plusieurs essais, meme si elle avait ete correctement fusionnee ici.
+    // On ecrit donc tout de suite un premier index avec les affaires a
+    // jour -- avant le transfert des pieces jointes, qui peut etre long --
+    // pour que l'affaire (sans forcement toutes ses pieces jointes encore)
+    // arrive des cette etape sur l'autre appareil.
+    etat('Enregistrement des affaires sur le Drive...');
+    distant.affaires = affaires; distant.supprimees = sup; distant.maj = new Date().toISOString(); distant.format = 'csps17-sync';
+    idIndex = await envoyerFichier(NOM_INDEX, dossier, new Blob([JSON.stringify(distant)], { type: 'application/json' }), idIndex);
+
     // 3. pieces jointes
     var locaux = await FichiersLocaux.cles(), aLocal = {};
     locaux.forEach(function(k){ aLocal[k] = true; });
