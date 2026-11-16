@@ -3323,6 +3323,18 @@ async function importerDossierVrac(event) {
   // affaire" pour proposer de pre-remplir "Identification de l'operation".
   var parType = {}, ignores = [], nonReconnus = [], parContenu = [];
   var infosIdent = {}, sourcesIdent = [];
+  // 16/11 (bug remonte par Alain : conventions AURAY + Ploneour-Lanvern +
+  // St-Mars-la-Briere melangees dans une seule affaire) : "Importer un
+  // dossier" ne sait pas repartir les fichiers par affaire -- tout ce qui
+  // est selectionne est depose dans l'affaire actuellement ouverte. Si le
+  // dossier choisi contient en fait les sous-dossiers de PLUSIEURS affaires
+  // (ex: le dossier CLIENT au lieu du dossier d'UNE affaire), ca melange
+  // tout. Un chantier n'a normalement qu'une seule convention/contrat de
+  // coordination -- si on en trouve plusieurs dans des sous-dossiers
+  // differents, c'est le signal le plus fiable qu'on a affaire a plusieurs
+  // chantiers a la fois : on arrete alors l'import AVANT tout depot plutot
+  // que de tout melanger.
+  var contratSousDossiers = {};
   function fusionnerIdent(o, nomFichier) {
     if (!o) return;
     var ajoute = false;
@@ -3363,6 +3375,20 @@ async function importerDossierVrac(event) {
     } catch (eIdent) { /* pre-remplissage facultatif : ne doit jamais bloquer le classement/depot */ }
     if (!t) { nonReconnus.push(f.name); continue; }
     (parType[t] = parType[t] || []).push(f);
+    if (t === 'CONTRAT' && f.webkitRelativePath) {
+      var segs = f.webkitRelativePath.split('/');
+      var cleSousDossier = segs.length > 2 ? segs[1] : '(a la racine du dossier choisi)';
+      contratSousDossiers[cleSousDossier] = true;
+    }
+  }
+
+  var dossiersAvecContrat = Object.keys(contratSousDossiers);
+  if (dossiersAvecContrat.length > 1) {
+    openDocModal('Import annule', '<p style="font-size:13px;">Le dossier choisi contient <strong>' + dossiersAvecContrat.length + ' conventions/contrats de coordination differents</strong>, dans des sous-dossiers differents :</p>'
+      + '<ul style="margin:6px 0 10px 18px;font-size:13px;">' + dossiersAvecContrat.map(function(d){ return '<li>' + icEscAttr(d) + '</li>'; }).join('') + '</ul>'
+      + '<p style="font-size:13px;">Un chantier n\'a normalement qu\'un seul contrat de coordination -- ca ressemble donc au dossier d\'un <strong>client</strong> (plusieurs affaires regroupees), pas au dossier d\'une seule affaire. Pour ne pas melanger plusieurs chantiers dans une seule fiche, l\'import est annule.</p>'
+      + '<p style="font-size:13px;">Choisissez directement le sous-dossier de l\'affaire voulue (ex : "AURAY") plutot que le dossier qui regroupe toutes les affaires du client.</p>', null, null);
+    return;
   }
 
   // Contrat/Convention SPS : extraction deja eprouvee (bouton dedie), juste
