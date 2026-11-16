@@ -5057,7 +5057,7 @@ function showHistoriqueDoc(ref) {
   var html = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:12px;">'
     + '<a href="#" onclick="toggleTousHistorique(\'' + ref + '\', true); return false;" style="color:var(--blue-mid);">Tout cocher</a>'
     + '<a href="#" onclick="toggleTousHistorique(\'' + ref + '\', false); return false;" style="color:var(--blue-mid);">Tout decocher</a>'
-    + '<button type="button" id="btn-suppr-selection" disabled onclick="supprimerSelectionHistorique(\'' + ref + '\')" style="margin-left:auto;font-size:12px;padding:4px 10px;border:1px solid var(--border);background:#fff;border-radius:5px;cursor:pointer;color:#b91c1c;">&#128465; Supprimer la selection (0)</button>'
+    + '<button type="button" id="btn-suppr-selection"' + (Object.keys(_selectionHistorique).length ? '' : ' disabled') + ' onclick="supprimerSelectionHistorique(\'' + ref + '\')" style="margin-left:auto;font-size:12px;padding:4px 10px;border:1px solid var(--border);background:#fff;border-radius:5px;cursor:pointer;color:#b91c1c;">&#128465; Supprimer la selection (' + Object.keys(_selectionHistorique).length + ')</button>'
     + '</div>'
     + '<div style="max-height:320px;overflow-y:auto;text-align:left;">'
     + entries.slice().reverse().map(function(e){
