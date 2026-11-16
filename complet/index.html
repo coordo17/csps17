@@ -4371,18 +4371,46 @@ function enregistrerFaitsCR(affaire, fichierNom) {
 function normNomFichier(s) {
   return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
 }
-function trouverDoublonRJC(affaire, type, fichierNom) {
+// 16/11 (demande d'Alain, suite a un prototype "Document Engine" qu'il a
+// teste de son cote) : empreinte SHA-256 du contenu du fichier, pour
+// detecter un VRAI doublon meme renomme -- la detection par nom seule
+// (ci-dessous) ne voit rien si Fred renvoie le meme PDF sous un autre nom.
+// crypto.subtle est partout dans les navigateurs modernes (HTTPS/localhost) ;
+// en cas d'echec (tres vieux navigateur, contexte non securise...) on
+// renvoie null et le depot continue normalement, juste sans cette
+// protection supplementaire -- jamais bloquant.
+async function empreinteFichier(file) {
+  try {
+    var buf = await file.arrayBuffer();
+    var digest = await crypto.subtle.digest('SHA-256', buf);
+    return Array.prototype.map.call(new Uint8Array(digest), function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+  } catch (e) { return null; }
+}
+function trouverDoublonRJC(affaire, type, fichierNom, hash) {
   var n = normNomFichier(fichierNom);
-  if (!n || !affaire || !affaire.rjc) return null;
-  var candidats = affaire.rjc.filter(function (e) { return e.docRef === type; });
-  for (var i = 0; i < candidats.length; i++) {
-    if (normNomFichier(candidats[i].fichierNom || candidats[i].objet) === n) return candidats[i];
+  if (!affaire || !affaire.rjc) return null;
+  if (n) {
+    var candidats = affaire.rjc.filter(function (e) { return e.docRef === type; });
+    for (var i = 0; i < candidats.length; i++) {
+      if (normNomFichier(candidats[i].fichierNom || candidats[i].objet) === n) return candidats[i];
+    }
+  }
+  // Pas de doublon par nom : on cherche quand meme un contenu identique
+  // (meme hash), tous types confondus -- un fichier renomme OU reclasse
+  // differemment d'une fois sur l'autre reste le meme document.
+  if (hash) {
+    for (var j = 0; j < affaire.rjc.length; j++) {
+      if (affaire.rjc[j].fichierHash && affaire.rjc[j].fichierHash === hash) return affaire.rjc[j];
+    }
   }
   return null;
 }
-function confirmerDepotMalgreDoublon(doublon) {
+function confirmerDepotMalgreDoublon(doublon, fichierNom) {
   return new Promise(function (resolve) {
-    var html = '<p>Un document du même type et du même nom semble déjà avoir été déposé :</p>'
+    var memeNom = normNomFichier(doublon.fichierNom || doublon.objet) === normNomFichier(fichierNom);
+    var html = (memeNom
+      ? '<p>Un document du même type et du même nom semble déjà avoir été déposé :</p>'
+      : '<p>Un document au <strong>contenu identique</strong> a déjà été déposé, sous un autre nom :</p>')
       + '<p style="margin:8px 0;padding:8px 10px;background:var(--bg-accent);border-radius:6px;font-size:13px;"><strong>' + icEscAttr(doublon.fichierNom || doublon.objet) + '</strong><br>déposé le ' + (doublon.date || '?') + '</p>'
       + '<p>Déposer quand même (nouvelle version) ?</p>';
     openDocModal('Document déjà déposé ?', html, 'Déposer quand même', function () { resolve(true); });
@@ -4393,10 +4421,11 @@ function confirmerDepotMalgreDoublon(doublon) {
 
 async function deposerPieceDossier(affaire, file, type, bulk) {
   try {
-    var doublon = trouverDoublonRJC(affaire, type, file.name);
+    var hashFichier = await empreinteFichier(file);
+    var doublon = trouverDoublonRJC(affaire, type, file.name, hashFichier);
     if (doublon) {
       if (bulk) return 'doublon';
-      var continuer = await confirmerDepotMalgreDoublon(doublon);
+      var continuer = await confirmerDepotMalgreDoublon(doublon, file.name);
       if (!continuer) { showToast(file.name + ' : dépôt annulé (déjà au dossier)', 'error'); return 'annule'; }
     }
     showToast('Depot de ' + file.name + '...');
@@ -4426,6 +4455,7 @@ async function deposerPieceDossier(affaire, file, type, bulk) {
       created.fichierPath = path;
       created.fichierNom = file.name;
       created.fichierType = file.type || '';
+      if (hashFichier) created.fichierHash = hashFichier;
       persistAffaires();
     }
     showToast(file.name + ' ajoute au dossier', 'success');
