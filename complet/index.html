@@ -3439,30 +3439,32 @@ async function importerDossierVrac(event) {
   var aTraiter = 0; for (var k in parType) aTraiter += parType[k].length;
   showToast('Import de ' + aTraiter + ' document(s)...', '');
 
-  // 16/11 (demande d'Alain, import d'un gros dossier lent/peu fiable --
-  // recherche faite sur le depot de fichiers en lot cote navigateur) : deux
-  // couts se cumulaient fichier par fichier --
-  //  1) un POST /api/rjc-upload attendu l'un apres l'autre (200 fichiers =
-  //     200 aller-retours reseau EN SERIE) -- traite maintenant par lots
-  //     paralleles (traiterParLots, meme principe que la synchro Drive) ;
-  //  2) persistAffaires() reserialisait et reecrivait TOUT le JSON de
-  //     TOUTES les affaires dans localStorage apres CHAQUE fichier (cout
-  //     proportionnel a la taille totale des donnees, encouru 200 fois,
-  //     et localStorage est synchrone -- bloque l'interface a chaque appel)
-  //     -- suspendu pendant tout l'import, une seule sauvegarde a la fin.
-  var bilan = {}, doublons = 0, erreurs = 0, taches = [];
-  for (var type in parType) {
-    bilan[type] = 0;
-    parType[type].forEach(function (f) { taches.push({ type: type, file: f }); });
-  }
+  // 16/11 (demande d'Alain, import d'un gros dossier lent) : "/api/rjc-upload"
+  // n'est pas un vrai serveur -- local-api.js l'intercepte et ecrit dans
+  // IndexedDB (voir window.fetch monkey-patche). Le paralleliser (essaye un
+  // temps, par lots de 4 comme la synchro Drive) a fait echouer TOUT le
+  // depot sur un gros lot (0 document ajoute alors que le registre etait
+  // vide) -- l'ecriture passe ici par des fermetures (f, type, affaire)
+  // partagees entre iterations d'une boucle, un piege classique avec des
+  // callbacks paralleles en JS ancien (var au lieu de let) qui n'est pas
+  // sans risque ici ; on revient donc au depot SEQUENTIEL, plus sur. Le vrai
+  // gain reste la sauvegarde unique a la fin (cf. persistAffaires ci-dessous) :
+  // avant, elle reserialisait et reecrivait TOUT le JSON de toutes les
+  // affaires dans localStorage (synchrone, bloquant) apres CHAQUE fichier --
+  // cout proportionnel a la taille totale des donnees, encouru 200 fois au
+  // lieu d'une seule, ce qui restait l'essentiel de la lenteur constatee.
+  var bilan = {}, doublons = 0, erreurs = 0;
   _suspendPersistAffaires = true;
   try {
-    await traiterParLots(taches, 4, async function (tache) {
-      var statut = await deposerPieceDossier(affaire, tache.file, tache.type, true);
-      if (statut === 'ok') bilan[tache.type]++;
-      else if (statut === 'doublon') doublons++;
-      else if (statut === 'erreur') erreurs++;
-    }, []);
+    for (var type in parType) {
+      bilan[type] = 0;
+      for (var pi = 0; pi < parType[type].length; pi++) {
+        var statut = await deposerPieceDossier(affaire, parType[type][pi], type, true);
+        if (statut === 'ok') bilan[type]++;
+        else if (statut === 'doublon') doublons++;
+        else if (statut === 'erreur') erreurs++;
+      }
+    }
   } finally {
     _suspendPersistAffaires = false;
     persistAffaires();
