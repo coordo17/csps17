@@ -12267,7 +12267,14 @@ function genFormulaireRJC() {
         + (e.intervenants ? '<span style="color:var(--text-light);">' + e.intervenants + '</span><br>' : '')
         + (e.ref ? '<span style="color:var(--text-light);font-size:11px;">Réf : ' + e.ref + '</span><br>' : '')
         + ((e.fichierData || e.fichierPath)
-            ? '<span style="color:var(--blue-mid);font-size:11px;">&#128206; ' + escHtml(e.fichierNom || 'fichier joint') + '</span>'
+            // 16/11 (demande d'Alain) : sur le terrain, pouvoir visionner une piece
+            // jointe synchronisee (PDF ou Word) sans avoir a se l'envoyer par mail.
+            // apercuFichierRJC = aperçu dans l'appli (mammoth pour docx, pdf.js pour
+            // pdf) ; ouvrirFichierRJC = telechargement pour l'ouvrir avec une autre
+            // appli (lecteur PDF/Word installe sur la tablette). Les deux fonctions
+            // retrouvent deja l'affaire via terrainAffaire, rien d'autre a changer.
+            ? '<a href="#" onclick="apercuFichierRJC(\'' + e.id + '\'); return false;" style="color:var(--blue-mid);font-size:11px;text-decoration:underline;">&#128065; ' + escHtml(e.fichierNom || 'fichier joint') + '</a>'
+              + ' <a href="#" onclick="ouvrirFichierRJC(\'' + e.id + '\'); return false;" title="Telecharger pour ouvrir avec une autre application" style="font-size:11px;color:var(--text-light);margin-left:4px;text-decoration:none;">&#11015;</a>'
               + ' <button type="button" onclick="envoyerDocMoiTerrain(\'' + e.id + '\')" style="font-size:11px;padding:2px 8px;margin-left:6px;border:1px solid var(--blue-mid);background:white;color:var(--blue-mid);border-radius:5px;cursor:pointer;">&#9993; M\'envoyer</button>'
             : '')
         + '</div>';
