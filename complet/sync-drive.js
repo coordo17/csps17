@@ -271,6 +271,28 @@
   function etat(t){ var e = document.getElementById('sync-drive-etat'); if (e) e.textContent = t; }
   window.synchroniserDrive = async function(){
     var btn = document.getElementById('btn-sync-drive'); if (btn) btn.disabled = true;
+    // 16/11 (demande d'Alain, suite au cas de St-Mars-la-Briere absente de
+    // la tablette) : si une affaire est ouverte a l'ecran au moment du clic
+    // sur "Synchroniser", on l'enregistre d'abord automatiquement. Sans ca,
+    // des modifications faites dans le formulaire mais pas encore
+    // "Enregistrees" restaient seulement dans les champs et ne partaient
+    // pas dans la synchro (qui, elle, travaille sur le tableau "affaires"
+    // deja sauvegarde, pas sur les champs du formulaire).
+    // Sans danger si aucune affaire n'est ouverte (currentAffaireId vide)
+    // ou si rien de nouveau n'a ete saisi : dans ce cas on ne touche a rien.
+    try {
+      if (typeof currentAffaireId !== 'undefined' && currentAffaireId && typeof collectFormData === 'function') {
+        var dataAvantSync = collectFormData();
+        if (dataAvantSync && dataAvantSync.chantier && dataAvantSync.chantier.nom) {
+          var idxAvantSync = affaires.findIndex(function(a){ return a.id === currentAffaireId; });
+          if (idxAvantSync >= 0) {
+            affaires[idxAvantSync] = Object.assign({}, affaires[idxAvantSync], dataAvantSync);
+            affaires[idxAvantSync].savedAt = new Date().toISOString();
+            localStorage.setItem('csps17_affaires', JSON.stringify(affaires));
+          }
+        }
+      }
+    } catch (eSaveAuto) { /* une sauvegarde automatique ratee ne doit jamais bloquer la synchro */ }
     showToast('Synchronisation en cours...');
     try {
       // 13/11 (consolidation) : filet de securite global. Les appels Drive
