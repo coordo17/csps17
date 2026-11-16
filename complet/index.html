@@ -3382,13 +3382,23 @@ async function importerDossierVrac(event) {
     }
   }
 
+  // 16/11 (faux positif remonte par Alain : un brouillon + une version
+  // signee du MEME contrat, ranges dans 2 sous-dossiers de la MEME affaire
+  // AURAY, declenchaient a tort ce controle) : plusieurs contrats dans des
+  // sous-dossiers differents ne veut pas forcement dire plusieurs affaires
+  // -- ca peut juste etre plusieurs versions d'un meme contrat. On affiche
+  // donc les fichiers concernes et on laisse Alain decider, au lieu
+  // d'annuler automatiquement.
   var dossiersAvecContrat = Object.keys(contratSousDossiers);
   if (dossiersAvecContrat.length > 1) {
-    openDocModal('Import annule', '<p style="font-size:13px;">Le dossier choisi contient <strong>' + dossiersAvecContrat.length + ' conventions/contrats de coordination differents</strong>, dans des sous-dossiers differents :</p>'
-      + '<ul style="margin:6px 0 10px 18px;font-size:13px;">' + dossiersAvecContrat.map(function(d){ return '<li>' + icEscAttr(d) + '</li>'; }).join('') + '</ul>'
-      + '<p style="font-size:13px;">Un chantier n\'a normalement qu\'un seul contrat de coordination -- ca ressemble donc au dossier d\'un <strong>client</strong> (plusieurs affaires regroupees), pas au dossier d\'une seule affaire. Pour ne pas melanger plusieurs chantiers dans une seule fiche, l\'import est annule.</p>'
-      + '<p style="font-size:13px;">Choisissez directement le sous-dossier de l\'affaire voulue (ex : "AURAY") plutot que le dossier qui regroupe toutes les affaires du client.</p>', null, null);
-    return;
+    var nomsContratTrouves = (parType.CONTRAT || []).map(function(f){ return f.name; });
+    var msgContrats = 'Plusieurs contrats/conventions de coordination trouves, dans des sous-dossiers differents :\n\n'
+      + nomsContratTrouves.map(function(n){ return '- ' + n; }).join('\n')
+      + '\n\nSi ce sont plusieurs versions du MEME contrat (brouillon + signe) pour une seule affaire, continuez normalement -- '
+      + 'tout sera depose dans l\'affaire actuellement ouverte.\n\n'
+      + 'Si ce sont des contrats de CHANTIERS DIFFERENTS (vous avez choisi le dossier d\'un client qui regroupe plusieurs affaires), '
+      + 'annulez et choisissez plutot le sous-dossier d\'une seule affaire.\n\nContinuer l\'import ?';
+    if (!confirm(msgContrats)) return;
   }
 
   // Contrat/Convention SPS : extraction deja eprouvee (bouton dedie), juste
