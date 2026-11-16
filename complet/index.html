@@ -5100,25 +5100,47 @@ function telechargerDernierDoc(ref) {
   }).catch(function(){ showToast('Impossible de recuperer le fichier', 'error'); });
 }
 
+// Correspondance d'une ligne du registre avec le texte tape dans le filtre
+// de l'historique (nom de fichier, objet, nature, reference) -- insensible
+// a la casse, simple sous-chaine (pas besoin de plus pour ce cas d'usage).
+function entreeCorrespondFiltre(e, filtre) {
+  if (!filtre) return true;
+  var f = filtre.toLowerCase();
+  var texte = [e.fichierNom, e.objet, e.nature, e.ref].filter(Boolean).join(' ').toLowerCase();
+  return texte.indexOf(f) >= 0;
+}
+
 // Historique des versions d'un document (clic sur le badge compteur)
+// 16/11 (demande d'Alain, nettoyage d'AURAY apres le melange de dossiers
+// Ploneour-Lanvern/St-Mars-la-Briere) : un champ de filtre texte permet de
+// retrouver vite les lignes a purger (ex: taper "ploneour" ou "mars") sans
+// parcourir a l'oeil les 200+ lignes du registre. Le filtre ne fait que
+// MASQUER des lignes -- Tout cocher/decocher n'agit que sur les lignes
+// actuellement visibles, et la selection n'est jamais effacee par un
+// changement de filtre : on peut filtrer "ploneour", tout cocher, puis
+// filtrer "mars", tout cocher a nouveau -- les deux groupes restent
+// selectionnes pour une suppression groupee unique.
 function showHistoriqueDoc(ref) {
   var affaire = currentAffaireObj();
-  var entries = rjcEntriesForDoc(affaire, ref);
-  if (!_selectionHistoriqueRef || _selectionHistoriqueRef !== ref) { _selectionHistorique = {}; }
+  var entriesToutes = rjcEntriesForDoc(affaire, ref);
+  if (!_selectionHistoriqueRef || _selectionHistoriqueRef !== ref) { _selectionHistorique = {}; _filtreHistorique = ''; }
   _selectionHistoriqueRef = ref;
   var doc = DOCS.find(function(d){ return d.ref === ref; })
     || PIECES_DOSSIER.find(function(d){ return d.ref === ref; });
   var titreDoc = doc ? doc.title : (ref === 'ANALYSE' ? 'Analyse des diagnostics' : ref);
-  if (!entries.length) {
+  if (!entriesToutes.length) {
     openDocModal(titreDoc, '<p style="color:var(--text-light);font-size:13px;">Aucune version pour le moment \u2014 utilisez Generer (ou Deposer pour les pieces).</p>', null, null);
     return;
   }
-  var html = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:12px;">'
-    + '<a href="#" onclick="toggleTousHistorique(\'' + ref + '\', true); return false;" style="color:var(--blue-mid);">Tout cocher</a>'
-    + '<a href="#" onclick="toggleTousHistorique(\'' + ref + '\', false); return false;" style="color:var(--blue-mid);">Tout decocher</a>'
-    + '<button type="button" id="btn-suppr-selection"' + (Object.keys(_selectionHistorique).length ? '' : ' disabled') + ' onclick="supprimerSelectionHistorique(\'' + ref + '\')" style="margin-left:auto;font-size:12px;padding:4px 10px;border:1px solid var(--border);background:#fff;border-radius:5px;cursor:pointer;color:#b91c1c;">&#128465; Supprimer la selection (' + Object.keys(_selectionHistorique).length + ')</button>'
+  var entries = entriesToutes.filter(function(e){ return entreeCorrespondFiltre(e, _filtreHistorique); });
+  var nSel = Object.keys(_selectionHistorique).length;
+  var html = '<input type="text" id="historique-filtre" value="' + icEscAttr(_filtreHistorique) + '" placeholder="Filtrer (nom de fichier, mot-cle...)" oninput="filtrerHistorique(\'' + ref + '\', this.value)" style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;margin-bottom:8px;">'
+    + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:12px;">'
+    + '<a href="#" onclick="toggleTousHistorique(\'' + ref + '\', true); return false;" style="color:var(--blue-mid);">Tout cocher' + (_filtreHistorique ? ' (visibles)' : '') + '</a>'
+    + '<a href="#" onclick="toggleTousHistorique(\'' + ref + '\', false); return false;" style="color:var(--blue-mid);">Tout decocher' + (_filtreHistorique ? ' (visibles)' : '') + '</a>'
+    + '<button type="button" id="btn-suppr-selection"' + (nSel ? '' : ' disabled') + ' onclick="supprimerSelectionHistorique(\'' + ref + '\')" style="margin-left:auto;font-size:12px;padding:4px 10px;border:1px solid var(--border);background:#fff;border-radius:5px;cursor:pointer;color:#b91c1c;">&#128465; Supprimer la selection (' + nSel + ')</button>'
     + '</div>'
-    + '<div style="max-height:320px;overflow-y:auto;text-align:left;">'
+    + (entries.length ? '<div style="max-height:320px;overflow-y:auto;text-align:left;">'
     + entries.slice().reverse().map(function(e){
       var lien;
       if (e.fichierPath || e.fichierData) {
@@ -5140,8 +5162,19 @@ function showHistoriqueDoc(ref) {
         + '<a href="#" onclick="supprimerPieceHistorique(\'' + e.id + '\', \'' + ref + '\'); return false;" title="Supprimer cette ligne (et son fichier)" style="font-size:13px;text-decoration:none;">&#128465;</a>'
         + '</div>';
     }).join('')
-    + '</div>';
-  openDocModal('Historique — ' + titreDoc + ' (' + entries.length + ')', html, null, null);
+    + '</div>'
+    : '<p style="color:var(--text-light);font-size:13px;">Aucune ligne ne correspond a ce filtre.</p>');
+  openDocModal('Historique — ' + titreDoc + ' (' + (_filtreHistorique ? (entries.length + ' / ' + entriesToutes.length) : entriesToutes.length) + ')', html, null, null);
+}
+
+// Rappelee a chaque frappe dans le champ de filtre : re-rend la liste puis
+// rend le focus/curseur au champ (perdu sinon, la modale etant entierement
+// reconstruite a chaque rendu -- cf. showHistoriqueDoc/openDocModal).
+function filtrerHistorique(ref, val) {
+  _filtreHistorique = val;
+  showHistoriqueDoc(ref);
+  var inp = document.getElementById('historique-filtre');
+  if (inp) { inp.focus(); var l = inp.value.length; try { inp.setSelectionRange(l, l); } catch (eSel) {} }
 }
 
 // Selection multiple dans l'historique (16/11, demande d'Alain : purger en
@@ -5151,6 +5184,9 @@ function showHistoriqueDoc(ref) {
 // historique (showHistoriqueDoc) ou apres une suppression groupee.
 var _selectionHistorique = {};
 var _selectionHistoriqueRef = null;
+// Filtre texte courant de l'historique ouvert (cf. entreeCorrespondFiltre) --
+// remis a vide a chaque changement de document (pas a chaque frappe).
+var _filtreHistorique = '';
 function majBoutonSelectionHistorique() {
   var n = Object.keys(_selectionHistorique).length;
   var btn = document.getElementById('btn-suppr-selection');
@@ -5162,9 +5198,13 @@ function toggleSelectionHistorique(entryId, coche) {
 }
 function toggleTousHistorique(ref, coche) {
   var affaire = currentAffaireObj();
-  var entries = rjcEntriesForDoc(affaire, ref);
-  _selectionHistorique = {};
-  if (coche) entries.forEach(function(e){ _selectionHistorique[e.id] = true; });
+  // 16/11 : n'agit que sur les lignes actuellement visibles (filtre texte) --
+  // ne touche plus a la selection existante sur les lignes masquees, pour
+  // pouvoir cocher par groupes successifs (filtre "ploneour" puis "mars").
+  var entries = rjcEntriesForDoc(affaire, ref).filter(function(e){ return entreeCorrespondFiltre(e, _filtreHistorique); });
+  entries.forEach(function(e){
+    if (coche) _selectionHistorique[e.id] = true; else delete _selectionHistorique[e.id];
+  });
   showHistoriqueDoc(ref);
 }
 async function supprimerSelectionHistorique(ref) {
