@@ -5114,7 +5114,7 @@ async function supprimerSelectionHistorique(ref) {
   if (!confirm('Supprimer ' + ids.length + ' ligne(s) (et leur fichier attache) ? Cette action est irreversible.')) return;
   showToast('Suppression de ' + ids.length + ' ligne(s)...');
   for (var i = 0; i < ids.length; i++) {
-    try { await supprimerEntreeRJC(ids[i]); } catch (eSup) { /* une ligne en echec ne bloque pas les autres */ }
+    try { await supprimerEntreeRJC(ids[i], true); } catch (eSup) { /* une ligne en echec ne bloque pas les autres */ }
   }
   _selectionHistorique = {};
   try { if (document.getElementById('docs-grid') && document.getElementById('docs-grid').innerHTML) renderDocsGrid(); } catch (eG) {}
@@ -12750,12 +12750,16 @@ function modifierDateRJC(entryId) {
 // erreur). A utiliser avec discernement : le RJC ne doit normalement pas etre
 // modifie a posteriori une fois transmis (Art. R.4532-38) — cette fonction
 // sert a corriger une erreur de saisie du jour meme, pas a reecrire l'historique.
-async function supprimerEntreeRJC(entryId) {
+async function supprimerEntreeRJC(entryId, sansConfirmation) {
   var affaire = currentAffaireObj();
   if (!affaire || !affaire.rjc) return;
   var e = affaire.rjc.find(function(x){ return x.id === entryId; });
   if (!e) return;
-  if (!confirm('Supprimer definitivement cette ligne du registre ("' + libelleRJC(e) + '") ?')) return;
+  // sansConfirmation (16/11, demande d'Alain) : une suppression groupee
+  // (supprimerSelectionHistorique) a deja fait confirmer UNE fois pour
+  // tout le lot -- redemander ici ferait defiler une confirmation par
+  // ligne, ce qui annule tout l'interet du "tout cocher".
+  if (!sansConfirmation && !confirm('Supprimer definitivement cette ligne du registre ("' + libelleRJC(e) + '") ?')) return;
   if (e.fichierPath) await supprimerFichierStockage(e.fichierPath);
   affaire.rjc = affaire.rjc.filter(function(x){ return x.id !== entryId; });
   persistAffaires();
