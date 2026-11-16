@@ -474,21 +474,47 @@
     } catch (e) { return null; }
   }
 
+  // Nettoie un nom pour en faire un nom de dossier valide (Windows interdit
+  // en plus certains caracteres un nom qui se termine par un espace ou un
+  // point).
+  function sanitizeNomDossier(s) {
+    var n = String(s || '').replace(/[\\/:*?"<>|]/g, '-').trim().replace(/[.\s]+$/, '');
+    // Designation du chantier parfois tres longue (80+ caracteres) -- on
+    // tronque pour rester raisonnable (chemins Windows limites) sans perdre
+    // la partie la plus identifiante (le debut).
+    return (n ? n.slice(0, 60).trim() : '') || 'sans-nom';
+  }
+
   // Cherche (ou cree) le sous-dossier <client>/<affaire> correspondant a
   // l'affaire -- ne cree que si rien n'approche (cas de la tablette, ou rien
   // n'existe encore la premiere fois).
+  // 16/11 (bug releve par Alain : sur la tablette, seule l'affaire dont le
+  // MOA etait rempli avait eu son dossier cree) : quand le champ Maitre
+  // d'Ouvrage est encore vide, on ne doit pas abandonner silencieusement --
+  // on range alors l'affaire directement a la racine, par son nom de
+  // chantier (a deplacer a la main sous le bon client une fois le MOA
+  // complete).
   async function dossierAffaire(racine, affaire, creer) {
     var nomClient = (affaire.moa && affaire.moa.nom) || '';
     var nomAffaire = (affaire.chantier && affaire.chantier.nom) || '';
     if (!nomClient && !nomAffaire) return null;
+    if (!nomClient) {
+      var direct = null;
+      for await (var [nomR, entryR] of racine.entries()) {
+        if (entryR.kind === 'directory' && nomsProches(nomR, nomAffaire)) { direct = entryR; break; }
+      }
+      if (direct) return direct;
+      if (!creer) return null;
+      return await racine.getDirectoryHandle(sanitizeNomDossier(nomAffaire), { create: true });
+    }
     var clientHandle = null;
     for await (var [nom, entry] of racine.entries()) {
       if (entry.kind !== 'directory') continue;
       if (nomsProches(nom, nomClient) || nomsProches(nom, nomAffaire)) { clientHandle = entry; break; }
     }
     if (!clientHandle) {
-      if (!creer || !nomClient) return null;
-      clientHandle = await racine.getDirectoryHandle(nomClient.replace(/[\\/:*?"<>|]/g, '-'), { create: true });
+      if (!creer) return null;
+      clientHandle = await racine.getDirectoryHandle(sanitizeNomDossier(nomClient), { create: true });
     }
     var affaireHandle = null;
     for await (var [nom2, entry2] of clientHandle.entries()) {
@@ -497,7 +523,7 @@
     }
     if (!affaireHandle) {
       if (!creer || !nomAffaire) return null;
-      affaireHandle = await clientHandle.getDirectoryHandle(nomAffaire.replace(/[\\/:*?"<>|]/g, '-'), { create: true });
+      affaireHandle = await clientHandle.getDirectoryHandle(sanitizeNomDossier(nomAffaire), { create: true });
     }
     return affaireHandle;
   }
@@ -582,7 +608,7 @@
     var ok = await obtenirPermission(racine);
     if (!ok) { showToast('Acces au dossier local refuse ou a reconfirmer', 'error'); return; }
     majStatutDossierLocal('Dossier local : verification en cours...');
-    var bilanImport = 0, bilanExport = 0, sansDossier = 0;
+    var bilanImport = 0, bilanExport = 0, sansDossier = 0, enErreur = [];
     for (var i = 0; i < affaires.length; i++) {
       var affaire = affaires[i];
       try {
@@ -592,13 +618,19 @@
         var fichiers = await listerFichiers(dir, 4);
         var nomsExistants = {}; fichiers.forEach(function(f){ nomsExistants[f.name] = true; });
         bilanExport += await exporterVersDossierLocal(affaire, dir, nomsExistants);
-      } catch (eAff) { /* une affaire en echec ne bloque pas les autres */ }
+      } catch (eAff) {
+        // 16/11 (suite au bug du MOA vide, reste invisible dans le bilan) :
+        // une affaire en echec ne doit plus passer inapercue -- on la
+        // nomme dans le toast final plutot que de l'avaler silencieusement.
+        enErreur.push(((affaire.chantier && affaire.chantier.nom) || affaire.id) + ' (' + (eAff && eAff.message || eAff) + ')');
+      }
     }
     persistAffaires();
     try { renderDocsGrid(); } catch (eR) {}
     try { renderAffaireList(); } catch (eR2) {}
     majStatutDossierLocal('Dossier local : ' + racine.name);
     showToast('Dossier local : ' + bilanImport + ' fichier(s) importe(s), ' + bilanExport + ' copie(s) deposee(s)'
-      + (sansDossier ? ', ' + sansDossier + ' affaire(s) sans dossier correspondant' : ''), 'success');
+      + (sansDossier ? ', ' + sansDossier + ' affaire(s) sans dossier correspondant' : '')
+      + (enErreur.length ? ', echec sur : ' + enErreur.join(' ; ') : ''), enErreur.length ? 'error' : 'success');
   };
 })();
