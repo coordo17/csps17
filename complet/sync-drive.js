@@ -375,6 +375,14 @@
       // terrainRafraichir dans index.html) : sans ca, un sous-traitant ajoute
       // sur l'autre appareil n'apparaissait jamais dans la liste Terrain.
       if (typeof terrainRafraichir === 'function') { try { terrainRafraichir(); } catch (e) {} }
+      // 16/11 (bug remonte par Alain : "6 pieces recues" annonce par le
+      // toast, mais rien de visible a l'ecran) : la grille "Documents" de
+      // l'affaire actuellement ouverte n'etait jamais rafraichie apres une
+      // synchro -- les pieces arrivaient bien dans affaires[], mais l'ecran
+      // affiche restait sur l'ancien contenu tant qu'on ne changeait pas de
+      // page. Meme garde que partout ailleurs (ne force rien si la grille
+      // n'est pas affichee).
+      try { if (document.getElementById('docs-grid') && document.getElementById('docs-grid').innerHTML) renderDocsGrid(); } catch (eDG) {}
       etat('');
       // 13/11 (consolidation) : l'indicateur du header reflete maintenant la
       // vraie synchro Drive -- vert "Synchronise" juste apres, avec la date
