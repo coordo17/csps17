@@ -3007,12 +3007,29 @@ var TYPE_MOTS_CLES_VRAC = [
 function normFichierClassement(s) {
   return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
+// 16/11 (bug remonte par Alain : "CBT Plomberie.pdf" classe dans Rapports &
+// diagnostics) : indexOf() seul fait matcher un mot-cle court meme comme
+// simple sous-chaine d'un autre mot ("plomb" dans "plomberie"). On verifie
+// en plus que les caracteres encadrant la correspondance ne sont pas
+// eux-memes des lettres/chiffres, pour n'accepter que de vraies occurrences
+// du mot-cle (isole par un espace, un tiret, un underscore, un debut/fin de
+// nom de fichier...).
+function motCleIsole(n, mot) {
+  var idx = n.indexOf(mot);
+  if (idx < 0) return false;
+  var alphaNum = /[a-z0-9]/;
+  var avant = idx > 0 ? n.charAt(idx - 1) : '';
+  var apres = idx + mot.length < n.length ? n.charAt(idx + mot.length) : '';
+  if (avant && alphaNum.test(avant)) return false;
+  if (apres && alphaNum.test(apres)) return false;
+  return true;
+}
 function deviserTypePiece(nomFichier) {
   var n = normFichierClassement(nomFichier);
   if (n.indexOf('csps17_') === 0) return null; // genere par CSPS17 lui-meme, pas une piece recue
   for (var i = 0; i < TYPE_MOTS_CLES_VRAC.length; i++) {
     var ref = TYPE_MOTS_CLES_VRAC[i][0], mots = TYPE_MOTS_CLES_VRAC[i][1];
-    for (var j = 0; j < mots.length; j++) { if (n.indexOf(mots[j]) >= 0) return ref; }
+    for (var j = 0; j < mots.length; j++) { if (motCleIsole(n, mots[j])) return ref; }
   }
   return null;
 }
@@ -3083,7 +3100,7 @@ function classerTexteParContenu(texte) {
   for (var i = 0; i < TYPE_MOTS_CLES_CONTENU.length; i++) {
     var ref = TYPE_MOTS_CLES_CONTENU[i][0], mots = TYPE_MOTS_CLES_CONTENU[i][1];
     if (ref === 'PGC' && estDevis) continue; // devis d'honoraires MC2 : parle du PGC sans en etre un
-    for (var j = 0; j < mots.length; j++) { if (n.indexOf(normFichierClassement(mots[j])) >= 0) return ref; }
+    for (var j = 0; j < mots.length; j++) { if (motCleIsole(n, normFichierClassement(mots[j]))) return ref; }
   }
   return null;
 }
