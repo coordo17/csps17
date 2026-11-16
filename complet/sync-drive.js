@@ -503,7 +503,34 @@
       for await (var [nomR, entryR] of racine.entries()) {
         if (entryR.kind === 'directory' && nomsProches(nomR, nomAffaire)) { direct = entryR; break; }
       }
-      if (direct) return direct;
+      if (direct) {
+        // 16/11 (bug remonte par Alain : conventions AURAY + Ploneour-Lanvern
+        // + St-Mars melangees dans une seule affaire) : quand le MOA est
+        // vide, "direct" peut matcher par coincidence le dossier CLIENT
+        // (ex: "Chantier Chausson") plutot que le dossier de CETTE affaire,
+        // simplement parce que la designation du chantier contient le nom
+        // du client ("Auray CHAUSSON MATERIAUX..."). Un dossier client
+        // contient plusieurs sous-dossiers d'affaires -- si c'est le cas
+        // ici, on cherche un sous-dossier qui correspond mieux avant
+        // d'utiliser "direct" tel quel, pour ne jamais importer (ni
+        // exporter dans) tout le dossier client d'un coup.
+        var sousDossiers = [];
+        for await (var [nomS, entryS] of direct.entries()) {
+          if (entryS.kind === 'directory') sousDossiers.push([nomS, entryS]);
+        }
+        if (sousDossiers.length) {
+          var meilleur = null;
+          for (var iS = 0; iS < sousDossiers.length; iS++) {
+            if (nomsProches(sousDossiers[iS][0], nomAffaire)) { meilleur = sousDossiers[iS][1]; break; }
+          }
+          if (meilleur) return meilleur;
+          // "direct" est un dossier a plusieurs affaires et aucune ne
+          // correspond precisement a celle-ci : on abandonne plutot que de
+          // tout ramener en vrac (mieux vaut ne rien importer que melanger).
+          return null;
+        }
+        return direct;
+      }
       if (!creer) return null;
       return await racine.getDirectoryHandle(sanitizeNomDossier(nomAffaire), { create: true });
     }
