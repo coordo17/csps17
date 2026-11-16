@@ -2925,6 +2925,19 @@ var PIECES_DOSSIER = [
   { ref: 'CBT', title: 'Cahier des besoins techniques (CBT)', icon: '&#128203;', note: 'Deposez le CBT de chaque lot/entreprise — lecture dechets/base-vie au depot, et points de coordination repérés par lot pour la fiche IC (pas d\'IA)' },
 ];
 
+// 16/11 : erreur de diagnostic corrigee -- il existait DEJA des cartes pour
+// le PV de passation de consignes (DOCS/'PV-PC') et le DIUO (DOCS/'DIUO'),
+// avec un bouton "Inserer" fait pour exactement ce cas (document realise
+// hors CSPS17 : recu de MC2, d'un CSPS precedent...). Pas besoin de nouvelles
+// categories PIECES_DOSSIER en double -- juste de faire pointer le
+// classement en vrac et le reclassement vers CES cartes existantes.
+var CIBLES_RECLASSEMENT = PIECES_DOSSIER.concat(
+  ['PV-PC', 'DIUO'].map(function(r){
+    var d = DOCS.find(function(x){ return x.ref === r; });
+    return d ? { ref: d.ref, title: d.title, icon: d.icon } : null;
+  }).filter(Boolean)
+);
+
 // Type de document d'une entree RJC : champ docRef (nouvelles entrees) ou
 // deduit du nom de fichier auto 'CSPS17_<REF>_...' (entrees existantes).
 function entryDocRef(e) {
@@ -2971,6 +2984,12 @@ async function handlePieceUpload(e, type) {
 // ============================================================================
 var TYPE_MOTS_CLES_VRAC = [
   ['CONTRAT', ['contrat', 'convention']],
+  // PV-PC / DIUO (16/11) : ces deux refs sont les DOCS existants ("PV
+  // Passation Consignes", "DIUO Trame") -- places avant PGC/DIAG pour qu'un
+  // "PV_Passation..." ou un fichier "DIUO_..." ne tombe plus dedans faute
+  // d'une regle plus specifique testee en premier.
+  ['PV-PC', ['passation']],
+  ['DIUO', ['diuo']],
   ['ICR', ['inspection', 'ic_individuelle', 'ic signee', 'ic_signee']],
   ['DIAG', ['amiante', 'plomb', 'crep', 'raat', 'diagnostic', 'diag_']],
   ['PLAN', ['planning']],
@@ -3015,6 +3034,8 @@ var EXT_IGNOREES_VRAC = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tif', '.tiff
 // classement (moins fiable qu'un nom de fichier clair).
 var TYPE_MOTS_CLES_CONTENU = [
   ['CONTRAT', ['contrat de coordination', 'mission de coordination sps']],
+  ['PV-PC', ['passation de consignes', 'proces-verbal de passation']],
+  ['DIUO', ['dossier d\'intervention ulterieure sur l\'ouvrage']],
   ['ICR', ['proces-verbal d\'inspection commune', 'inspection commune prealable']],
   ['PGC', ['plan general de coordination', 'p.g.c.s.p.s']],
   ['DIAG', ['diagnostic amiante', 'diagnostic plomb', 'rapport de reperage', 'etude geotechnique']],
@@ -3368,7 +3389,7 @@ async function importerDossierVrac(event) {
   }
   html += '<p style="margin-bottom:8px;">Import termine : <strong>' + (aTraiter - doublons - erreurs) + '</strong> document(s) ajoute(s) au registre.</p>';
   var lignesBilan = Object.keys(bilan).filter(function (t) { return bilan[t] > 0; }).map(function (t) {
-    var def = PIECES_DOSSIER.filter(function (p) { return p.ref === t; })[0];
+    var def = CIBLES_RECLASSEMENT.filter(function (p) { return p.ref === t; })[0];
     return '<li>' + icEscAttr(def ? def.title : t) + ' \u2014 ' + bilan[t] + '</li>';
   }).join('');
   if (lignesBilan) html += '<ul style="margin:0 0 10px 18px;font-size:13px;">' + lignesBilan + '</ul>';
@@ -4302,6 +4323,8 @@ async function deposerPieceDossier(affaire, file, type, bulk) {
       : type === 'PPSPS' ? 'Reception PPSPS (harmonisation)'
       : type === 'CRMOA' ? 'CR de reunion / mise a jour MOA'
       : type === 'CBT' ? 'Cahier des besoins techniques (CBT)'
+      : type === 'PV-PC' ? 'Reception PV de passation de consignes'
+      : type === 'DIUO' ? 'Reception DIUO (document existant, recu)'
       : 'Reception rapport / diagnostic';
     var created = ajouterEntreeRJC(affaire, {
       date: new Date().toISOString().split('T')[0],
@@ -5037,12 +5060,14 @@ function showHistoriqueDoc(ref) {
       } else {
         lien = '<span>' + escHtml(e.objet || e.nature || '') + '</span> <span style="color:var(--text-light);font-size:11px;">(sans fichier)</span>';
       }
+      var estPiece = !!CIBLES_RECLASSEMENT.find(function(p){ return p.ref === ref; });
       return '<div style="display:flex;align-items:baseline;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;">'
         + '<span style="color:var(--text-light);white-space:nowrap;">' + formatDateFR(e.date)
         + ' <a href="#" onclick="modifierDateRJC(\'' + e.id + '\'); showHistoriqueDoc(\'' + ref + '\'); return false;" style="font-size:10px;color:var(--blue-mid);">modifier</a></span>'
         + '<span style="flex:1;min-width:0;overflow-wrap:anywhere;">' + lien + '</span>'
         + ((e.fichierPath || e.fichierData) ? '<a href="#" onclick="apercuFichierRJC(\'' + e.id + '\'); return false;" title="Apercu de ce fichier (sans telecharger)" style="font-size:13px;text-decoration:none;">&#128065;</a>' : '')
         + ((e.fichierPath || e.fichierData) ? '<a href="#" onclick="envoyerDocMoi(\'' + e.id + '\'); return false;" title="M\'envoyer ce fichier par email (pour transfert)" style="font-size:13px;text-decoration:none;">&#9993;</a>' : '')
+        + (estPiece ? '<a href="#" onclick="reclasserPieceHistorique(\'' + e.id + '\', \'' + ref + '\'); return false;" title="Deplacer vers une autre categorie de piece" style="font-size:13px;text-decoration:none;">&#128194;</a>' : '')
         + '<a href="#" onclick="supprimerPieceHistorique(\'' + e.id + '\', \'' + ref + '\'); return false;" title="Supprimer cette ligne (et son fichier)" style="font-size:13px;text-decoration:none;">&#128465;</a>'
         + '</div>';
     }).join('')
@@ -5058,6 +5083,38 @@ async function supprimerPieceHistorique(entryId, ref) {
   try { if (document.getElementById('docs-grid') && document.getElementById('docs-grid').innerHTML) renderDocsGrid(); } catch (eG) {}
   var affaire = currentAffaireObj();
   if (rjcEntriesForDoc(affaire, ref).length) { showHistoriqueDoc(ref); } else { closeModal(); }
+}
+
+// Reclassement d'une piece deja deposee (16/11, demande d'Alain -- "regarde
+// le probleme par toi meme" : des PV de passation et des DIUO recus avaient
+// ete classes dans PGC/Rapports & diagnostics faute de categorie dediee --
+// ajoutee ci-dessus, mais les pieces deja deposees restent au mauvais endroit
+// tant qu'on ne les deplace pas). Change juste le docRef de l'entree RJC ;
+// le fichier et sa date restent inchanges.
+function reclasserPieceHistorique(entryId, refActuel) {
+  var affaire = currentAffaireObj();
+  if (!affaire) return;
+  var entry = (affaire.rjc || []).find(function(e){ return e.id === entryId; });
+  if (!entry) return;
+  var html = '<p style="font-size:13px;color:var(--text-light);margin-bottom:10px;">Deplacer "' + escHtml(entry.fichierNom || entry.objet || '') + '" vers :</p>'
+    + '<div style="display:flex;flex-direction:column;gap:6px;">'
+    + CIBLES_RECLASSEMENT.filter(function(p){ return p.ref !== refActuel; }).map(function(p){
+        return '<button type="button" class="btn btn-outline btn-sm" style="text-align:left;" onclick="confirmerReclassementPiece(\'' + entryId + '\', \'' + refActuel + '\', \'' + p.ref + '\')">' + p.icon + ' ' + p.title + '</button>';
+      }).join('')
+    + '</div>';
+  openDocModal('Reclasser cette piece', html, null, null);
+}
+function confirmerReclassementPiece(entryId, refActuel, nouveauRef) {
+  var affaire = currentAffaireObj();
+  if (!affaire) return;
+  var entry = (affaire.rjc || []).find(function(e){ return e.id === entryId; });
+  if (!entry) return;
+  entry.docRef = nouveauRef;
+  persistAffaires();
+  try { if (document.getElementById('docs-grid') && document.getElementById('docs-grid').innerHTML) renderDocsGrid(); } catch (eG) {}
+  var nouveauTitre = (CIBLES_RECLASSEMENT.find(function(p){ return p.ref === nouveauRef; }) || {}).title || nouveauRef;
+  showToast('Piece deplacee vers "' + nouveauTitre + '"', 'success');
+  if (rjcEntriesForDoc(affaire, refActuel).length) { showHistoriqueDoc(refActuel); } else { closeModal(); }
 }
 
 // Types de pieces dont l'analyse au depot est en cours (badge clignotant).
