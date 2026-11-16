@@ -2126,7 +2126,14 @@ function saveAffaire() {
 // Deux sources d'alimentation : auto (chaque doc genere s'y ajoute tout seul,
 // voir generateDoc()) et manuelle (formulaire terrain, voir genFormulaireRJC()).
 // ============================================================================
+// 16/11 : suspend temporairement l'ecriture reelle dans localStorage pendant
+// un import en lot (voir importerDossierVrac) -- chaque appel individuel
+// reste sans effet pendant que le flag est actif, une seule sauvegarde
+// est faite a la fin du lot. Ne doit jamais rester bloque a true : toujours
+// remis a false dans un bloc finally.
+var _suspendPersistAffaires = false;
 function persistAffaires() {
+  if (_suspendPersistAffaires) return;
   // Horodater l'affaire courante pour que la fusion sache qui est le plus recent
   var maintenant = new Date().toISOString();
   if (currentAffaireId) {
@@ -3432,15 +3439,33 @@ async function importerDossierVrac(event) {
   var aTraiter = 0; for (var k in parType) aTraiter += parType[k].length;
   showToast('Import de ' + aTraiter + ' document(s)...', '');
 
-  var bilan = {}, doublons = 0, erreurs = 0;
+  // 16/11 (demande d'Alain, import d'un gros dossier lent/peu fiable --
+  // recherche faite sur le depot de fichiers en lot cote navigateur) : deux
+  // couts se cumulaient fichier par fichier --
+  //  1) un POST /api/rjc-upload attendu l'un apres l'autre (200 fichiers =
+  //     200 aller-retours reseau EN SERIE) -- traite maintenant par lots
+  //     paralleles (traiterParLots, meme principe que la synchro Drive) ;
+  //  2) persistAffaires() reserialisait et reecrivait TOUT le JSON de
+  //     TOUTES les affaires dans localStorage apres CHAQUE fichier (cout
+  //     proportionnel a la taille totale des donnees, encouru 200 fois,
+  //     et localStorage est synchrone -- bloque l'interface a chaque appel)
+  //     -- suspendu pendant tout l'import, une seule sauvegarde a la fin.
+  var bilan = {}, doublons = 0, erreurs = 0, taches = [];
   for (var type in parType) {
     bilan[type] = 0;
-    for (var i = 0; i < parType[type].length; i++) {
-      var statut = await deposerPieceDossier(affaire, parType[type][i], type, true);
-      if (statut === 'ok') bilan[type]++;
+    parType[type].forEach(function (f) { taches.push({ type: type, file: f }); });
+  }
+  _suspendPersistAffaires = true;
+  try {
+    await traiterParLots(taches, 4, async function (tache) {
+      var statut = await deposerPieceDossier(affaire, tache.file, tache.type, true);
+      if (statut === 'ok') bilan[tache.type]++;
       else if (statut === 'doublon') doublons++;
       else if (statut === 'erreur') erreurs++;
-    }
+    }, []);
+  } finally {
+    _suspendPersistAffaires = false;
+    persistAffaires();
   }
 
   var html = '';
