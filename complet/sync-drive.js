@@ -597,40 +597,50 @@
     return exportes;
   }
 
+  // 16/11 (Alain : "ne fonctionne plus", aucun message) : toute la fonction
+  // est maintenant protegee par un filet global -- un clic sur "Dossier
+  // local" doit TOUJOURS afficher quelque chose (meme une erreur), jamais
+  // rester muet.
   window.synchroniserDossierLocal = async function() {
-    if (!window.showDirectoryPicker) {
-      showToast('Fonction indisponible sur ce navigateur (Chrome PC ou Android uniquement)', 'error');
-      return;
-    }
-    var racine = await recupererRacine();
-    if (!racine) { await window.choisirDossierLocal(); racine = racineHandle; }
-    if (!racine) return;
-    var ok = await obtenirPermission(racine);
-    if (!ok) { showToast('Acces au dossier local refuse ou a reconfirmer', 'error'); return; }
-    majStatutDossierLocal('Dossier local : verification en cours...');
-    var bilanImport = 0, bilanExport = 0, sansDossier = 0, enErreur = [];
-    for (var i = 0; i < affaires.length; i++) {
-      var affaire = affaires[i];
-      try {
-        var dir = await dossierAffaire(racine, affaire, true);
-        if (!dir) { sansDossier++; continue; }
-        bilanImport += await importerDepuisDossierLocal(affaire, dir);
-        var fichiers = await listerFichiers(dir, 4);
-        var nomsExistants = {}; fichiers.forEach(function(f){ nomsExistants[f.name] = true; });
-        bilanExport += await exporterVersDossierLocal(affaire, dir, nomsExistants);
-      } catch (eAff) {
-        // 16/11 (suite au bug du MOA vide, reste invisible dans le bilan) :
-        // une affaire en echec ne doit plus passer inapercue -- on la
-        // nomme dans le toast final plutot que de l'avaler silencieusement.
-        enErreur.push(((affaire.chantier && affaire.chantier.nom) || affaire.id) + ' (' + (eAff && eAff.message || eAff) + ')');
+    try {
+      if (!window.showDirectoryPicker) {
+        showToast('Fonction indisponible sur ce navigateur (Chrome PC ou Android uniquement)', 'error');
+        return;
       }
+      showToast('Dossier local : verification de l\'acces...');
+      var racine = await recupererRacine();
+      if (!racine) { await window.choisirDossierLocal(); racine = racineHandle; }
+      if (!racine) { showToast('Dossier local : aucun dossier selectionne', 'error'); return; }
+      var ok = await obtenirPermission(racine);
+      if (!ok) { showToast('Acces au dossier local refuse ou a reconfirmer', 'error'); return; }
+      majStatutDossierLocal('Dossier local : verification en cours...');
+      var bilanImport = 0, bilanExport = 0, sansDossier = 0, enErreur = [];
+      for (var i = 0; i < affaires.length; i++) {
+        var affaire = affaires[i];
+        try {
+          var dir = await dossierAffaire(racine, affaire, true);
+          if (!dir) { sansDossier++; continue; }
+          bilanImport += await importerDepuisDossierLocal(affaire, dir);
+          var fichiers = await listerFichiers(dir, 4);
+          var nomsExistants = {}; fichiers.forEach(function(f){ nomsExistants[f.name] = true; });
+          bilanExport += await exporterVersDossierLocal(affaire, dir, nomsExistants);
+        } catch (eAff) {
+          // Suite au bug du MOA vide (deja corrige) : une affaire en echec
+          // ne doit plus passer inapercue -- on la nomme dans le toast
+          // final plutot que de l'avaler silencieusement.
+          enErreur.push(((affaire.chantier && affaire.chantier.nom) || affaire.id) + ' (' + (eAff && eAff.message || eAff) + ')');
+        }
+      }
+      persistAffaires();
+      try { renderDocsGrid(); } catch (eR) {}
+      try { renderAffaireList(); } catch (eR2) {}
+      majStatutDossierLocal('Dossier local : ' + racine.name);
+      showToast('Dossier local : ' + bilanImport + ' fichier(s) importe(s), ' + bilanExport + ' copie(s) deposee(s)'
+        + (sansDossier ? ', ' + sansDossier + ' affaire(s) sans dossier correspondant' : '')
+        + (enErreur.length ? ', echec sur : ' + enErreur.join(' ; ') : ''), enErreur.length ? 'error' : 'success');
+    } catch (eGlobal) {
+      try { majStatutDossierLocal(''); } catch (e2) {}
+      showToast('Dossier local : erreur inattendue -- ' + (eGlobal && (eGlobal.name ? eGlobal.name + ' : ' : '') + eGlobal.message || eGlobal), 'error');
     }
-    persistAffaires();
-    try { renderDocsGrid(); } catch (eR) {}
-    try { renderAffaireList(); } catch (eR2) {}
-    majStatutDossierLocal('Dossier local : ' + racine.name);
-    showToast('Dossier local : ' + bilanImport + ' fichier(s) importe(s), ' + bilanExport + ' copie(s) deposee(s)'
-      + (sansDossier ? ', ' + sansDossier + ' affaire(s) sans dossier correspondant' : '')
-      + (enErreur.length ? ', echec sur : ' + enErreur.join(' ; ') : ''), enErreur.length ? 'error' : 'success');
   };
 })();
