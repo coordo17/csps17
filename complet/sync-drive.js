@@ -150,17 +150,40 @@
     var sup = supprimees();
     Object.keys(distant.supprimees).forEach(function(k){ if (!sup[k]) sup[k] = distant.supprimees[k]; });
     localStorage.setItem('csps17_supprimees', JSON.stringify(sup));
-    // 2. fichiers supprimes (rapide, global -- pas de gros transfert ici)
+    // 2. fichiers supprimes (comptabilite globale, potentiellement
+    // volumineuse si accumulee depuis longtemps sur les deux appareils)
     var fsup = fichiersSupprimes(); distant.fichiersSupprimes = distant.fichiersSupprimes || {};
     Object.keys(distant.fichiersSupprimes).forEach(function(k){ if (!fsup[k]) fsup[k] = distant.fichiersSupprimes[k]; });
     localStorage.setItem('csps17_fichiers_supprimes', JSON.stringify(fsup));
     var locauxTous = await FichiersLocaux.cles(), aLocal = {};
     locauxTous.forEach(function(k){ aLocal[k] = true; });
+    // 16/11 (bug constate par Alain, St-Mars-la-Briere incomplete sur la
+    // tablette) : ce nettoyage reprenait A CHAQUE synchro TOUTES les
+    // suppressions jamais notees depuis le debut -- des centaines d'appels
+    // de suppression Drive un par un (presque tous deja supprimes, donc en
+    // echec 404), au point d'epuiser a lui seul tout le delai global avant
+    // meme d'avoir commence a traiter les affaires. Les suppressions Drive
+    // partent maintenant toutes EN PARALLELE (beaucoup plus rapide), et le
+    // resultat est aussitot confirme sur le Drive -- pour que ce nettoyage
+    // ne soit plus jamais refait si la suite (les affaires) venait a
+    // depasser le delai.
+    var aEffacerDrive = [];
     for (var z in fsup) {
       if (aLocal[z]) { await FichiersLocaux.effacer(z); delete aLocal[z]; }
-      if (distant.fichiers[z]) { if (distant.fichiers[z].id) await effacerFichierDrive(distant.fichiers[z].id); delete distant.fichiers[z]; }
+      if (distant.fichiers[z]) {
+        if (distant.fichiers[z].id) aEffacerDrive.push(distant.fichiers[z].id);
+        delete distant.fichiers[z];
+      }
+    }
+    if (aEffacerDrive.length) {
+      etat('Nettoyage (' + aEffacerDrive.length + ' fichier(s) deja supprime(s))...');
+      await Promise.all(aEffacerDrive.map(function(id){ return effacerFichierDrive(id); }));
     }
     distant.fichiersSupprimes = fsup;
+    if (aEffacerDrive.length) {
+      distant.affaires = affaires; distant.supprimees = sup; distant.maj = new Date().toISOString(); distant.format = 'csps17-sync';
+      idIndex = await envoyerFichier(NOM_INDEX, dossier, new Blob([JSON.stringify(distant)], { type: 'application/json' }), idIndex);
+    }
 
     // 16/11 (demande d'Alain, suite au bug du 45 s depasse sur un gros
     // import) : fusion ET transfert des pieces jointes AFFAIRE PAR AFFAIRE
@@ -252,13 +275,20 @@
     }
 
     // nettoyage : un fichier recupere par tous les appareils quitte le Drive
+    // (en parallele aussi, meme raison qu'au nettoyage du debut)
     var idsApp = Object.keys(distant.appareils);
     var chemins = Object.keys(distant.fichiers);
+    var aEffacerFinal = [];
     for (var k = 0; k < chemins.length; k++) {
       var fx = distant.fichiers[chemins[k]];
       if (fx.id && idsApp.length > 1 && idsApp.every(function(a){ return fx.par.indexOf(a) !== -1; })) {
-        await effacerFichierDrive(fx.id); fx.id = null; bilan.nettoyes++;
+        aEffacerFinal.push(fx);
       }
+    }
+    if (aEffacerFinal.length) {
+      etat('Nettoyage final (' + aEffacerFinal.length + ' fichier(s))...');
+      await Promise.all(aEffacerFinal.map(function(fx2){ return effacerFichierDrive(fx2.id); }));
+      aEffacerFinal.forEach(function(fx2){ fx2.id = null; bilan.nettoyes++; });
     }
     // ecriture finale (comptabilite des fichiers/appareils a jour)
     etat('Enregistrement sur le Drive...');
