@@ -5045,6 +5045,8 @@ function telechargerDernierDoc(ref) {
 function showHistoriqueDoc(ref) {
   var affaire = currentAffaireObj();
   var entries = rjcEntriesForDoc(affaire, ref);
+  if (!_selectionHistoriqueRef || _selectionHistoriqueRef !== ref) { _selectionHistorique = {}; }
+  _selectionHistoriqueRef = ref;
   var doc = DOCS.find(function(d){ return d.ref === ref; })
     || PIECES_DOSSIER.find(function(d){ return d.ref === ref; });
   var titreDoc = doc ? doc.title : (ref === 'ANALYSE' ? 'Analyse des diagnostics' : ref);
@@ -5052,7 +5054,12 @@ function showHistoriqueDoc(ref) {
     openDocModal(titreDoc, '<p style="color:var(--text-light);font-size:13px;">Aucune version pour le moment \u2014 utilisez Generer (ou Deposer pour les pieces).</p>', null, null);
     return;
   }
-  var html = '<div style="max-height:320px;overflow-y:auto;text-align:left;">'
+  var html = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:12px;">'
+    + '<a href="#" onclick="toggleTousHistorique(\'' + ref + '\', true); return false;" style="color:var(--blue-mid);">Tout cocher</a>'
+    + '<a href="#" onclick="toggleTousHistorique(\'' + ref + '\', false); return false;" style="color:var(--blue-mid);">Tout decocher</a>'
+    + '<button type="button" id="btn-suppr-selection" disabled onclick="supprimerSelectionHistorique(\'' + ref + '\')" style="margin-left:auto;font-size:12px;padding:4px 10px;border:1px solid var(--border);background:#fff;border-radius:5px;cursor:pointer;color:#b91c1c;">&#128465; Supprimer la selection (0)</button>'
+    + '</div>'
+    + '<div style="max-height:320px;overflow-y:auto;text-align:left;">'
     + entries.slice().reverse().map(function(e){
       var lien;
       if (e.fichierPath || e.fichierData) {
@@ -5062,7 +5069,9 @@ function showHistoriqueDoc(ref) {
         lien = '<span>' + escHtml(e.objet || e.nature || '') + '</span> <span style="color:var(--text-light);font-size:11px;">(sans fichier)</span>';
       }
       var estPiece = !!CIBLES_RECLASSEMENT.find(function(p){ return p.ref === ref; });
+      var coche = _selectionHistorique[e.id] ? ' checked' : '';
       return '<div style="display:flex;align-items:baseline;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;">'
+        + '<input type="checkbox"' + coche + ' onchange="toggleSelectionHistorique(\'' + e.id + '\', this.checked)" style="margin:0;">'
         + '<span style="color:var(--text-light);white-space:nowrap;">' + formatDateFR(e.date)
         + ' <a href="#" onclick="modifierDateRJC(\'' + e.id + '\'); showHistoriqueDoc(\'' + ref + '\'); return false;" style="font-size:10px;color:var(--blue-mid);">modifier</a></span>'
         + '<span style="flex:1;min-width:0;overflow-wrap:anywhere;">' + lien + '</span>'
@@ -5074,6 +5083,44 @@ function showHistoriqueDoc(ref) {
     }).join('')
     + '</div>';
   openDocModal('Historique — ' + titreDoc + ' (' + entries.length + ')', html, null, null);
+}
+
+// Selection multiple dans l'historique (16/11, demande d'Alain : purger en
+// une fois les ~86 fiches de test d'AURAY plutot qu'une suppression a la
+// fois). _selectionHistorique survit entre les cases a cocher (pas de
+// re-rendu a chaque clic) mais est reinitialisee a chaque ouverture d'un
+// historique (showHistoriqueDoc) ou apres une suppression groupee.
+var _selectionHistorique = {};
+var _selectionHistoriqueRef = null;
+function majBoutonSelectionHistorique() {
+  var n = Object.keys(_selectionHistorique).length;
+  var btn = document.getElementById('btn-suppr-selection');
+  if (btn) { btn.textContent = '\u{1F5D1} Supprimer la selection (' + n + ')'; btn.disabled = !n; }
+}
+function toggleSelectionHistorique(entryId, coche) {
+  if (coche) _selectionHistorique[entryId] = true; else delete _selectionHistorique[entryId];
+  majBoutonSelectionHistorique();
+}
+function toggleTousHistorique(ref, coche) {
+  var affaire = currentAffaireObj();
+  var entries = rjcEntriesForDoc(affaire, ref);
+  _selectionHistorique = {};
+  if (coche) entries.forEach(function(e){ _selectionHistorique[e.id] = true; });
+  showHistoriqueDoc(ref);
+}
+async function supprimerSelectionHistorique(ref) {
+  var ids = Object.keys(_selectionHistorique);
+  if (!ids.length) return;
+  if (!confirm('Supprimer ' + ids.length + ' ligne(s) (et leur fichier attache) ? Cette action est irreversible.')) return;
+  showToast('Suppression de ' + ids.length + ' ligne(s)...');
+  for (var i = 0; i < ids.length; i++) {
+    try { await supprimerEntreeRJC(ids[i]); } catch (eSup) { /* une ligne en echec ne bloque pas les autres */ }
+  }
+  _selectionHistorique = {};
+  try { if (document.getElementById('docs-grid') && document.getElementById('docs-grid').innerHTML) renderDocsGrid(); } catch (eG) {}
+  var affaire = currentAffaireObj();
+  showToast(ids.length + ' ligne(s) supprimee(s)', 'success');
+  if (rjcEntriesForDoc(affaire, ref).length) { showHistoriqueDoc(ref); } else { closeModal(); }
 }
 
 // Suppression d'une version/piece depuis l'historique (Apercu ou badge).
