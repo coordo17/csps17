@@ -10547,7 +10547,12 @@ function icPresAjouter(nom, qualite, role) {
 function icCollecterPresents() {
   return Array.prototype.slice.call(document.querySelectorAll('#ic-pres-liste .ic-pres')).map(function (d) {
     var role = d.getAttribute('data-role');
-    var sig = role === 'csps' ? sigData.csps : role === 'ent' ? sigData.ent : sigData['pres_' + d.getAttribute('data-n')];
+    // 17/11 (demande Alain) : CSPS et entreprise signent deja au §7 (visa) --
+    // ne pas dupliquer leur image de signature dans le tableau d'emargement
+    // du §6 bis, seul le nom/qualite y figure pour eux. Les personnes
+    // ajoutees en plus ("autre") n'ont pas d'autre endroit pour signer :
+    // leur signature manuscrite reste donc dans ce tableau.
+    var sig = role === 'autre' ? sigData['pres_' + d.getAttribute('data-n')] : null;
     return { nom: d.querySelector('.ic-pres-nom').value.trim(), qualite: d.querySelector('.ic-pres-qual').value.trim(), role: role, sig: sig || null };
   }).filter(function (p) { return p.nom || p.qualite; });
 }
