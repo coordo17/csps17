@@ -6,7 +6,11 @@
 //   des que tous les appareils l'ont recuperee. Le Drive n'est qu'un point de passage.
 (function(){
   var CLIENT_ID = '282523067881-3ia7tora957rq0d3eb256o88m39jiekg.apps.googleusercontent.com';
-  var SCOPE = 'https://www.googleapis.com/auth/drive.file';
+  // 19/11 (demande d'Alain) : scope "email" ajoute en plus de "drive.file" --
+  // sert uniquement a afficher QUEL compte Google a ete utilise pour la
+  // synchro (voir afficherCompteConnecte ci-dessous), pour ne plus jamais se
+  // demander si PC et tablette pointent bien vers le meme compte/Drive.
+  var SCOPE = 'https://www.googleapis.com/auth/drive.file email';
   var API = 'https://www.googleapis.com/drive/v3/files', UP = 'https://www.googleapis.com/upload/drive/v3/files';
   var NOM_DOSSIER = 'CSPS17', NOM_INDEX = 'CSPS17_donnees.json';
   var jeton = null, jetonFin = 0, clientJeton = null;
@@ -27,6 +31,26 @@
     var s = supprimees(); s[id] = new Date().toISOString();
     localStorage.setItem('csps17_supprimees', JSON.stringify(s));
   };
+
+  // --- compte Google connecte (affichage seul, n'influence pas la synchro) ---
+  function afficherCompteConnecte(token){
+    var el = document.getElementById('sync-compte');
+    fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: 'Bearer ' + token } })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(info){
+        if (!info || !info.email) return;
+        try { localStorage.setItem('csps17_compte_google', info.email); } catch (e) {}
+        if (el) el.textContent = 'Connecté : ' + info.email;
+      })
+      .catch(function(){ /* affichage seulement -- une erreur ici ne doit jamais faire echouer la synchro */ });
+  }
+  (function restaurerCompteAffiche(){
+    try {
+      var dernier = localStorage.getItem('csps17_compte_google');
+      var el = document.getElementById('sync-compte');
+      if (dernier && el) el.textContent = 'Connecté : ' + dernier;
+    } catch (e) {}
+  })();
 
   // --- connexion Google ---
   function chargerGoogle(){
@@ -223,7 +247,8 @@
   async function synchroniser(){
     var moi = appareil(), bilan = { recues: 0, envoyees: 0, fichiersEnvoyes: 0, fichiersRecus: 0, nettoyes: 0, erreursFichiers: [] };
     etat('Connexion à Google...');
-    await obtenirJeton();
+    var jetonCourant = await obtenirJeton();
+    afficherCompteConnecte(jetonCourant);
     etat('Lecture du Drive...');
     var dossiers = await chercher("name='" + NOM_DOSSIER + "' and mimeType='application/vnd.google-apps.folder'");
     var dossier = dossiers.length ? dossiers[0].id : await creerDossier(NOM_DOSSIER);

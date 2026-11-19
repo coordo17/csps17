@@ -671,6 +671,11 @@
     <button class="btn btn-outline btn-sm" onclick="mettreAJourAppli()" title="Charger la derniere version de l'application">&#8635; Mettre à jour</button>
     <button class="btn btn-outline btn-sm" onclick="ouvrirSauvegardes()" title="Exporter / importer une sauvegarde de toutes vos affaires">&#128190; Sauvegardes</button>
     <span id="sync-indic" onclick="resyncMaintenant()" title="Cliquer pour synchroniser avec l'autre appareil (Google Drive)" style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 9px;border-radius:12px;cursor:pointer;background:#eee;color:#666;"><span id="sync-dot" style="width:9px;height:9px;border-radius:50%;background:#999;"></span><span id="sync-txt">—</span></span>
+    <!-- 19/11 (demande d'Alain : impossible de savoir quel compte Google etait
+         vraiment utilise par la synchro, sur quel appareil) : affiche en clair
+         le compte connecte, mis a jour par sync-drive.js apres chaque synchro
+         reussie, et restaure depuis le dernier connu au chargement de la page. -->
+    <span id="sync-compte" title="Compte Google utilisé pour la synchronisation Drive" style="font-size:11px;color:#888;"></span>
   </div>
 </header>
 
