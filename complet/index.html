@@ -3881,6 +3881,14 @@ var CBT_BASEVIE_MOTS = ['installations de chantier', 'installation de chantier',
 var CBT_EXPLOITATION_MOTS = ['site en exploitation', 'etablissement en activite', 'établissement en activité', 'maintien de l\'activite', "maintien de l'activité", 'reste ouvert', 'reste ouverte', 'site occupe', 'site occupé', 'plan de prevention', 'plan de prévention', 'coactivite avec le personnel', 'personnel du site', 'clientele', 'clientèle'];
 var CBT_ENERGIE_MOTS = ['energie provisoire', 'énergie provisoire', 'alimentation provisoire', 'raccordement provisoire', 'tableau provisoire', 'armoire electrique de chantier', 'armoire électrique de chantier', 'coffret de chantier', 'branchement provisoire', 'alimentation electrique de chantier', 'alimentation électrique de chantier'];
 var CBT_STOCKAGE_SITE_MOTS = ['zone de stockage', 'aire de stockage', 'zone de depot', 'zone de dépôt', 'aire de depot', 'aire de dépôt', 'stockage des materiaux', 'stockage des matériaux', 'zone logistique', 'zone de stationnement'];
+// 20/11 (demande d'Alain, chantier Auray) : jusqu'ici, seul le plan/PIC
+// etait scrute pour la cloture (cf. PLANS_CLOTURE_MOTS plus bas) -- texte de
+// legende souvent fragile a isoler proprement du cartouche. Le CBT contient
+// en general une phrase bien plus propre et explicite (ex : "Mise en place
+// d'une cloture de chantier jusqu'a la fin des travaux de VRD.") : on la
+// recherche desormais aussi, et elle est prioritaire sur celle du plan
+// (cf. priorite cbt.cloture puis plans.cloture plus bas).
+var CBT_CLOTURE_MOTS = ['cloture de chantier', 'clôture de chantier', "mise en place d'une cloture", "mise en place d'une clôture", 'palissade de chantier', 'grillage de chantier', 'heras'];
 function repererClauseCBT(texte, motsCles) {
   var texteMin = texte.toLowerCase();
   for (var i = 0; i < motsCles.length; i++) {
@@ -4007,6 +4015,7 @@ async function ouvrirFaitsCBTDepuisFichier(file) {
       propositions.exploitation = repererClauseCBT(texte, CBT_EXPLOITATION_MOTS);
       propositions.energie = repererClauseCBT(texte, CBT_ENERGIE_MOTS);
       propositions.stockages = repererClauseCBT(texte, CBT_STOCKAGE_SITE_MOTS);
+      propositions.cloture = repererClauseCBT(texte, CBT_CLOTURE_MOTS);
     }
   } catch (err) {
     // Document scanne/illisible : on ouvre quand meme la fiche, vide --
@@ -4026,7 +4035,8 @@ function ouvrirFaitsCBT(fichierNom, propositions) {
   var exploitationVal = f.exploitation || prop.exploitation || '';
   var energieVal = f.energie || prop.energie || '';
   var stockagesVal = f.stockages || prop.stockages || '';
-  var uneProposition = prop.dechets || prop.base_vie || prop.exploitation || prop.energie || prop.stockages;
+  var clotureVal = f.cloture || prop.cloture || '';
+  var uneProposition = prop.dechets || prop.base_vie || prop.exploitation || prop.energie || prop.stockages || prop.cloture;
   var html = '<p style="margin-bottom:10px;font-size:13px;color:var(--text-light);">'
     + (fichierNom ? 'Document depose : <strong>' + icEscAttr(fichierNom) + '</strong>. ' : '')
     + 'Info de chantier (valable pour toutes les entreprises) -- alimente la grille de la fiche IC (§4A), la Section I et les observations du CSPS (§12). '
@@ -4040,8 +4050,10 @@ function ouvrirFaitsCBT(fichierNom, propositions) {
     + '<textarea id="faits-cbt-basevie" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Vestiaires, sanitaires et réfectoire mis en place par le lot gros oeuvre dès le démarrage.">' + icEscAttr(baseVieVal) + '</textarea></div>'
     + '<div class="field" style="margin-bottom:10px;"><label>Énergie provisoire</label>'
     + '<textarea id="faits-cbt-energie" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Coffret provisoire fourni par le lot électricité, raccordement sur le TGBT existant.">' + icEscAttr(energieVal) + '</textarea></div>'
-    + '<div class="field"><label>Stockages (zone de dépôt matériaux)</label>'
-    + '<textarea id="faits-cbt-stockages" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Zone de stockage délimitée côté cour, pas de stockage sur domaine public.">' + icEscAttr(stockagesVal) + '</textarea></div>';
+    + '<div class="field" style="margin-bottom:10px;"><label>Stockages (zone de dépôt matériaux)</label>'
+    + '<textarea id="faits-cbt-stockages" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Zone de stockage délimitée côté cour, pas de stockage sur domaine public.">' + icEscAttr(stockagesVal) + '</textarea></div>'
+    + '<div class="field"><label>Clôture de chantier</label>'
+    + '<textarea id="faits-cbt-cloture" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Mise en place d\'une clôture de chantier jusqu\'à la fin des travaux de VRD.">' + icEscAttr(clotureVal) + '</textarea></div>';
   openDocModal('Faits CBT (déchets / base vie / exploitation / énergie / stockages)' + (f.source ? ' — source : ' + icEscAttr(f.source) : ''), html, 'Enregistrer', function () {
     enregistrerFaitsCBT(affaire, fichierNom);
   });
@@ -4054,6 +4066,7 @@ function enregistrerFaitsCBT(affaire, fichierNom) {
     exploitation: document.getElementById('faits-cbt-exploitation').value.trim(),
     energie: document.getElementById('faits-cbt-energie').value.trim(),
     stockages: document.getElementById('faits-cbt-stockages').value.trim(),
+    cloture: document.getElementById('faits-cbt-cloture').value.trim(),
     source: (fichierNom ? fichierNom + ' — ' : '') + 'saisi le ' + new Date().toLocaleDateString('fr-FR')
   };
   persistAffaires();
@@ -4951,7 +4964,7 @@ function faitsVierges() {
     // (jamais injectees sans verification -- meme logique que l'import
     // deterministe du PPSPS). exploitation/energie/stockages ajoutes le
     // 13/11 pour alimenter la Section I (meme garde-fou).
-    cbt: { dechets: '', base_vie: '', exploitation: '', energie: '', stockages: '', source: '' },
+    cbt: { dechets: '', base_vie: '', exploitation: '', energie: '', stockages: '', cloture: '', source: '' },
     // Plans/PIC (05/11) : acces et cloture, reperes dans le plan de masse
     // / PIC depose (cf. ouvrirFaitsPlans) -- meme principe que le CBT.
     plans: { acces: '', cloture: '', source: '' },
@@ -5036,6 +5049,7 @@ function affaireFaits(affaire) {
   if (affaire.faits.cbt.exploitation === undefined) affaire.faits.cbt.exploitation = '';
   if (affaire.faits.cbt.energie === undefined) affaire.faits.cbt.energie = '';
   if (affaire.faits.cbt.stockages === undefined) affaire.faits.cbt.stockages = '';
+  if (affaire.faits.cbt.cloture === undefined) affaire.faits.cbt.cloture = '';
   if (!affaire.faits.alertesPlanning) affaire.faits.alertesPlanning = [];
   if (!affaire.faits.plans) affaire.faits.plans = faitsVierges().plans;
   if (!affaire.faits.cbtPoints) affaire.faits.cbtPoints = {};
@@ -6942,7 +6956,8 @@ function corpsSection3PGCNatif(data, faits) {
   // Continuité de la clôture de chantier
   b += wH2('Continuité de la clôture de chantier');
   var pl = faits.plans || {};
-  var phraseAttribution = pl.cloture ? (' Attribution relevée dans les documents du chantier : ' + pl.cloture + '.') : '';
+  var clotureSourcePGC = (faits.cbt && faits.cbt.cloture) || pl.cloture || '';
+  var phraseAttribution = clotureSourcePGC ? (' Attribution relevée dans les documents du chantier : ' + clotureSourcePGC + '.') : '';
   b += wP('La fermeture du site est maintenue sans interruption pendant toute la durée du chantier. Lorsque la responsabilité de la clôture passe d\'un lot à un autre, une réunion de coordination entre les deux lots concernés précède le relais, afin qu\'aucune période du chantier ne reste sans clôture.' + phraseAttribution, {sz:18, spacing:80, color:'475569'});
 
   // Réseaux connus + sujétions DT-DICT
@@ -7664,13 +7679,15 @@ function genererPGCNatif(ref){
       if (cbt.base_vie) body += wLi('Base vie / installations de chantier : ' + cbt.base_vie);
     }
 
-    // 2.4 Acces et cloture du chantier (Plans/PIC, cf. ouvrirFaitsPlans)
+    // 2.4 Acces et cloture du chantier (Plans/PIC, cf. ouvrirFaitsPlans --
+    // priorite au CBT (cf. ouvrirFaitsCBT) si rempli, plus fiable/propre)
     var pl = faits.plans || {};
-    if (pl.acces || pl.cloture) {
+    var clotureTexteDoc = (faits.cbt && faits.cbt.cloture) || pl.cloture || '';
+    if (pl.acces || clotureTexteDoc) {
       if (sectionsVides) { body += wH('2. Organisation générale, diagnostics et contraintes'); sectionsVides = false; }
       body += wP('Accès et clôture du chantier', {b:true,sz:20,spacing:60});
       if (pl.acces) body += wLi('Accès chantier : ' + pl.acces);
-      if (pl.cloture) body += wLi('Clôture / périmètre : ' + pl.cloture);
+      if (clotureTexteDoc) body += wLi('Clôture / périmètre : ' + clotureTexteDoc);
     }
 
     // 2.5 Phasage et co-activite (planning, cf. ouvrirFaitsPlanning) --
@@ -11430,7 +11447,7 @@ function genFormulaireFIC() {
   html2 += '<p style="font-size:12px;color:var(--text-light);margin-bottom:12px;">Dispositions du PGC, par theme -- pre-remplies quand un CBT ou un plan depose en contenait un passage repere (texte reel, a verifier), sinon a completer a la main. La colonne attendue par Fred ("Constat in situ") est le champ lui-meme : relisez et corrigez selon ce que vous observez sur place.</p>';
   html2 += fieldRow('Site en exploitation / plan de prevention', 'fic-cat3-exploitation', 'textarea', 'Ex: Agence ouverte pendant les travaux, horaires...', cbtFaits.exploitation || '');
   html2 += fieldRow('🚗 Accès & Véhicules', 'fic-cat3-acces', 'textarea', 'Ex: Accès depuis la voie communale...', plansFaits.acces || '');
-  html2 += fieldRow('Sécurisation / Clôture', 'fic-cat3-securisation', 'textarea', 'Ex: Site fermé, portail verrouillé...', plansFaits.cloture || '');
+  html2 += fieldRow('Sécurisation / Clôture', 'fic-cat3-securisation', 'textarea', 'Ex: Site fermé, portail verrouillé...', cbtFaits.cloture || plansFaits.cloture || '');
   html2 += fieldRow('Hygiène & Base vie', 'fic-cat3-hygiene', 'textarea', 'Ex: Utilisation des installations présentes...', cbtFaits.base_vie || '');
   html2 += fieldRow('Énergie Provisoire', 'fic-cat3-energie', 'textarea', 'Ex: Points électriques protégés par différentiel...', cbtFaits.energie || '');
   html2 += fieldRow('Stockages', 'fic-cat3-stockages', 'textarea', 'Ex: Stockages dans la cour, pas sur domaine public...', cbtFaits.stockages || '');
