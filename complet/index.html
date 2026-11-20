@@ -3596,9 +3596,10 @@ function relireChantier() {
   } else {
     html = '<p style="margin-bottom:10px;font-size:13px;color:var(--text-light);">Documents d\u00e9pos\u00e9s sans fiche de faits saisie :</p>'
       + manques.map(function (m, i) {
+        var libelleBouton = m.fichier === 'tout relire en un clic' ? 'Tout relire' : 'Remplir';
         return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);gap:10px;">'
           + '<div><strong>' + icEscAttr(m.label) + '</strong><br><span style="font-size:12px;color:var(--text-light);">' + icEscAttr(m.fichier) + '</span></div>'
-          + '<button type="button" class="btn btn-primary btn-sm" onclick="closeModal();window._relireManques[' + i + '].fn(window._relireManques[' + i + '].fichier)">Remplir</button>'
+          + '<button type="button" class="btn btn-primary btn-sm" onclick="closeModal();window._relireManques[' + i + '].fn(window._relireManques[' + i + '].fichier)">' + libelleBouton + '</button>'
           + '</div>';
       }).join('');
   }
@@ -3915,6 +3916,25 @@ var CBT_STOCKAGE_SITE_MOTS = ['zone de stockage', 'aire de stockage', 'zone de d
 // recherche desormais aussi, et elle est prioritaire sur celle du plan
 // (cf. priorite cbt.cloture puis plans.cloture plus bas).
 var CBT_CLOTURE_MOTS = ['cloture de chantier', 'clôture de chantier', "mise en place d'une cloture", "mise en place d'une clôture", 'palissade de chantier', 'grillage de chantier', 'heras'];
+// 20/11 (bug remonte par Alain, plan Auray : "...IS/1UP IS/1UP IS/1UP...
+// Cloture existante simple torsion HT : 2.00m Cloture existante simple
+// torsion HT : 2.00m...") : une legende de plan (tableau de symboles ou de
+// revisions) repete souvent la meme courte phrase plusieurs fois de suite,
+// a l'INTERIEUR d'un seul extrait -- ce n'est pas un doublon entre
+// documents (fusionnerPropositionCBT ne peut rien y faire), c'est du texte
+// brut repete dans le PDF lui-meme. On reduit toute sequence de 2
+// repetitions consecutives ou plus d'un meme groupe de mots a une seule
+// occurrence.
+function collapserRepetitionsInternesCBT(texte) {
+  if (!texte) return texte;
+  var t = texte, avant, garde = 0;
+  do {
+    avant = t;
+    t = t.replace(/\b([^\n]{3,90}?)( \1){1,}/g, '$1');
+    garde++;
+  } while (t !== avant && garde < 20);
+  return t;
+}
 function repererClauseCBT(texte, motsCles) {
   var texteMin = texte.toLowerCase();
   for (var i = 0; i < motsCles.length; i++) {
@@ -3980,6 +4000,7 @@ function repererClauseCBT(texte, motsCles) {
     var finRel = mArret ? (mArret.index + (/^[.;]/.test(mArret[0]) ? 1 : 0)) : Math.min(apresMotCle.length, 320);
     var finAbs = relPos + finRel;
     var extrait = brut.slice(0, finAbs).replace(/\s+/g, ' ').trim();
+    extrait = collapserRepetitionsInternesCBT(extrait);
     if (debut > 0) extrait = '…' + extrait;
     if (finAbs < brut.length) extrait = extrait + '…';
     return extrait;
