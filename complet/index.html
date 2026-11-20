@@ -3991,12 +3991,38 @@ function repererClauseCBT(texte, motsCles) {
 // deja (une ligne par document, jamais de doublon si le texte y figure
 // deja) -- toujours affiche dans la modale pour relecture avant
 // enregistrement, jamais ecrit directement sans validation d'Alain.
+// Compare deux extraits en ignorant ponctuation/numerotation/majuscules, pour
+// reperer des "quasi doublons" (meme clause citee dans plusieurs documents
+// de lots differents -- ex: Auray a 51 CBT de lots, et la clause generale
+// "III - NETTOYAGE DU CHANTIER..." est recopiee a l'identique dans presque
+// chacun, mais precedee chaque fois d'un morceau de phrase different de la
+// fin du paragraphe precedent, de longueur variable). Une simple comparaison
+// de prefixe ne suffit pas (le prefixe variable n'a pas une longueur fixe) :
+// on cherche si une fenetre de texte (60 caracteres normalises, a plusieurs
+// positions) tiree du plus court des deux extraits se retrouve n'importe ou
+// dans le plus long -- ce qui detecte le coeur commun quel que soit l'endroit
+// ou les deux textes different (debut, fin, ou les deux).
+function normaliserPourComparaisonCBT(s) {
+  return (s || '').toLowerCase().replace(/[^a-z0-9àâäéèêëïîôöùûüçœ]+/g, ' ').trim();
+}
+function estQuasiDoublonCBT(a, b) {
+  if (!a || !b) return false;
+  var court = a.length <= b.length ? a : b;
+  var long = a.length <= b.length ? b : a;
+  if (court.length < 30) return long.indexOf(court) !== -1;
+  var fenetre = Math.min(60, court.length);
+  for (var i = 0; i + fenetre <= court.length; i += 20) {
+    if (long.indexOf(court.substr(i, fenetre)) !== -1) return true;
+  }
+  return false;
+}
 function fusionnerPropositionCBT(existant, proposition) {
   existant = (existant || '').trim();
   proposition = (proposition || '').trim();
   if (!proposition) return existant;
   if (!existant) return proposition;
   if (existant.indexOf(proposition) !== -1) return existant;
+  if (estQuasiDoublonCBT(normaliserPourComparaisonCBT(proposition), normaliserPourComparaisonCBT(existant))) return existant;
   return existant + '\n' + proposition;
 }
 // Appelee au depot d'un CBT : lit le PDF (pdf.js, cote client, pas d'IA),
