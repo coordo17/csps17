@@ -3557,14 +3557,28 @@ function relireChantier() {
     var crDejaSaisi = (faits.reunions || []).some(function (r) { return r.source && crFichier && r.source.indexOf(crFichier) === 0; });
     if (!crDejaSaisi) manques.push({ label: 'CR de r\u00e9union', fichier: crFichier, fn: ouvrirFaitsCR });
   }
-  // CBT (05/11) : un CBT depose sans aucune fiche dechets/base-vie saisie
-  // pour l'affaire -- on ne verifie que le dernier depose (info de chantier,
-  // pas propre a un lot, donc un seul CBT suffit a la remplir).
-  var cbtDoc = dernierDoc('CBT');
-  if (cbtDoc && !faits.cbt.source) manques.push({ label: 'D\u00e9chets / Base vie (CBT d\u00e9pos\u00e9)', fichier: cbtDoc.fichierNom || cbtDoc.objet, fn: ouvrirFaitsCBT });
+  // CBT/PGC (05/11, refondu le 20/11 -- demande d'Alain, "mise a jour
+  // constante et reelle") : AVANT, seul l'indicateur global faits.cbt.source
+  // etait verifie -- un deuxieme CBT depose plus tard (ex : lot Cloture,
+  // apres le lot VRD) n'etait jamais repere puisque le premier avait deja
+  // rempli ce champ (bug trouve par Alain sur Auray le 20/11). On verifie
+  // desormais CHAQUE document CBT/PGC depose individuellement
+  // (documentsLus, par id d'entree RJC) : tout document pas encore lu
+  // propose sa propre relecture automatique (relireDocumentCBTAuto -- le
+  // fichier est deja stocke localement, pas besoin de le redeposer),
+  // fusionnee avec ce qui existe deja et toujours a valider avant
+  // enregistrement.
+  rjc.filter(function (e) { return e.docRef === 'CBT' || e.docRef === 'PGC'; }).forEach(function (e) {
+    if (!faits.cbt.documentsLus || faits.cbt.documentsLus.indexOf(e.id) === -1) {
+      manques.push({ label: (e.docRef === 'PGC' ? 'PGC' : 'CBT') + ' pas encore relu', fichier: e.fichierNom || e.objet, fn: function () { relireDocumentCBTAuto(e); } });
+    }
+  });
   // Plans/PIC (05/11) : meme logique que le CBT.
-  var plansDoc = dernierDoc('PLANS');
-  if (plansDoc && !faits.plans.source) manques.push({ label: 'Acc\u00e8s / Cl\u00f4ture (plan d\u00e9pos\u00e9)', fichier: plansDoc.fichierNom || plansDoc.objet, fn: ouvrirFaitsPlans });
+  rjc.filter(function (e) { return e.docRef === 'PLANS'; }).forEach(function (e) {
+    if (!faits.plans.documentsLus || faits.plans.documentsLus.indexOf(e.id) === -1) {
+      manques.push({ label: 'Plan pas encore relu (acc\u00e8s / cl\u00f4ture)', fichier: e.fichierNom || e.objet, fn: function () { relireDocumentPlansAuto(e); } });
+    }
+  });
 
   window._relireManques = manques;
   var html;
@@ -4030,7 +4044,7 @@ async function extraireEtStockerPointsCBTParLot(file) {
   });
   persistAffaires();
 }
-async function ouvrirFaitsCBTDepuisFichier(file) {
+async function ouvrirFaitsCBTDepuisFichier(file, entryId) {
   var affaire = currentAffaireObj();
   if (!affaire) { showToast('Ouvrez une affaire avant de deposer un CBT', 'error'); return; }
   var propositions = {};
@@ -4048,9 +4062,9 @@ async function ouvrirFaitsCBTDepuisFichier(file) {
     // Document scanne/illisible : on ouvre quand meme la fiche, vide --
     // Alain peut toujours la remplir a la main en lisant le CBT lui-meme.
   }
-  ouvrirFaitsCBT(file.name, propositions);
+  ouvrirFaitsCBT(file.name, propositions, entryId);
 }
-function ouvrirFaitsCBT(fichierNom, propositions) {
+function ouvrirFaitsCBT(fichierNom, propositions, entryId) {
   var affaire = currentAffaireObj();
   if (!affaire) { showToast('Ouvrez une affaire avant de saisir ces faits', 'error'); return; }
   var f = affaireFaits(affaire).cbt;
@@ -4082,11 +4096,19 @@ function ouvrirFaitsCBT(fichierNom, propositions) {
     + '<div class="field"><label>Clôture de chantier</label>'
     + '<textarea id="faits-cbt-cloture" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Mise en place d\'une clôture de chantier jusqu\'à la fin des travaux de VRD.">' + icEscAttr(clotureVal) + '</textarea></div>';
   openDocModal('Faits CBT (déchets / base vie / exploitation / énergie / stockages)' + (f.source ? ' — source : ' + icEscAttr(f.source) : ''), html, 'Enregistrer', function () {
-    enregistrerFaitsCBT(affaire, fichierNom);
+    enregistrerFaitsCBT(affaire, fichierNom, entryId);
   });
 }
-function enregistrerFaitsCBT(affaire, fichierNom) {
+// 20/11 (demande d'Alain, "mise a jour constante et reelle") : chaque
+// document CBT/PGC traite est desormais marque individuellement
+// (documentsLus, par id d'entree RJC) -- c'est ce qui permet a "Relire le
+// chantier" de reperer precisement les documents PAS ENCORE pris en compte
+// (et donc d'en relire plusieurs pour la meme affaire), au lieu de ne
+// verifier qu'un seul indicateur global pour tout le chantier.
+function enregistrerFaitsCBT(affaire, fichierNom, entryId) {
   var f = affaireFaits(affaire);
+  var documentsLus = (f.cbt && f.cbt.documentsLus) ? f.cbt.documentsLus.slice() : [];
+  if (entryId && documentsLus.indexOf(entryId) === -1) documentsLus.push(entryId);
   f.cbt = {
     dechets: document.getElementById('faits-cbt-dechets').value.trim(),
     base_vie: document.getElementById('faits-cbt-basevie').value.trim(),
@@ -4094,7 +4116,8 @@ function enregistrerFaitsCBT(affaire, fichierNom) {
     energie: document.getElementById('faits-cbt-energie').value.trim(),
     stockages: document.getElementById('faits-cbt-stockages').value.trim(),
     cloture: document.getElementById('faits-cbt-cloture').value.trim(),
-    source: (fichierNom ? fichierNom + ' — ' : '') + 'saisi le ' + new Date().toLocaleDateString('fr-FR')
+    source: (fichierNom ? fichierNom + ' — ' : '') + 'saisi le ' + new Date().toLocaleDateString('fr-FR'),
+    documentsLus: documentsLus
   };
   persistAffaires();
   showToast('Faits CBT enregistres', 'success');
@@ -4110,7 +4133,7 @@ function enregistrerFaitsCBT(affaire, fichierNom) {
 // ============================================================================
 var PLANS_ACCES_MOTS = ['acces chantier', 'acces au chantier', 'acces engins', 'acces poids lourds', 'entree chantier', 'acces principal', 'voie d\'acces'];
 var PLANS_CLOTURE_MOTS = ['cloture', 'clôture', 'palissade', 'grillage', 'heras', 'portail'];
-async function ouvrirFaitsPlansDepuisFichier(file) {
+async function ouvrirFaitsPlansDepuisFichier(file, entryId) {
   var affaire = currentAffaireObj();
   if (!affaire) { showToast('Ouvrez une affaire avant de deposer un plan', 'error'); return; }
   var propositions = {};
@@ -4121,9 +4144,9 @@ async function ouvrirFaitsPlansDepuisFichier(file) {
       propositions.cloture = repererClauseCBT(texte, PLANS_CLOTURE_MOTS);
     }
   } catch (err) { /* document illisible : fiche ouverte vide */ }
-  ouvrirFaitsPlans(file.name, propositions);
+  ouvrirFaitsPlans(file.name, propositions, entryId);
 }
-function ouvrirFaitsPlans(fichierNom, propositions) {
+function ouvrirFaitsPlans(fichierNom, propositions, entryId) {
   var affaire = currentAffaireObj();
   if (!affaire) { showToast('Ouvrez une affaire avant de saisir ces faits', 'error'); return; }
   var f = affaireFaits(affaire).plans;
@@ -4141,18 +4164,69 @@ function ouvrirFaitsPlans(fichierNom, propositions) {
     + '<div class="field"><label>Clôture / périmètre du chantier</label>'
     + '<textarea id="faits-plans-cloture" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Clôture HERAS sur tout le périmètre, portail cadenassé.">' + icEscAttr(clotureVal) + '</textarea></div>';
   openDocModal('Faits Plans/PIC (accès / clôture)' + (f.source ? ' — source : ' + icEscAttr(f.source) : ''), html, 'Enregistrer', function () {
-    enregistrerFaitsPlans(affaire, fichierNom);
+    enregistrerFaitsPlans(affaire, fichierNom, entryId);
   });
 }
-function enregistrerFaitsPlans(affaire, fichierNom) {
+function enregistrerFaitsPlans(affaire, fichierNom, entryId) {
   var f = affaireFaits(affaire);
+  var documentsLus = (f.plans && f.plans.documentsLus) ? f.plans.documentsLus.slice() : [];
+  if (entryId && documentsLus.indexOf(entryId) === -1) documentsLus.push(entryId);
   f.plans = {
     acces: document.getElementById('faits-plans-acces').value.trim(),
     cloture: document.getElementById('faits-plans-cloture').value.trim(),
-    source: (fichierNom ? fichierNom + ' — ' : '') + 'saisi le ' + new Date().toLocaleDateString('fr-FR')
+    source: (fichierNom ? fichierNom + ' — ' : '') + 'saisi le ' + new Date().toLocaleDateString('fr-FR'),
+    documentsLus: documentsLus
   };
   persistAffaires();
   showToast('Faits Plans/PIC enregistres', 'success');
+}
+
+// 20/11 (demande d'Alain, "mise a jour constante et reelle") : relit
+// automatiquement un document CBT/PGC deja depose -- sans repasser par un
+// selecteur de fichier, le document est deja stocke localement (cf.
+// fichierPath, FichiersLocaux) -- et ouvre la fiche de faits avec les
+// propositions a jour, fusionnees avec ce qui existe deja (jamais ecrase
+// sans relecture d'Alain). Utilise par "Relire le chantier" pour chaque
+// document pas encore marque comme lu (documentsLus).
+async function relireDocumentCBTAuto(entry) {
+  if (!entry || !entry.fichierPath) { showToast('Fichier introuvable sur cet appareil (sync partielle ?)', 'error'); return; }
+  var propositions = {};
+  try {
+    var donnee = await FichiersLocaux.lire(entry.fichierPath);
+    if (!donnee) throw new Error('fichier absent');
+    var blob = dataUrlVersBlob(donnee);
+    var file = new File([blob], entry.fichierNom || 'document.pdf', { type: entry.fichierType || blob.type });
+    var texte = await extraireTexteFichier(file);
+    if (texte && texte.replace(/\s/g, '').length >= 30) {
+      propositions.dechets = repererClauseCBT(texte, CBT_DECHETS_MOTS);
+      propositions.base_vie = repererClauseCBT(texte, CBT_BASEVIE_MOTS);
+      propositions.exploitation = repererClauseCBT(texte, CBT_EXPLOITATION_MOTS);
+      propositions.energie = repererClauseCBT(texte, CBT_ENERGIE_MOTS);
+      propositions.stockages = repererClauseCBT(texte, CBT_STOCKAGE_SITE_MOTS);
+      propositions.cloture = repererClauseCBT(texte, CBT_CLOTURE_MOTS);
+    }
+  } catch (err) {
+    showToast('Lecture impossible (' + (entry.fichierNom || 'document') + ') : fiche ouverte vide', 'error');
+  }
+  ouvrirFaitsCBT(entry.fichierNom, propositions, entry.id);
+}
+async function relireDocumentPlansAuto(entry) {
+  if (!entry || !entry.fichierPath) { showToast('Fichier introuvable sur cet appareil (sync partielle ?)', 'error'); return; }
+  var propositions = {};
+  try {
+    var donnee = await FichiersLocaux.lire(entry.fichierPath);
+    if (!donnee) throw new Error('fichier absent');
+    var blob = dataUrlVersBlob(donnee);
+    var file = new File([blob], entry.fichierNom || 'document.pdf', { type: entry.fichierType || blob.type });
+    var texte = await extraireTexteFichier(file);
+    if (texte && texte.replace(/\s/g, '').length >= 30) {
+      propositions.acces = repererClauseCBT(texte, PLANS_ACCES_MOTS);
+      propositions.cloture = repererClauseCBT(texte, PLANS_CLOTURE_MOTS);
+    }
+  } catch (err) {
+    showToast('Lecture impossible (' + (entry.fichierNom || 'document') + ') : fiche ouverte vide', 'error');
+  }
+  ouvrirFaitsPlans(entry.fichierNom, propositions, entry.id);
 }
 
 // ============================================================================
@@ -4531,9 +4605,9 @@ async function deposerPieceDossier(affaire, file, type, bulk) {
       // CBT (05/11) : seul type dont le contenu est lu (pdf.js, deterministe,
       // pas d'IA) pour PROPOSER dechets/base vie -- jamais rien enregistre
       // sans relecture d'Alain dans la fiche qui s'ouvre.
-      else if (type === 'CBT') ouvrirFaitsCBTDepuisFichier(file);
+      else if (type === 'CBT') ouvrirFaitsCBTDepuisFichier(file, created && created.id);
       // Plans/PIC (05/11) : meme lecture deterministe que le CBT.
-      else if (type === 'PLANS') ouvrirFaitsPlansDepuisFichier(file);
+      else if (type === 'PLANS') ouvrirFaitsPlansDepuisFichier(file, created && created.id);
       // PGC (13/11, repere par Alain sur le chantier Auray) : les CBT par
       // lot sont souvent de simples trames generiques qui ne disent rien
       // sur l'exploitation/l'energie/les stockages du chantier -- alors que
@@ -4542,7 +4616,7 @@ async function deposerPieceDossier(affaire, file, type, bulk) {
       // applique donc la meme lecture deterministe (mots-cles) sur le PGC
       // depose, en complement du CBT : si un champ est deja rempli (CBT ou
       // saisie manuelle), il n'est jamais ecrase (cf. ouvrirFaitsCBT).
-      else if (type === 'PGC') ouvrirFaitsCBTDepuisFichier(file);
+      else if (type === 'PGC') ouvrirFaitsCBTDepuisFichier(file, created && created.id);
       // Contrat de coordination SPS (05/11) : repere un eventuel co-traitant
       // CSPS (conception), remplit directement les champs Chantier si
       // trouves (pas de modale -- champs deja a l'ecran, pas une "fiche
@@ -4992,10 +5066,10 @@ function faitsVierges() {
     // (jamais injectees sans verification -- meme logique que l'import
     // deterministe du PPSPS). exploitation/energie/stockages ajoutes le
     // 13/11 pour alimenter la Section I (meme garde-fou).
-    cbt: { dechets: '', base_vie: '', exploitation: '', energie: '', stockages: '', cloture: '', source: '' },
+    cbt: { dechets: '', base_vie: '', exploitation: '', energie: '', stockages: '', cloture: '', source: '', documentsLus: [] },
     // Plans/PIC (05/11) : acces et cloture, reperes dans le plan de masse
     // / PIC depose (cf. ouvrirFaitsPlans) -- meme principe que le CBT.
-    plans: { acces: '', cloture: '', source: '' },
+    plans: { acces: '', cloture: '', source: '', documentsLus: [] },
     // Points de coordination par lot reperes dans les CBT deposes (13/11) --
     // cle = metier (IC_METIER_MOTS), valeur = liste de {theme, texte, source}.
     // Jamais injectes directement : proposes en fiche IC (section D) pour
@@ -5078,6 +5152,8 @@ function affaireFaits(affaire) {
   if (affaire.faits.cbt.energie === undefined) affaire.faits.cbt.energie = '';
   if (affaire.faits.cbt.stockages === undefined) affaire.faits.cbt.stockages = '';
   if (affaire.faits.cbt.cloture === undefined) affaire.faits.cbt.cloture = '';
+  if (!affaire.faits.cbt.documentsLus) affaire.faits.cbt.documentsLus = [];
+  if (!affaire.faits.plans.documentsLus) affaire.faits.plans.documentsLus = [];
   if (!affaire.faits.alertesPlanning) affaire.faits.alertesPlanning = [];
   if (!affaire.faits.plans) affaire.faits.plans = faitsVierges().plans;
   if (!affaire.faits.cbtPoints) affaire.faits.cbtPoints = {};
