@@ -1041,7 +1041,7 @@
       var ok = await obtenirPermission(racine);
       if (!ok) { showToast('Acc\u00e8s au dossier local refus\u00e9 ou \u00e0 reconfirmer', 'error'); return; }
       var dir = await dossierAffaire(racine, affaire, false);
-      if (!dir) { showToast('Dossier local : sous-dossier de cette affaire introuvable', 'error'); return; }
+      if (!dir) dir = racine; // repli : l'utilisateur a pu choisir directement le dossier de CETTE affaire (cas d'usage courant pour une reparation ponctuelle) plutot que la racine multi-clients utilisee par la synchro complete
       var fichiers = await listerFichiers(dir, 4);
       var parNom = {};
       fichiers.forEach(function (f) {
