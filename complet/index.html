@@ -3568,17 +3568,25 @@ function relireChantier() {
   // fichier est deja stocke localement, pas besoin de le redeposer),
   // fusionnee avec ce qui existe deja et toujours a valider avant
   // enregistrement.
-  rjc.filter(function (e) { return e.docRef === 'CBT' || e.docRef === 'PGC'; }).forEach(function (e) {
-    if (!faits.cbt.documentsLus || faits.cbt.documentsLus.indexOf(e.id) === -1) {
+  (function () {
+    var nonLusCBT = rjc.filter(function (e) { return (e.docRef === 'CBT' || e.docRef === 'PGC') && (!faits.cbt.documentsLus || faits.cbt.documentsLus.indexOf(e.id) === -1); });
+    if (nonLusCBT.length === 1) {
+      var e = nonLusCBT[0];
       manques.push({ label: (e.docRef === 'PGC' ? 'PGC' : 'CBT') + ' pas encore relu', fichier: e.fichierNom || e.objet, fn: function () { relireDocumentCBTAuto(e); } });
+    } else if (nonLusCBT.length > 1) {
+      manques.push({ label: nonLusCBT.length + ' documents CBT/PGC pas encore relus', fichier: 'tout relire en un clic', fn: function () { relireTousDocumentsCBT(); } });
     }
-  });
+  })();
   // Plans/PIC (05/11) : meme logique que le CBT.
-  rjc.filter(function (e) { return e.docRef === 'PLANS'; }).forEach(function (e) {
-    if (!faits.plans.documentsLus || faits.plans.documentsLus.indexOf(e.id) === -1) {
+  (function () {
+    var nonLusPlans = rjc.filter(function (e) { return e.docRef === 'PLANS' && (!faits.plans.documentsLus || faits.plans.documentsLus.indexOf(e.id) === -1); });
+    if (nonLusPlans.length === 1) {
+      var e = nonLusPlans[0];
       manques.push({ label: 'Plan pas encore relu (acc\u00e8s / cl\u00f4ture)', fichier: e.fichierNom || e.objet, fn: function () { relireDocumentPlansAuto(e); } });
+    } else if (nonLusPlans.length > 1) {
+      manques.push({ label: nonLusPlans.length + ' plans pas encore relus (acc\u00e8s / cl\u00f4ture)', fichier: 'tout relire en un clic', fn: function () { relireTousDocumentsPlans(); } });
     }
-  });
+  })();
 
   window._relireManques = manques;
   var html;
@@ -4108,7 +4116,8 @@ function ouvrirFaitsCBT(fichierNom, propositions, entryId) {
 function enregistrerFaitsCBT(affaire, fichierNom, entryId) {
   var f = affaireFaits(affaire);
   var documentsLus = (f.cbt && f.cbt.documentsLus) ? f.cbt.documentsLus.slice() : [];
-  if (entryId && documentsLus.indexOf(entryId) === -1) documentsLus.push(entryId);
+  var idsACBT = entryId ? (Array.isArray(entryId) ? entryId : [entryId]) : [];
+  idsACBT.forEach(function (id) { if (id && documentsLus.indexOf(id) === -1) documentsLus.push(id); });
   f.cbt = {
     dechets: document.getElementById('faits-cbt-dechets').value.trim(),
     base_vie: document.getElementById('faits-cbt-basevie').value.trim(),
@@ -4170,7 +4179,8 @@ function ouvrirFaitsPlans(fichierNom, propositions, entryId) {
 function enregistrerFaitsPlans(affaire, fichierNom, entryId) {
   var f = affaireFaits(affaire);
   var documentsLus = (f.plans && f.plans.documentsLus) ? f.plans.documentsLus.slice() : [];
-  if (entryId && documentsLus.indexOf(entryId) === -1) documentsLus.push(entryId);
+  var idsAPlans = entryId ? (Array.isArray(entryId) ? entryId : [entryId]) : [];
+  idsAPlans.forEach(function (id) { if (id && documentsLus.indexOf(id) === -1) documentsLus.push(id); });
   f.plans = {
     acces: document.getElementById('faits-plans-acces').value.trim(),
     cloture: document.getElementById('faits-plans-cloture').value.trim(),
@@ -4227,6 +4237,83 @@ async function relireDocumentPlansAuto(entry) {
     showToast('Lecture impossible (' + (entry.fichierNom || 'document') + ') : fiche ouverte vide', 'error');
   }
   ouvrirFaitsPlans(entry.fichierNom, propositions, entry.id);
+}
+
+// 20/11 (demande d'Alain, "je dois cliquer sur chaque 'remplir' ?") : relit
+// EN UN SEUL CLIC tous les documents CBT/PGC (ou Plans) pas encore marques
+// comme lus pour l'affaire en cours -- au lieu d'ouvrir une fiche par
+// document, on extrait le texte de chacun, on fusionne toutes les
+// propositions ensemble (fusionnerPropositionCBT, qui ignore les doublons),
+// puis on ouvre UNE seule fiche de validation avec le resultat fusionne et
+// la liste complete des ids a marquer comme lus. Alain ne relit/valide
+// qu'une fois, meme si 50 documents ont ete deposes.
+async function relireTousDocumentsCBT() {
+  var affaire = currentAffaireObj();
+  if (!affaire) return;
+  var faits = affaireFaits(affaire);
+  var lus = faits.cbt.documentsLus || [];
+  var rjc = affaire.rjc || [];
+  var aLire = rjc.filter(function (e) { return (e.docRef === 'CBT' || e.docRef === 'PGC') && lus.indexOf(e.id) === -1; });
+  if (!aLire.length) { showToast('Tous les documents CBT/PGC sont deja relus', 'info'); return; }
+  showToast('Relecture de ' + aLire.length + ' document(s) CBT/PGC en cours...', 'info');
+  var propositions = {};
+  var ids = [];
+  var nomsLus = [];
+  for (var i = 0; i < aLire.length; i++) {
+    var entry = aLire[i];
+    ids.push(entry.id);
+    if (!entry.fichierPath) continue;
+    try {
+      var donnee = await FichiersLocaux.lire(entry.fichierPath);
+      if (!donnee) continue;
+      var blob = dataUrlVersBlob(donnee);
+      var file = new File([blob], entry.fichierNom || 'document.pdf', { type: entry.fichierType || blob.type });
+      var texte = await extraireTexteFichier(file);
+      if (texte && texte.replace(/\s/g, '').length >= 30) {
+        propositions.dechets = fusionnerPropositionCBT(propositions.dechets, repererClauseCBT(texte, CBT_DECHETS_MOTS));
+        propositions.base_vie = fusionnerPropositionCBT(propositions.base_vie, repererClauseCBT(texte, CBT_BASEVIE_MOTS));
+        propositions.exploitation = fusionnerPropositionCBT(propositions.exploitation, repererClauseCBT(texte, CBT_EXPLOITATION_MOTS));
+        propositions.energie = fusionnerPropositionCBT(propositions.energie, repererClauseCBT(texte, CBT_ENERGIE_MOTS));
+        propositions.stockages = fusionnerPropositionCBT(propositions.stockages, repererClauseCBT(texte, CBT_STOCKAGE_SITE_MOTS));
+        propositions.cloture = fusionnerPropositionCBT(propositions.cloture, repererClauseCBT(texte, CBT_CLOTURE_MOTS));
+        nomsLus.push(entry.fichierNom);
+      }
+    } catch (err) { /* document illisible : ignore, reste dans la liste des non-lus */ }
+  }
+  var libelle = nomsLus.length ? (nomsLus.length + ' document(s) relu(s) : ' + nomsLus.join(', ')) : (aLire.length + ' document(s)');
+  ouvrirFaitsCBT(libelle, propositions, ids);
+}
+async function relireTousDocumentsPlans() {
+  var affaire = currentAffaireObj();
+  if (!affaire) return;
+  var faits = affaireFaits(affaire);
+  var lus = faits.plans.documentsLus || [];
+  var rjc = affaire.rjc || [];
+  var aLire = rjc.filter(function (e) { return e.docRef === 'PLANS' && lus.indexOf(e.id) === -1; });
+  if (!aLire.length) { showToast('Tous les plans sont deja relus', 'info'); return; }
+  showToast('Relecture de ' + aLire.length + ' plan(s) en cours...', 'info');
+  var propositions = {};
+  var ids = [];
+  var nomsLus = [];
+  for (var i = 0; i < aLire.length; i++) {
+    var entry = aLire[i];
+    ids.push(entry.id);
+    if (!entry.fichierPath) continue;
+    try {
+      var donnee = await FichiersLocaux.lire(entry.fichierPath);
+      if (!donnee) continue;
+      var blob = dataUrlVersBlob(donnee);
+      var file = new File([blob], entry.fichierNom || 'document.pdf', { type: entry.fichierType || blob.type });
+      var texte = await extraireTexteFichier(file);
+      if (texte && texte.replace(/\s/g, '').length >= 30) {
+        propositions.acces = fusionnerPropositionCBT(propositions.acces, repererClauseCBT(texte, PLANS_ACCES_MOTS));
+        propositions.cloture = fusionnerPropositionCBT(propositions.cloture, repererClauseCBT(texte, PLANS_CLOTURE_MOTS));
+        nomsLus.push(entry.fichierNom);
+      }
+    } catch (err) { /* document illisible : ignore, reste dans la liste des non-lus */ }
+  }
+  var libelle = nomsLus.length ? (nomsLus.length + ' plan(s) relu(s) : ' + nomsLus.join(', ')) : (aLire.length + ' plan(s)');
+  ouvrirFaitsPlans(libelle, propositions, ids);
 }
 
 // ============================================================================
