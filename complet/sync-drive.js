@@ -523,7 +523,98 @@
     }
     if (btn) btn.disabled = false;
   };
-  window.CSPS17Sync = { appareil: appareil };
+  window.CSPS17Sync = { appareil: appareil, fusionnerAvecRegistre: fusionnerAvecRegistre };
+})();
+
+// ============================================================================
+// EXPORT / IMPORT PAR FICHIER JSON (20/11, demande d'Alain) : en plus de la
+// synchro Drive (automatique, par reseau) et du "Dossier local" (classement
+// de pieces recues, ignore volontairement les documents generes par CSPS17
+// lui-meme -- cf. deviserTypePiece), il manquait un moyen d'integrer une
+// fiche IC ou un CR fait sur la tablette directement DANS LA BONNE AFFAIRE
+// (donnees reelles du registre, pas juste un fichier Word joint) sans passer
+// par le Drive -- pour les cas ou Alain prefere le transfert par USB/
+// Bluetooth (mefiance envers la tablette/le cloud).
+// Principe : "Exporter (fichier)" ecrit un .json autonome (meme forme que
+// l'index du Drive, pieces jointes incluses en base64) dans Telechargements
+// -- recuperable par USB/"Mobile connecte" comme n'importe quel autre
+// fichier. "Importer (fichier)" relit ce .json sur l'autre appareil et
+// fusionne avec la meme regle que la synchro Drive (la version la plus
+// recente gagne, mais les entrees du registre des deux cotes sont toujours
+// reunies) -- meme moteur de fusion (fusionnerAvecRegistre), juste sans
+// passer par le Drive.
+(function(){
+  function appareilLocal(){ return (window.CSPS17Sync && window.CSPS17Sync.appareil) ? window.CSPS17Sync.appareil() : { nom: 'Appareil' }; }
+
+  window.exporterDonneesLocal = async function(){
+    try {
+      showToast('Préparation de l\'export...');
+      // Clone profond : on n'ecrit jamais dans affaires[] pendant l'export,
+      // seulement dans la copie qui part dans le fichier.
+      var copie = JSON.parse(JSON.stringify(affaires));
+      var piecesIncluses = 0;
+      for (var i = 0; i < copie.length; i++) {
+        var rjc = copie[i].rjc || [];
+        for (var j = 0; j < rjc.length; j++) {
+          var e = rjc[j];
+          if (e && e.fichierPath && !e.fichierData) {
+            try { var d = await FichiersLocaux.lire(e.fichierPath); if (d) { e.fichierData = d; piecesIncluses++; } } catch (eF) {}
+          }
+        }
+      }
+      var paquet = { format: 'csps17-export-local', exporteLe: new Date().toISOString(), appareil: appareilLocal().nom, affaires: copie };
+      var blob = new Blob([JSON.stringify(paquet)], { type: 'application/json' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'CSPS17_export_' + appareilLocal().nom.toLowerCase() + '_' + new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '') + '.json';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function(){ URL.revokeObjectURL(a.href); }, 10000);
+      showToast('Export prêt : ' + copie.length + ' affaire(s), ' + piecesIncluses + ' pièce(s) jointe(s) incluse(s). Fichier dans Téléchargements.', 'success');
+    } catch (e) { showToast('Export impossible : ' + (e && e.message || e), 'error'); }
+  };
+
+  window.importerDonneesLocal = function(){
+    var input = document.createElement('input');
+    input.type = 'file'; input.accept = '.json,application/json'; input.style.display = 'none';
+    input.onchange = async function(){
+      var f = input.files && input.files[0];
+      try { document.body.removeChild(input); } catch (eRm) {}
+      if (!f) return;
+      try {
+        var texte = await f.text();
+        var paquet = JSON.parse(texte);
+        var distantes = (paquet && paquet.affaires) || [];
+        if (!Array.isArray(distantes) || !distantes.length) { showToast('Fichier vide ou format non reconnu', 'error'); return; }
+        showToast('Import en cours (' + distantes.length + ' affaire(s) dans le fichier)...');
+        var avant = {}; affaires.forEach(function(a){ if (a && a.id) avant[a.id] = JSON.stringify(a); });
+        var fusionner = (window.CSPS17Sync && window.CSPS17Sync.fusionnerAvecRegistre);
+        if (!fusionner) { showToast('Import impossible : moteur de fusion indisponible', 'error'); return; }
+        var fusion = fusionner(affaires, distantes);
+        var recues = 0, fichiersImportes = 0;
+        for (var i = 0; i < fusion.length; i++) {
+          var a2 = fusion[i];
+          if (!avant[a2.id] || avant[a2.id] !== JSON.stringify(a2)) recues++;
+          var rjc = a2.rjc || [];
+          for (var j = 0; j < rjc.length; j++) {
+            var e = rjc[j];
+            if (e && e.fichierData && !e.fichierPath) {
+              var chemin = 'local/' + a2.id + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 6) + '-' + (e.fichierNom || 'fichier');
+              try { await FichiersLocaux.ecrire(chemin, e.fichierData); e.fichierPath = chemin; delete e.fichierData; fichiersImportes++; } catch (eW) {}
+            }
+          }
+        }
+        affaires = fusion;
+        localStorage.setItem('csps17_affaires', JSON.stringify(affaires));
+        renderAffaireList();
+        if (typeof renderDashboard === 'function') { try { renderDashboard(); } catch (eDb) {} }
+        if (typeof terrainRafraichir === 'function') { try { terrainRafraichir(); } catch (eTr) {} }
+        try { if (document.getElementById('docs-grid') && document.getElementById('docs-grid').innerHTML) renderDocsGrid(); } catch (eDG) {}
+        if (typeof majSyncIndic === 'function') { try { majSyncIndic('local'); } catch (eMs) {} }
+        showToast('Import terminé : ' + recues + ' affaire(s) mise(s) à jour, ' + fichiersImportes + ' pièce(s) jointe(s) intégrée(s) dans le registre.', 'success');
+      } catch (eImp) { showToast('Import impossible : ' + (eImp && eImp.message || eImp), 'error'); }
+    };
+    document.body.appendChild(input); input.click();
+  };
 })();
 
 // ============================================================================
