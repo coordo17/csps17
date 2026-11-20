@@ -546,12 +546,39 @@
 (function(){
   function appareilLocal(){ return (window.CSPS17Sync && window.CSPS17Sync.appareil) ? window.CSPS17Sync.appareil() : { nom: 'Appareil' }; }
 
-  window.exporterDonneesLocal = async function(){
+  // 20/11 (demande d'Alain, suite au 1er essai qui exportait tout en bloc) :
+  // choix des chantiers a exporter via la modale generique deja utilisee
+  // ailleurs dans l'appli (openDocModal) -- une case a cocher par affaire
+  // active, tout coche par defaut, avec "Tout cocher"/"Tout decocher".
+  window.exporterDonneesLocal = function(){
+    var actives = (affaires || []).filter(function(a){ return a && !a.archive; });
+    if (!actives.length) { showToast('Aucune affaire a exporter', 'error'); return; }
+    if (typeof openDocModal !== 'function') { exporterDonneesLocalSelection(actives.map(function(a){ return a.id; })); return; }
+    var body = '<div style="font-size:13px;color:var(--text-light);margin-bottom:10px;">Choisissez le ou les chantiers a mettre dans le fichier exporte.</div>'
+      + '<div style="margin-bottom:10px;font-size:12px;">'
+      + '<a href="#" onclick="document.querySelectorAll(\'.export-aff-check\').forEach(function(c){c.checked=true;});return false;">Tout cocher</a>'
+      + ' &middot; <a href="#" onclick="document.querySelectorAll(\'.export-aff-check\').forEach(function(c){c.checked=false;});return false;">Tout décocher</a>'
+      + '</div>'
+      + actives.slice().reverse().map(function(a){
+          var nom = (a.chantier && a.chantier.nom) ? a.chantier.nom : 'Sans nom';
+          return '<label style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:14px;cursor:pointer;">'
+            + '<input type="checkbox" class="export-aff-check" value="' + a.id + '" checked style="width:auto;flex:0 0 auto;">'
+            + '<span><strong>' + (a.num || '-') + '</strong> — ' + escHtml(nom) + '</span></label>';
+        }).join('');
+    openDocModal('Exporter (fichier)', body, 'Exporter', function(){
+      var ids = Array.prototype.slice.call(document.querySelectorAll('.export-aff-check:checked')).map(function(c){ return c.value; });
+      exporterDonneesLocalSelection(ids);
+    });
+  };
+
+  async function exporterDonneesLocalSelection(ids){
     try {
-      showToast('Préparation de l\'export...');
+      if (!ids || !ids.length) { showToast('Aucun chantier sélectionné', 'error'); return; }
+      showToast('Préparation de l\'export (' + ids.length + ' chantier(s))...');
+      var idsOk = {}; ids.forEach(function(id){ idsOk[id] = true; });
       // Clone profond : on n'ecrit jamais dans affaires[] pendant l'export,
       // seulement dans la copie qui part dans le fichier.
-      var copie = JSON.parse(JSON.stringify(affaires));
+      var copie = JSON.parse(JSON.stringify((affaires || []).filter(function(a){ return a && idsOk[a.id]; })));
       var piecesIncluses = 0;
       for (var i = 0; i < copie.length; i++) {
         var rjc = copie[i].rjc || [];
@@ -566,12 +593,18 @@
       var blob = new Blob([JSON.stringify(paquet)], { type: 'application/json' });
       var a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = 'CSPS17_export_' + appareilLocal().nom.toLowerCase() + '_' + new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '') + '.json';
+      var suffixeNom = copie.length === 1 ? sanitizeNomFichier((copie[0].chantier && copie[0].chantier.nom) || copie[0].num || 'chantier') : (copie.length + 'chantiers');
+      a.download = 'CSPS17_export_' + appareilLocal().nom.toLowerCase() + '_' + suffixeNom + '_' + new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '') + '.json';
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setTimeout(function(){ URL.revokeObjectURL(a.href); }, 10000);
       showToast('Export prêt : ' + copie.length + ' affaire(s), ' + piecesIncluses + ' pièce(s) jointe(s) incluse(s). Fichier dans Téléchargements.', 'success');
     } catch (e) { showToast('Export impossible : ' + (e && e.message || e), 'error'); }
-  };
+  }
+
+  function sanitizeNomFichier(s){
+    return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).toLowerCase() || 'chantier';
+  }
 
   window.importerDonneesLocal = function(){
     var input = document.createElement('input');
