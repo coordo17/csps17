@@ -3916,9 +3916,19 @@ function repererClauseCBT(texte, motsCles) {
       // revision "JC E 08/04/2026 Modif du portail...") ou un extrait
       // cadastral (cadastre.gouv.fr, "Section C parcelle n°...") qui peut
       // contenir le mot-cle sans etre une vraie clause. On regarde une
-      // fenetre plus large (400 car. avant/apres) pour ces marqueurs et on
+      // fenetre plus large (650 car. avant/apres) pour ces marqueurs et on
       // saute a l'occurrence suivante si elle ressemble a un cartouche.
-      var fenCartouche = texte.slice(Math.max(0, p - 400), Math.min(texte.length, p + mc.length + 400)).toLowerCase();
+      // 20/11 (bug trouve par Alain, meme chantier Auray, recidive malgre
+      // la correction du 13/11) : cette fenetre etait fixee a 400 car.,
+      // plus ETROITE que la fenetre d'extraction plus bas (600 car. apres
+      // le mot-cle, cf. finGarde) -- un marqueur cadastral situe entre 400
+      // et 600 caracteres apres le mot-cle n'etait donc jamais vu par ce
+      // controle, alors qu'il se retrouvait quand meme inclus dans
+      // l'extrait final. La fenetre de controle doit toujours couvrir au
+      // moins large que la fenetre d'extraction -- portee a 650 car. (marge
+      // de securite au-dela des 600 de finGarde) pour que ce decalage ne
+      // puisse plus se reproduire.
+      var fenCartouche = texte.slice(Math.max(0, p - 650), Math.min(texte.length, p + mc.length + 650)).toLowerCase();
       var ressembleCartouche = /cadastre\.gouv\.fr|extrait du plan|unit[ée] fonci[èe]re|parcelle n[°o]/.test(fenCartouche);
       if (ressembleCartouche) { posDepart = p + mc.length; continue; }
       pos = p;
