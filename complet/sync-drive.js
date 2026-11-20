@@ -1004,4 +1004,83 @@
       showToast('Dossier local : erreur inattendue -- ' + (eGlobal && (eGlobal.name ? eGlobal.name + ' : ' : '') + eGlobal.message || eGlobal), 'error');
     }
   };
+
+  // 20/11 (demande d'Alain : "il suffit que quand je clique sur le bouton
+  // 'dossier local' il me demande le chemin et il a tout, dossier et
+  // sous-dossier") : meme mecanique que "Dossier local" ci-dessus (meme
+  // dossier relie ou meme demande si pas encore fait, meme reperage du
+  // sous-dossier de l'affaire, meme parcours recursif des sous-dossiers) --
+  // mais ici pour COMPLETER, sur CET appareil, les fichiers RJC dont le
+  // contenu est absent localement (deposes depuis un autre appareil, ex. la
+  // tablette, puisque le stockage est uniquement local par appareil -- cf.
+  // local-api.js). Jamais de nouvelle entree RJC : on ecrit uniquement a
+  // l'emplacement deja enregistre (fichierPath), retrouve par nom de
+  // fichier (verifie par empreinte si plusieurs fichiers portent le meme
+  // nom et qu'une empreinte est deja connue).
+  window.reparerFichiersManquants = async function() {
+    try {
+      var affaire = currentAffaireObj();
+      if (!affaire) { showToast('Ouvrez une affaire avant de reparer des fichiers', 'error'); return; }
+      if (!window.showDirectoryPicker) {
+        showToast('Fonction indisponible sur ce navigateur (Chrome PC ou Android uniquement)', 'error');
+        return;
+      }
+      var rjc = affaire.rjc || [];
+      var manquants = [];
+      for (var i = 0; i < rjc.length; i++) {
+        var e = rjc[i];
+        if (!e.fichierPath) continue;
+        var present = await FichiersLocaux.lire(e.fichierPath);
+        if (!present) manquants.push(e);
+      }
+      if (!manquants.length) { showToast('Aucun fichier manquant sur cet appareil pour cette affaire', 'info'); return; }
+      showToast('R\u00e9paration : v\u00e9rification de l\'acc\u00e8s au dossier local...');
+      var racine = await recupererRacine();
+      if (!racine) { await window.choisirDossierLocal(); racine = racineHandle; }
+      if (!racine) { showToast('Dossier local : aucun dossier s\u00e9lectionn\u00e9', 'error'); return; }
+      var ok = await obtenirPermission(racine);
+      if (!ok) { showToast('Acc\u00e8s au dossier local refus\u00e9 ou \u00e0 reconfirmer', 'error'); return; }
+      var dir = await dossierAffaire(racine, affaire, false);
+      if (!dir) { showToast('Dossier local : sous-dossier de cette affaire introuvable', 'error'); return; }
+      var fichiers = await listerFichiers(dir, 4);
+      var parNom = {};
+      fichiers.forEach(function (f) {
+        var n2 = normNomFichier(f.name);
+        if (!parNom[n2]) parNom[n2] = [];
+        parNom[n2].push(f);
+      });
+      var repares = [], ambigus = [], introuvables = [];
+      for (var j = 0; j < manquants.length; j++) {
+        var entry = manquants[j];
+        var n3 = normNomFichier(entry.fichierNom || entry.objet || '');
+        var candidats = parNom[n3] || [];
+        if (!candidats.length) { introuvables.push(entry.fichierNom || entry.objet); continue; }
+        var choisi = candidats[0];
+        if (candidats.length > 1 && entry.fichierHash) {
+          for (var k = 0; k < candidats.length; k++) {
+            try {
+              var h = await empreinteFichier(candidats[k]);
+              if (h === entry.fichierHash) { choisi = candidats[k]; break; }
+            } catch (errHash) { /* empreinte impossible : on garde le 1er candidat */ }
+          }
+        } else if (candidats.length > 1) {
+          ambigus.push(entry.fichierNom || entry.objet);
+        }
+        try {
+          var dataUrl = await blobToDataURL(choisi);
+          await FichiersLocaux.ecrire(entry.fichierPath, dataUrl);
+          repares.push(entry.fichierNom || entry.objet);
+        } catch (errLect) {
+          introuvables.push((entry.fichierNom || entry.objet) + ' (lecture impossible)');
+        }
+      }
+      var msg = repares.length + ' fichier(s) repar\u00e9(s) sur ' + manquants.length + ' manquant(s)'
+        + (introuvables.length ? ' -- ' + introuvables.length + ' toujours introuvable(s) dans ce dossier' : '')
+        + (ambigus.length ? ' -- ' + ambigus.length + ' nom(s) en double (1er pris)' : '');
+      showToast(msg, repares.length ? 'success' : 'error');
+      if (document.getElementById('modal-overlay') && document.getElementById('modal-overlay').classList.contains('open')) relireChantier();
+    } catch (eGlobal2) {
+      showToast('R\u00e9paration : erreur inattendue -- ' + (eGlobal2 && (eGlobal2.name ? eGlobal2.name + ' : ' : '') + eGlobal2.message || eGlobal2), 'error');
+    }
+  };
 })();
