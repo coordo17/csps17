@@ -12677,6 +12677,16 @@ function renderRJCTab() {
   if (!affaire) { list.innerHTML = '<p style="color:var(--text-light);font-size:13px;">Sauvegardez d\'abord l\'affaire pour acceder au RJC.</p>'; return; }
   var entries = (affaire.rjc || []).slice().sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
   var html = '';
+  // 20/11 (demande d'Alain) : le bloc d'envoi par email etait tout en bas de
+  // l'ecran (il fallait descendre toute la chronologie pour le trouver) --
+  // remonte en haut, juste apres l'ouverture de l'onglet.
+  html += '<div style="background:white;border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;margin-bottom:16px;">'
+    + '<div style="font-weight:700;color:var(--blue-dark);margin-bottom:10px;">&#128231; Envoyer le RJC par email (ex : Inspection du Travail)</div>'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+    + '<input type="email" id="rjc-pc-email-dest" placeholder="ex : it.xxx@travail.gouv.fr" '
+    + 'style="flex:1;min-width:220px;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;">'
+    + '<button type="button" class="btn btn-success btn-sm" onclick="envoyerRJCPC()">&#128231; Envoyer</button>'
+    + '</div></div>';
   if (_rjcPendingFile && !_rjcTargetEntryId) html += renderRJCAttachPanel(entries);
   if (!entries.length) {
     html += '<p style="color:var(--text-light);font-size:13px;">Aucune entree pour le moment. Les documents generes sur le tel (IC, CR Visite, Observation...) '
@@ -12706,13 +12716,6 @@ function renderRJCTab() {
     });
     html += '</div>';
   }
-  html += '<div style="background:white;border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;margin-top:16px;">'
-    + '<div style="font-weight:700;color:var(--blue-dark);margin-bottom:10px;">&#128231; Envoyer le RJC par email (ex : Inspection du Travail)</div>'
-    + '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
-    + '<input type="email" id="rjc-pc-email-dest" placeholder="ex : it.xxx@travail.gouv.fr" '
-    + 'style="flex:1;min-width:220px;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:14px;">'
-    + '<button type="button" class="btn btn-success btn-sm" onclick="envoyerRJCPC()">&#128231; Envoyer</button>'
-    + '</div></div>';
   list.innerHTML = html;
 }
 
