@@ -4346,6 +4346,7 @@ async function relireTousDocumentsPlans() {
   var propositions = {};
   var ids = [];
   var nomsLus = [];
+  var sourceAcces = null, sourceCloture = null;
   for (var i = 0; i < aLire.length; i++) {
     var entry = aLire[i];
     ids.push(entry.id);
@@ -4357,13 +4358,26 @@ async function relireTousDocumentsPlans() {
       var file = new File([blob], entry.fichierNom || 'document.pdf', { type: entry.fichierType || blob.type });
       var texte = await extraireTexteFichier(file);
       if (texte && texte.replace(/\s/g, '').length >= 30) {
-        propositions.acces = fusionnerPropositionCBT(propositions.acces, repererClauseCBT(texte, PLANS_ACCES_MOTS));
-        propositions.cloture = fusionnerPropositionCBT(propositions.cloture, repererClauseCBT(texte, PLANS_CLOTURE_MOTS));
+        // 20/11 (demande d'Alain : un plan PDF restitue son texte dans un
+        // ordre quasi aleatoire -- legendes, cotes, cartouche -- fusionner
+        // les propositions de dizaines de plans empile du bruit plutot que
+        // de l'info complementaire, contrairement au CBT ou chaque lot
+        // apporte une clause reellement differente. Pour les plans, on ne
+        // garde que le PREMIER plan qui repond pour chaque champ -- les
+        // autres sont quand meme marques comme lus.
+        if (!sourceAcces) {
+          var propAcces = repererClauseCBT(texte, PLANS_ACCES_MOTS);
+          if (propAcces) { propositions.acces = propAcces; sourceAcces = entry.fichierNom; }
+        }
+        if (!sourceCloture) {
+          var propCloture = repererClauseCBT(texte, PLANS_CLOTURE_MOTS);
+          if (propCloture) { propositions.cloture = propCloture; sourceCloture = entry.fichierNom; }
+        }
         nomsLus.push(entry.fichierNom);
       }
     } catch (err) { /* document illisible : ignore, reste dans la liste des non-lus */ }
   }
-  var libelle = nomsLus.length ? (nomsLus.length + ' plan(s) relu(s) : ' + nomsLus.join(', ')) : (aLire.length + ' plan(s)');
+  var libelle = nomsLus.length ? (nomsLus.length + ' plan(s) relu(s), retenu pour acc\u00e8s/cl\u00f4ture : ' + (sourceAcces || sourceCloture || 'aucun')) : (aLire.length + ' plan(s)');
   ouvrirFaitsPlans(libelle, propositions, ids);
 }
 
