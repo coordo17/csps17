@@ -546,39 +546,99 @@
 (function(){
   function appareilLocal(){ return (window.CSPS17Sync && window.CSPS17Sync.appareil) ? window.CSPS17Sync.appareil() : { nom: 'Appareil' }; }
 
-  // 20/11 (demande d'Alain, suite au 1er essai qui exportait tout en bloc) :
-  // choix des chantiers a exporter via la modale generique deja utilisee
-  // ailleurs dans l'appli (openDocModal) -- une case a cocher par affaire
-  // active, tout coche par defaut, avec "Tout cocher"/"Tout decocher".
+  // 20/11 (demande d'Alain) : au lieu de choisir seulement des chantiers
+  // entiers, choix fin ENTREE PAR ENTREE du registre (RJC) -- avec, par
+  // chantier, des raccourcis par categorie (ex : "toutes les IC") pour ne
+  // renvoyer que ce qui est reellement nouveau et eviter les doublons.
+  // Chaque chantier garde en plus sa case globale (coche tout / decoche
+  // tout ses entrees).
   window.exporterDonneesLocal = function(){
     var actives = (affaires || []).filter(function(a){ return a && !a.archive; });
     if (!actives.length) { showToast('Aucune affaire a exporter', 'error'); return; }
-    if (typeof openDocModal !== 'function') { exporterDonneesLocalSelection(actives.map(function(a){ return a.id; })); return; }
-    var body = '<div style="font-size:13px;color:var(--text-light);margin-bottom:10px;">Choisissez le ou les chantiers a mettre dans le fichier exporte.</div>'
-      + '<div style="margin-bottom:10px;font-size:12px;">'
-      + '<a href="#" onclick="document.querySelectorAll(\'.export-aff-check\').forEach(function(c){c.checked=true;});return false;">Tout cocher</a>'
-      + ' &middot; <a href="#" onclick="document.querySelectorAll(\'.export-aff-check\').forEach(function(c){c.checked=false;});return false;">Tout décocher</a>'
-      + '</div>'
-      + actives.slice().reverse().map(function(a){
-          var nom = (a.chantier && a.chantier.nom) ? a.chantier.nom : 'Sans nom';
-          return '<label style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:14px;cursor:pointer;">'
-            + '<input type="checkbox" class="export-aff-check" value="' + a.id + '" checked style="width:auto;flex:0 0 auto;">'
-            + '<span><strong>' + (a.num || '-') + '</strong> — ' + escHtml(nom) + '</span></label>';
-        }).join('');
+    if (typeof openDocModal !== 'function') {
+      var sel0 = {}; actives.forEach(function(a){ sel0[a.id] = { total: (a.rjc||[]).length, ids: null }; });
+      exporterDonneesLocalSelection(sel0); return;
+    }
+    var titres = (typeof DOC_TITRES !== 'undefined') ? DOC_TITRES : {};
+    var body = '<div style="font-size:13px;color:var(--text-light);margin-bottom:10px;">Choisissez ce qui part dans le fichier -- chantier entier, ou seulement certaines entrees (ex : juste les nouvelles IC) pour eviter les doublons.</div>';
+    body += actives.slice().reverse().map(function(a){
+      var nom = (a.chantier && a.chantier.nom) ? a.chantier.nom : 'Sans nom';
+      var entries = (a.rjc || []).slice().sort(function(x,y){ return (y.date||'').localeCompare(x.date||''); });
+      var parCat = {};
+      entries.forEach(function(e){ var c = e.docRef || 'Autre'; parCat[c] = (parCat[c] || 0) + 1; });
+      var cats = Object.keys(parCat);
+      var blocCats = cats.length ? ('<div style="margin:6px 0 6px 26px;font-size:12px;">'
+        + cats.map(function(c){
+            return '<a href="#" onclick="window._exportCocherCategorie(\'' + a.id + '\',\'' + c + '\',true);return false;">'
+              + escHtml(titres[c] || c) + ' (' + parCat[c] + ')</a>';
+          }).join(' &middot; ') + '</div>') : '';
+      var blocEntries = entries.length ? ('<div style="margin-left:26px;max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:4px 8px;">'
+        + entries.map(function(e){
+            var titre = (typeof libelleRJC === 'function') ? libelleRJC(e) : (e.nature || e.objet || 'Entree');
+            return '<label style="display:flex;align-items:flex-start;gap:6px;padding:4px 0;font-size:13px;cursor:pointer;">'
+              + '<input type="checkbox" class="export-entry-check" data-aff="' + a.id + '" data-cat="' + escHtml(e.docRef || 'Autre') + '" value="' + e.id + '" checked style="width:auto;flex:0 0 auto;margin-top:2px;">'
+              + '<span>' + formatDateFR(e.date) + ' — ' + escHtml(titre) + (e.docRef ? ' <span style="color:var(--text-light);">(' + escHtml(titres[e.docRef] || e.docRef) + ')</span>' : '') + '</span></label>';
+          }).join('') + '</div>')
+        : '<div style="margin-left:26px;font-size:12px;color:var(--text-light);">Aucune entree enregistree pour ce chantier.</div>';
+      return '<div style="margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--border);">'
+        + '<label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;font-weight:700;">'
+        + '<input type="checkbox" class="aff-toggle-export" data-aff="' + a.id + '" checked style="width:auto;flex:0 0 auto;" '
+        + 'onchange="window._exportCocherAffaire(\'' + a.id + '\', this.checked)">'
+        + '<span>' + (a.num || '-') + ' — ' + escHtml(nom) + '</span></label>'
+        + blocCats + blocEntries + '</div>';
+    }).join('');
     openDocModal('Exporter (fichier)', body, 'Exporter', function(){
-      var ids = Array.prototype.slice.call(document.querySelectorAll('.export-aff-check:checked')).map(function(c){ return c.value; });
-      exporterDonneesLocalSelection(ids);
+      var sel = {};
+      actives.forEach(function(a){
+        var boxes = Array.prototype.slice.call(document.querySelectorAll('.export-entry-check[data-aff="' + a.id + '"]'));
+        if (boxes.length) {
+          var checked = boxes.filter(function(c){ return c.checked; }).map(function(c){ return c.value; });
+          if (checked.length) sel[a.id] = { total: boxes.length, ids: checked };
+        } else {
+          var top = document.querySelector('.aff-toggle-export[data-aff="' + a.id + '"]');
+          if (top && top.checked) sel[a.id] = { total: 0, ids: null };
+        }
+      });
+      exporterDonneesLocalSelection(sel);
     });
   };
 
-  async function exporterDonneesLocalSelection(ids){
+  // Raccourcis utilises par les liens de la modale (cf. onclick ci-dessus) --
+  // exposes sur window car la modale est du HTML brut injecte dans la page.
+  window._exportCocherCategorie = function(affId, cat, val){
+    document.querySelectorAll('.export-entry-check[data-aff="' + affId + '"][data-cat="' + cat + '"]').forEach(function(c){ c.checked = val; });
+  };
+  window._exportCocherAffaire = function(affId, val){
+    document.querySelectorAll('.export-entry-check[data-aff="' + affId + '"]').forEach(function(c){ c.checked = val; });
+  };
+
+  // sel : { affaireId: { total: nb d'entrees RJC de cette affaire, ids: [id,...] ou null si tout (chantier sans filtre d'entree) } }
+  async function exporterDonneesLocalSelection(sel){
     try {
-      if (!ids || !ids.length) { showToast('Aucun chantier sélectionné', 'error'); return; }
-      showToast('Préparation de l\'export (' + ids.length + ' chantier(s))...');
-      var idsOk = {}; ids.forEach(function(id){ idsOk[id] = true; });
-      // Clone profond : on n'ecrit jamais dans affaires[] pendant l'export,
-      // seulement dans la copie qui part dans le fichier.
-      var copie = JSON.parse(JSON.stringify((affaires || []).filter(function(a){ return a && idsOk[a.id]; })));
+      var affIds = Object.keys(sel || {});
+      if (!affIds.length) { showToast('Aucun élément sélectionné', 'error'); return; }
+      showToast('Préparation de l\'export (' + affIds.length + ' chantier(s))...');
+      var copie = [], partielsCount = 0;
+      for (var k = 0; k < affIds.length; k++) {
+        var id = affIds[k];
+        var orig = (affaires || []).find(function(a){ return a && a.id === id; });
+        if (!orig) continue;
+        var clone = JSON.parse(JSON.stringify(orig));
+        var info = sel[id];
+        if (info.ids) {
+          var idsOk = {}; info.ids.forEach(function(x){ idsOk[x] = true; });
+          var totalAvant = (clone.rjc || []).length;
+          clone.rjc = (clone.rjc || []).filter(function(e){ return e && idsOk[e.id]; });
+          // 20/11 (demande d'Alain, eviter les doublons) : marque explicitement
+          // un export partiel -- a l'import, ca empeche ce sous-ensemble de
+          // remplacer tout le registre existant sur l'autre appareil (voir
+          // importerDonneesLocal : une affaire marquee rjcPartiel ne peut
+          // qu'AJOUTER des entrees, jamais en faire perdre).
+          if (clone.rjc.length < totalAvant) { clone.rjcPartiel = true; partielsCount++; }
+        }
+        copie.push(clone);
+      }
+      if (!copie.length) { showToast('Aucun élément sélectionné', 'error'); return; }
       var piecesIncluses = 0;
       for (var i = 0; i < copie.length; i++) {
         var rjc = copie[i].rjc || [];
@@ -597,7 +657,10 @@
       a.download = 'CSPS17_export_' + appareilLocal().nom.toLowerCase() + '_' + suffixeNom + '_' + new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '') + '.json';
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setTimeout(function(){ URL.revokeObjectURL(a.href); }, 10000);
-      showToast('Export prêt : ' + copie.length + ' affaire(s), ' + piecesIncluses + ' pièce(s) jointe(s) incluse(s). Fichier dans Téléchargements.', 'success');
+      var totalEntrees = copie.reduce(function(s,c){ return s + (c.rjc||[]).length; }, 0);
+      showToast('Export prêt : ' + copie.length + ' chantier(s), ' + totalEntrees + ' entrée(s)'
+        + (partielsCount ? ' (dont ' + partielsCount + ' en sélection partielle)' : '') + ', '
+        + piecesIncluses + ' pièce(s) jointe(s) incluse(s). Fichier dans Téléchargements.', 'success');
     } catch (e) { showToast('Export impossible : ' + (e && e.message || e), 'error'); }
   }
 
@@ -619,6 +682,17 @@
         var distantes = (paquet && paquet.affaires) || [];
         if (!Array.isArray(distantes) || !distantes.length) { showToast('Fichier vide ou format non reconnu', 'error'); return; }
         showToast('Import en cours (' + distantes.length + ' affaire(s) dans le fichier)...');
+        // 20/11 (demande d'Alain, eviter les doublons) : une affaire marquee
+        // rjcPartiel (export d'une selection d'entrees, pas tout le
+        // registre) ne doit jamais ECRASER le registre local existant --
+        // seulement y AJOUTER les entrees qu'elle contient. Le moteur de
+        // fusion (fusionnerAvecRegistre) ne fait ca correctement que si
+        // cette version partielle PERD toujours la comparaison de date ;
+        // on vide donc son savedAt avant la fusion -- la version locale
+        // (si elle existe) gagne systematiquement, et ses propres entrees
+        // RJC absentes du registre local sont quand meme ajoutees par la
+        // logique additive deja existante du moteur de fusion.
+        distantes.forEach(function(d){ if (d && d.rjcPartiel) d.savedAt = ''; });
         var avant = {}; affaires.forEach(function(a){ if (a && a.id) avant[a.id] = JSON.stringify(a); });
         var fusionner = (window.CSPS17Sync && window.CSPS17Sync.fusionnerAvecRegistre);
         if (!fusionner) { showToast('Import impossible : moteur de fusion indisponible', 'error'); return; }
