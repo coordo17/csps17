@@ -3901,7 +3901,15 @@ function enregistrerFaitsContraintes(affaire, fichierNom) {
 // injecte sans relecture humaine.
 // ============================================================================
 var CBT_DECHETS_MOTS = ['nettoyage du chantier', 'evacuation des dechets', 'évacuation des déchets', 'dechets de chantier', 'déchets de chantier', 'tri des dechets', 'tri des déchets', 'gestion des dechets', 'gestion des déchets', 'compte prorata'];
-var CBT_BASEVIE_MOTS = ['installations de chantier', 'installation de chantier', 'base vie', 'base-vie', 'vestiaires', 'sanitaires de chantier', 'refectoire', 'réfectoire'];
+// 20/11 (demande d'Alain : "une relecture avant de rendre les phrases...
+// pour ne pas etre oblige de retoucher toutes les IC") : "vestiaires" et
+// "refectoire" seuls matchaient n'importe quelle mention de ces pieces
+// dans un lot technique (plomberie, peinture, electricite du BATIMENT),
+// pas seulement l'organisation de la base vie de CHANTIER -- d'ou des
+// extraits hors-sujet a chaque relecture. Mots-cles resserres pour exiger
+// le contexte chantier, qui elimine la quasi-totalite de ces faux positifs
+// a la source (vaut pour tous les chantiers, pas seulement Auray).
+var CBT_BASEVIE_MOTS = ['installations de chantier', 'installation de chantier', 'base vie', 'base-vie', 'vestiaires de chantier', 'sanitaires de chantier', 'refectoire de chantier', 'réfectoire de chantier', 'base de vie'];
 // Themes chantier-wide ajoutes le 13/11 (demande d'Alain, "Section I de
 // Fred") : memes garde-fous que dechets/base_vie ci-dessus -- une
 // proposition reperee par mots-cles, jamais injectee sans relecture.
