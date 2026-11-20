@@ -3960,6 +3960,23 @@ function repererClauseCBT(texte, motsCles) {
   }
   return null;
 }
+// 20/11 (demande d'Alain, "comment l'avoir automatiquement sur tous les
+// chantiers") : jusqu'ici, un theme (CBT ou Plans) deja renseigne n'etait
+// plus jamais complete par un nouveau document depose ensuite (ex : le CBT
+// VRD renseigne la cloture en premier, puis le CBT du lot Cloture, depose
+// plus tard, n'apportait plus rien puisque le champ n'etait plus vide).
+// Chaque nouveau document depose peut desormais COMPLETER ce qui existe
+// deja (une ligne par document, jamais de doublon si le texte y figure
+// deja) -- toujours affiche dans la modale pour relecture avant
+// enregistrement, jamais ecrit directement sans validation d'Alain.
+function fusionnerPropositionCBT(existant, proposition) {
+  existant = (existant || '').trim();
+  proposition = (proposition || '').trim();
+  if (!proposition) return existant;
+  if (!existant) return proposition;
+  if (existant.indexOf(proposition) !== -1) return existant;
+  return existant + '\n' + proposition;
+}
 // Appelee au depot d'un CBT : lit le PDF (pdf.js, cote client, pas d'IA),
 // repere les passages probables, et ouvre la fiche de faits avec ces
 // propositions pre-remplies -- jamais ecrit directement dans l'affaire.
@@ -4040,13 +4057,13 @@ function ouvrirFaitsCBT(fichierNom, propositions) {
   var prop = propositions || {};
   // Une proposition reperee automatiquement ne remplace jamais un texte deja
   // valide et enregistre -- seulement un champ encore vide.
-  var dechetsVal = f.dechets || prop.dechets || '';
-  var baseVieVal = f.base_vie || prop.base_vie || '';
-  var exploitationVal = f.exploitation || prop.exploitation || '';
-  var energieVal = f.energie || prop.energie || '';
-  var stockagesVal = f.stockages || prop.stockages || '';
-  var clotureVal = f.cloture || prop.cloture || '';
-  var uneProposition = prop.dechets || prop.base_vie || prop.exploitation || prop.energie || prop.stockages || prop.cloture;
+  var dechetsVal = fusionnerPropositionCBT(f.dechets, prop.dechets);
+  var baseVieVal = fusionnerPropositionCBT(f.base_vie, prop.base_vie);
+  var exploitationVal = fusionnerPropositionCBT(f.exploitation, prop.exploitation);
+  var energieVal = fusionnerPropositionCBT(f.energie, prop.energie);
+  var stockagesVal = fusionnerPropositionCBT(f.stockages, prop.stockages);
+  var clotureVal = fusionnerPropositionCBT(f.cloture, prop.cloture);
+  var uneProposition = (dechetsVal !== (f.dechets||'')) || (baseVieVal !== (f.base_vie||'')) || (exploitationVal !== (f.exploitation||'')) || (energieVal !== (f.energie||'')) || (stockagesVal !== (f.stockages||'')) || (clotureVal !== (f.cloture||''));
   var html = '<p style="margin-bottom:10px;font-size:13px;color:var(--text-light);">'
     + (fichierNom ? 'Document depose : <strong>' + icEscAttr(fichierNom) + '</strong>. ' : '')
     + 'Info de chantier (valable pour toutes les entreprises) -- alimente la grille de la fiche IC (§4A), la Section I et les observations du CSPS (§12). '
@@ -4111,12 +4128,13 @@ function ouvrirFaitsPlans(fichierNom, propositions) {
   if (!affaire) { showToast('Ouvrez une affaire avant de saisir ces faits', 'error'); return; }
   var f = affaireFaits(affaire).plans;
   var prop = propositions || {};
-  var accesVal = f.acces || prop.acces || '';
-  var clotureVal = f.cloture || prop.cloture || '';
+  var accesVal = fusionnerPropositionCBT(f.acces, prop.acces);
+  var clotureVal = fusionnerPropositionCBT(f.cloture, prop.cloture);
+  var uneProposPlans = (accesVal !== (f.acces||'')) || (clotureVal !== (f.cloture||''));
   var html = '<p style="margin-bottom:10px;font-size:13px;color:var(--text-light);">'
     + (fichierNom ? 'Document depose : <strong>' + icEscAttr(fichierNom) + '</strong>. ' : '')
     + 'Info de chantier (plan de masse / PIC) -- alimente la grille de la fiche IC (§4A) et les observations du CSPS (§12). '
-    + (prop.acces || prop.cloture ? '<strong>Passage repéré automatiquement (à vérifier, rien n\'est jugé à votre place) :</strong> relisez et corrigez avant d\'enregistrer. ' : '')
+    + (uneProposPlans ? '<strong>Passage repéré automatiquement (à vérifier, rien n\'est jugé à votre place) :</strong> relisez et corrigez avant d\'enregistrer. ' : '')
     + 'Laissez vide si non concerne.</p>'
     + '<div class="field" style="margin-bottom:10px;"><label>Accès chantier (engins, poids lourds, voie d\'accès)</label>'
     + '<textarea id="faits-plans-acces" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Accès unique par la voie communale, coté nord, largeur 4m.">' + icEscAttr(accesVal) + '</textarea></div>'
