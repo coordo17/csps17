@@ -672,6 +672,8 @@
     <button class="btn btn-outline btn-sm" onclick="importerDonneesLocal()" title="Relit un fichier .json exporte depuis l'autre appareil et integre directement les IC/CR dans la bonne affaire (meme fusion que Synchroniser, sans passer par le Drive)">&#8593; Importer (fichier)</button>
     <button class="btn btn-outline btn-sm" onclick="mettreAJourAppli()" title="Charger la derniere version de l'application">&#8635; Mettre à jour</button>
     <button class="btn btn-outline btn-sm" onclick="ouvrirSauvegardes()" title="Exporter / importer une sauvegarde de toutes vos affaires">&#128190; Sauvegardes</button>
+    <button class="btn btn-outline btn-sm" onclick="ouvrirClassementAffaire()" title="Choisir une affaire et un dossier de votre ordinateur : les documents sont analyses et incorpores dans cette affaire">&#128194; Classement par affaire</button>
+    <button class="btn btn-outline btn-sm" onclick="ouvrirSauvegardeD()" title="Copier les pieces de toutes les affaires dans un dossier de sauvegarde (D:), triees par sous-dossier (IC, PPSPS, DIAG, etc.), sans jamais recopier ce qui y est deja">&#128190; Sauvegarde D:\</button>
     <span id="sync-indic" onclick="resyncMaintenant()" title="Cliquer pour synchroniser avec l'autre appareil (Google Drive)" style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 9px;border-radius:12px;cursor:pointer;background:#eee;color:#666;"><span id="sync-dot" style="width:9px;height:9px;border-radius:50%;background:#999;"></span><span id="sync-txt">—</span></span>
     <!-- 19/11 (demande d'Alain : impossible de savoir quel compte Google etait
          vraiment utilise par la synchro, sur quel appareil) : affiche en clair
@@ -3006,7 +3008,19 @@ var TYPE_MOTS_CLES_VRAC = [
   ['PV-PC', ['passation']],
   ['DIUO', ['diuo']],
   ['ICR', ['inspection', 'ic_individuelle', 'ic signee', 'ic_signee']],
-  ['DIAG', ['amiante', 'plomb', 'crep', 'raat', 'diagnostic', 'diag_']],
+  // 23/11 (bug releve par Alain : "..._DIAG_V.1.0.pdf" non reconnu) : l'ancien
+  // mot-cle 'diag_' exigeait un caractere non-alphanumerique juste APRES le
+  // "_" final, ce qui echoue des que ce "_" est suivi d'une lettre/chiffre
+  // (cas courant : "..._DIAG_V1.0.pdf"). Remplace par 'diag' seul, deja
+  // correctement isole par motCleIsole de chaque cote (espace, tiret,
+  // underscore...).
+  // 23/11 (demande d'Alain, test Auray) : "plan de gestion depo(l)lution" et
+  // "mesure(s) simples de gestion" (mesures de gestion amiante) ajoutes.
+  // Les deux orthographes de "depo(l)lution" sont couvertes : le fichier
+  // reel d'Alain s'appelle "depolution" (une faute de frappe du bureau
+  // d'etudes, un seul "l") et ne doit pas dependre de l'orthographe
+  // correcte pour etre reconnu.
+  ['DIAG', ['amiante', 'plomb', 'crep', 'raat', 'diagnostic', 'diag', 'gestion depollution', 'gestion depolution', 'mesure simples de gestion', 'mesures simples de gestion']],
   ['PLAN', ['planning']],
   // 16/11 (demande d'Alain : plans de coupe/elevation/situation d'AURAY
   // non reconnus, seul "plan de masse" matchait malgre le titre de la
@@ -3014,8 +3028,29 @@ var TYPE_MOTS_CLES_VRAC = [
   // types de plans de ce jeu de dessins. "securite" volontairement absent
   // -- trop risque de collision avec les PPSPS ("Plan Particulier de
   // Securite..."), teste juste apres dans cette liste.
-  ['PLANS', ['plan de masse', 'plan-masse', 'plan masse', 'pic-0', 'pic_0', 'plan de situation', 'plan d\'implantation', 'plan interieur', 'coupe terrain', 'coupe batiment', 'elevation', 'elevations', 'circu stock']],
-  ['CONTRAINTES', ['arrete de voirie', 'arrete voirie', 'contrainte']],
+  // 23/11 (demande d'Alain, test Auray) : "plan de phasage" ajoute (variante
+  // non couverte) ; "implantation" seul ajoute aussi (plans d'un bureau
+  // d'etudes structure qui ne reprend pas le "plan d'" devant, ex.
+  // "26G035-03B-IMPLANTATION ACCUEIL-...pdf").
+  // 23/11 (demande d'Alain, verif 9 fichiers non reconnus Auray) : plan de
+  // bureau d'etudes structure non repere par "implantation" seul (fichier
+  // distinct), ex. "26G035-01A-DESCENTE DE CHARGES ACCUEIL-...pdf".
+  // 23/11 (demande d'Alain, verif 9 fichiers non reconnus Auray) : "plan
+  // camera" / "plan wifi" ajoutes -- Alain : "un plan c'est un plan point",
+  // classes avec le reste des plans quelle que soit leur specialite.
+  // 23/11 (demande d'Alain, test St-Mars-la-Briere) : nouveau jeu de plans
+  // non reconnu -- "DDC" (abreviation de "Descente De Charges", vue en toutes
+  // lettres sur Auray), "Plans interieurs" au PLURIEL (le singulier "plan
+  // interieur" ne matchait pas a cause du "s" final qui rompt l'isolement du
+  // mot -- meme bug que "echantillon(s)" plus haut), et plusieurs variantes
+  // de plans techniques (cadastral, bornage, elec, carrelage, espace vert,
+  // reseaux). "pic" seul ajoute aussi (fichiers nommes juste "PIC_..." sans
+  // le suffixe numerique "-0"/"_0" deja couvert par 'pic-0'/'pic_0').
+  ['PLANS', ['plan de masse', 'plan-masse', 'plan masse', 'pic-0', 'pic_0', 'pic', 'plan de situation', 'plan d\'implantation', 'implantation', 'plan interieur', 'plans interieurs', 'coupe terrain', 'coupe batiment', 'elevation', 'elevations', 'circu stock', 'plan de phasage', 'descente de charges', 'ddc', 'plan camera', 'plan wifi', 'plan cadastral', 'plan de bornage', 'plan elec', 'plan carrelage', 'plan espace vert', 'plan reseaux']],
+  // 23/11 (demande d'Alain, verif 9 fichiers non reconnus Auray) :
+  // "declaration prealable" ajoute cote nom de fichier (deja presente cote
+  // contenu plus bas) -- couvre "Declaration Prealable AURAY-signe.pdf".
+  ['CONTRAINTES', ['arrete de voirie', 'arrete voirie', 'contrainte', 'declaration prealable']],
   ['PPSPS', ['ppsps']],
   ['CRMOA', ['compte rendu', 'cr reunion', 'cr_reunion', 'reunion de chantier', 'cr n°', 'cr n ']],
   ['PGC', ['pgc']],
@@ -3046,7 +3081,27 @@ function motCleIsole(n, mot) {
 }
 function deviserTypePiece(nomFichier) {
   var n = normFichierClassement(nomFichier);
-  if (n.indexOf('csps17_') === 0) return null; // genere par CSPS17 lui-meme, pas une piece recue
+  // 23/11 (bug releve par Alain : ses FIC signees, generees depuis CSPS17
+  // puis renvoyees signees par l'entreprise, gardent le prefixe d'origine
+  // "CSPS17_FIC_..." -- ce sont de vraies pieces recues (signees), pas un
+  // export interne a ignorer comme les autres "csps17_..." ci-dessous
+  // (sauvegardes, registre, CR de visite...). Seul le PDF est garde
+  // (regle d'Alain : jamais le .docx), le .docx tombe dans l'exclusion
+  // ICR/FIC -> PDF uniquement plus loin dans le code appelant.
+  if (/^csps17_fic[_-]/.test(n)) return 'ICR';
+  if (n.indexOf('csps17_') === 0) return null; // autre export genere par CSPS17 lui-meme, pas une piece recue
+  // 23/11 (demande d'Alain, test Auray) : variante longue "Circulation _
+  // Stockage" (separateur libre) en plus de l'abreviation "circu stock"
+  // deja geree ci-dessous -- les deux mots doivent etre isoles (motCleIsole),
+  // pas forcement adjacents.
+  if (motCleIsole(n, 'circulation') && motCleIsole(n, 'stockage')) return 'PLANS';
+  // 23/11 (demande d'Alain, test Auray) : plans "Securite" du jeu de dessins
+  // de l'architecte (ex. "PRO- IND- F-1X1-Securite") -- a classer avec le
+  // PIC (PLANS), PAS avec les PPSPS. Regle volontairement etroite (motif
+  // "PRO- IND-" du nommage de CE jeu de plans) pour ne jamais capter un
+  // vrai PPSPS ecrit en toutes lettres ("Plan Particulier de Securite et de
+  // Protection de la Sante...") ni un fichier contenant deja "ppsps".
+  if (motCleIsole(n, 'securite') && /pro-\s*ind-/.test(n) && !motCleIsole(n, 'ppsps') && !/protection\s*de\s*la\s*sante/.test(n)) return 'PLANS';
   for (var i = 0; i < TYPE_MOTS_CLES_VRAC.length; i++) {
     var ref = TYPE_MOTS_CLES_VRAC[i][0], mots = TYPE_MOTS_CLES_VRAC[i][1];
     for (var j = 0; j < mots.length; j++) { if (motCleIsole(n, mots[j])) return ref; }
@@ -3076,7 +3131,10 @@ var TYPE_MOTS_CLES_CONTENU = [
   ['DIUO', ['dossier d\'intervention ulterieure sur l\'ouvrage']],
   ['ICR', ['proces-verbal d\'inspection commune', 'inspection commune prealable']],
   ['PGC', ['plan general de coordination', 'p.g.c.s.p.s']],
-  ['DIAG', ['diagnostic amiante', 'diagnostic plomb', 'rapport de reperage', 'etude geotechnique']],
+  // 23/11 (demande d'Alain, verif 9 fichiers non reconnus Auray) : annexes
+  // de laboratoire du dossier de depollution (nom de fichier non explicite,
+  // ex. "ANNEXE III.pdf", "ANNEXE VI.pdf") -- reconnues par leur contenu.
+  ['DIAG', ['diagnostic amiante', 'diagnostic plomb', 'rapport de reperage', 'etude geotechnique', 'permeabilite', 'investigations geotechniques', "compte-rendu d'investigations", 'fiche de tracabilite des echantillons']],
   ['PLAN', ['planning previsionnel', 'planning des travaux', 'diagramme de gantt']],
   ['CONTRAINTES', ['arrete de voirie', 'declaration prealable', 'servitude']],
   ['PLANS', ['plan de masse', 'plan d\'implantation', 'plan d\'installation de chantier', 'plan de situation', 'coupe terrain', 'coupe batiment', 'elevation', 'elevations']],
@@ -3114,8 +3172,26 @@ async function texteRapideClassement(file) {
   return '';
 }
 function classerTexteParContenu(texte) {
-  var n = normFichierClassement(texte);
+  var n = normFichierClassement(texte).replace(/\s+/g, ' ');
   if (!n) return null;
+  // 23/11 (demande d'Alain, verif 9 fichiers non reconnus Auray) : rapport
+  // de laboratoire (analyse d'eau/sol, dossier de depollution) -- l'en-tete
+  // type "RAPPORT D'ANALYSES" est trop generique seul (risque de collision
+  // avec un autre type de rapport), mais associe au mot "echantillon"
+  // (toujours present dans ces rapports de labo) il identifie de facon
+  // fiable un rapport d'analyses environnemental. Verifie sur le fichier
+  // reel "ANNEXE VI.pdf" (rapport AL-West B.V., dossier depollution Auray).
+  // Teste sans l'apostrophe de "d'analyses" (3 mots isoles au lieu d'une
+  // phrase) : premier essai avec la phrase complete echoue en pratique,
+  // l'extraction de texte du PDF via pdf.js (dans l'appli) ne restituant pas
+  // forcement l'apostrophe a l'identique de l'outil utilise pour verifier
+  // hors appli -- en ne cherchant plus l'apostrophe on elimine ce risque.
+  // Deuxieme bug trouve en testant avec le vrai moteur pdf.js de l'appli :
+  // le document ecrit "echantillons" (pluriel, ex. "Specification des
+  // echantillons"), jamais "echantillon" seul -- motCleIsole("echantillon")
+  // echouait car le "s" final suivant immediatement rompt l'isolement du
+  // mot. On accepte donc les deux formes.
+  if (motCleIsole(n, 'rapport') && motCleIsole(n, 'analyses') && (motCleIsole(n, 'echantillon') || motCleIsole(n, 'echantillons'))) return 'DIAG';
   var estDevis = sembleDevisHonoraires(texte);
   for (var i = 0; i < TYPE_MOTS_CLES_CONTENU.length; i++) {
     var ref = TYPE_MOTS_CLES_CONTENU[i][0], mots = TYPE_MOTS_CLES_CONTENU[i][1];
@@ -4796,6 +4872,502 @@ async function deposerPieceDossier(affaire, file, type, bulk) {
     showToast('Erreur depot : ' + err.message, 'error');
     return 'erreur';
   }
+}
+
+// ===== CLASSEMENT PAR AFFAIRE (bouton dedie, 23/11 demande d'Alain) =====
+// Reprend le meme moteur que "Dossier local" (deviserTypePiece par nom,
+// classerTexteParContenu en secours, deposerPieceDossier pour l'ecriture et
+// le dedoublonnage) -- mais avec UNE affaire et UN dossier choisis
+// explicitement (pas de recherche automatique du bon sous-dossier), et
+// surtout : les fichiers que l'automatique ne reconnait pas sont PRESENTES
+// a Alain pour qu'il choisisse lui-meme, au lieu d'etre ignores en
+// silence comme le fait l'import en vrac existant.
+var _caAffaireId = null;
+var _caDossierHandle = null;
+var _caResultats = null;
+
+var CA_EXT_IGNOREES = EXT_IGNOREES_VRAC.concat(['.pat', '.lnk', '.ics', '.zip']);
+var CA_MOTS_EXCLUS = /essai|test|exemple|lorem|dummy|bidon|fictif|vierge/;
+var CA_DOSSIERS_EXCLUS = /(^|[\\\/])(doc adm|essais|nouveau dossier)([\\\/]|$)/i;
+
+// Categorie absente du classement "en vrac" existant : une ANALYSE de
+// PPSPS/IC generee par CSPS17 ("Analyses des rapports & diagnostics",
+// "Points du PGC repris/manquants") ne doit jamais retomber dans DIAG ou
+// PLAN seulement parce qu'elle mentionne acces/circulation/reseaux -- bug
+// concret du 23/11 (fichier "Analyse LEROUXTP_PPSPS..." classe en Plan
+// lors d'un essai hors de l'appli).
+function classerAnalysePPSPS(nomOuTexte) {
+  var n = normFichierClassement(nomOuTexte || '');
+  if (!n) return false;
+  if (/analyses? des rapports/.test(n)) return true;
+  if (/points du pgc (repris|manquants)/.test(n)) return true;
+  return /\banalyse/.test(n) && /ppsps/.test(n);
+}
+
+function ouvrirClassementAffaire() {
+  var options = '<option value="">-- Choisir --</option>' + affaires.map(function(a){
+    return '<option value="' + a.id + '">' + escHtml((a.num || '') + ' - ' + ((a.chantier && a.chantier.nom) || 'sans nom')) + '</option>';
+  }).join('');
+  var html = '<div style="text-align:left;font-size:13px;">'
+    + '<p style="margin-bottom:10px;">Choisissez l\'affaire, puis le dossier de votre ordinateur qui contient ses documents. '
+    + 'Les fichiers sont analyses (type lu dans le nom, puis dans le contenu si besoin) et incorpores directement dans cette affaire. '
+    + 'Les fichiers deja presents (meme contenu) ne sont jamais dupliques.</p>'
+    + '<label style="display:block;margin-bottom:10px;">Affaire :<br>'
+    + '<select id="ca-affaire-select" style="width:100%;padding:6px;margin-top:4px;">' + options + '</select></label>'
+    + '<button class="btn btn-primary btn-sm" onclick="caChoisirDossier()">&#128193; Choisir le dossier a analyser</button>'
+    + '<div id="ca-statut" style="margin-top:10px;color:var(--text-light);font-size:12px;"></div>'
+    + '<div id="ca-resultats"></div>'
+    + '</div>';
+  openDocModal('🗂️ Classement par affaire', html, null, null);
+}
+
+async function caChoisirDossier() {
+  if (!window.showDirectoryPicker) {
+    showToast('Fonction indisponible sur ce navigateur (Chrome PC ou Android uniquement)', 'error');
+    return;
+  }
+  var sel = document.getElementById('ca-affaire-select');
+  _caAffaireId = sel ? sel.value : '';
+  if (!_caAffaireId) { showToast('Choisissez d\'abord une affaire', 'error'); return; }
+  try {
+    _caDossierHandle = await window.showDirectoryPicker({ id: 'csps17-classement-affaire' });
+  } catch (e) { if (e && e.name !== 'AbortError') showToast('Impossible d\'ouvrir le dossier : ' + e.message, 'error'); return; }
+
+  // 23/11 (bug releve par Alain : un classement lance sur le dossier
+  // St-Mars-la-Briere, affaire Auray restee selectionnee par megarde, a
+  // incorpore un document St-Mars dans le registre d'Auray -- rien ne liait
+  // le dossier choisi a l'affaire selectionnee) : avant d'analyser, on
+  // verifie si le nom du dossier choisi ressemble plutot au nom d'une AUTRE
+  // affaire deja existante que celle selectionnee. Volontairement on ne
+  // compare qu'aux autres affaires connues (pas a un mot-cle generique) pour
+  // ne pas declencher d'avertissement intempestif sur un sous-dossier dont
+  // le nom ne reprend pas celui du chantier (ex. "IC signes", "Depolution").
+  var affaireSel = affaires.find(function(a){ return a.id === _caAffaireId; });
+  var autreAffaire = affaireSel ? dossierRessembleAAutreAffaire(_caDossierHandle.name, affaireSel) : null;
+  if (autreAffaire) {
+    var nomSel = (affaireSel.num || '') + ' - ' + ((affaireSel.chantier && affaireSel.chantier.nom) || 'sans nom');
+    var nomAutre = (autreAffaire.num || '') + ' - ' + ((autreAffaire.chantier && autreAffaire.chantier.nom) || 'sans nom');
+    var ok = confirm('Le dossier choisi ("' + _caDossierHandle.name + '") ressemble plutot au nom de l\'affaire "' + nomAutre + '".\n\n'
+      + 'L\'affaire actuellement selectionnee est "' + nomSel + '" -- tous les fichiers de ce dossier y seront incorpores.\n\n'
+      + 'Continuer quand meme ?');
+    if (!ok) { _caDossierHandle = null; return; }
+  }
+
+  var statutEl = document.getElementById('ca-statut');
+  if (statutEl) statutEl.textContent = 'Analyse de "' + _caDossierHandle.name + '" en cours (peut prendre un moment)...';
+  await caAnalyser();
+}
+// Mots de 4 caracteres ou plus seulement (filtre les "de", "la", "le"...).
+function motsSignificatifsNom(s) {
+  return normFichierClassement(s || '').split(/[^a-z0-9]+/).filter(function(w){ return w.length >= 4; });
+}
+function dossierRessembleAAutreAffaire(nomDossier, affaireSelectionnee) {
+  var motsDossier = motsSignificatifsNom(nomDossier);
+  if (!motsDossier.length) return null;
+  for (var i = 0; i < affaires.length; i++) {
+    var a = affaires[i];
+    if (a.id === affaireSelectionnee.id) continue;
+    var motsA = motsSignificatifsNom((a.chantier && a.chantier.nom) || '');
+    if (!motsA.length) continue;
+    var matched = motsA.some(function(ma){ return motsDossier.some(function(md){ return md.indexOf(ma) >= 0 || ma.indexOf(md) >= 0; }); });
+    if (matched) return a;
+  }
+  return null;
+}
+
+async function caAnalyser() {
+  var affaire = affaires.find(function(a){ return a.id === _caAffaireId; });
+  if (!affaire || !_caDossierHandle) return;
+
+  var hashesExistants = {};
+  (affaire.rjc || []).forEach(function(e){ if (e.fichierHash) hashesExistants[e.fichierHash] = true; });
+
+  var fichiers = [];
+  async function parcourir(dir, chemin, p) {
+    if (p > 8) return;
+    for await (var [nom, entry] of dir.entries()) {
+      var cheminComplet = chemin + '/' + nom;
+      if (entry.kind === 'directory') {
+        if (CA_DOSSIERS_EXCLUS.test(cheminComplet)) continue;
+        await parcourir(entry, cheminComplet, p + 1);
+      } else if (entry.kind === 'file') {
+        fichiers.push({ file: await entry.getFile(), chemin: cheminComplet });
+      }
+    }
+  }
+  await parcourir(_caDossierHandle, _caDossierHandle.name, 0);
+
+  var resOk = [], resAVerifier = [], resExclus = [];
+  for (var i = 0; i < fichiers.length; i++) {
+    var f = fichiers[i].file, chemin2 = fichiers[i].chemin;
+    var ext = (/\.[a-z0-9]+$/i.exec(f.name || '') || [''])[0].toLowerCase();
+    var nomNorm = normFichierClassement(f.name);
+
+    if (CA_MOTS_EXCLUS.test(nomNorm) || CA_MOTS_EXCLUS.test(normFichierClassement(chemin2))) {
+      resExclus.push({ nom: f.name, raison: 'fichier d\'essai/test' }); continue;
+    }
+    if (CA_EXT_IGNOREES.indexOf(ext) >= 0) continue;
+
+    var hash = null;
+    try { hash = await empreinteFichier(f); } catch (eH) {}
+    if (hash && hashesExistants[hash]) continue; // deja dans l'affaire, rien a montrer
+
+    var type = classerAnalysePPSPS(f.name) ? 'ANALYSE_PPSPS' : deviserTypePiece(f.name);
+    var texte = '';
+    if (!type && (ext === '.pdf' || ext === '.docx')) {
+      try { texte = await texteRapideClassement(f); } catch (eT) {}
+      if (classerAnalysePPSPS(texte)) type = 'ANALYSE_PPSPS';
+      else type = classerTexteParContenu(texte);
+    }
+
+    // Regle d'Alain : une Inspection Commune ne se garde qu'en PDF, jamais
+    // en .docx (une entreprise pourrait modifier le texte pour eviter un
+    // blame) -- exclue sans demander, meme detectee.
+    if ((type === 'ICR' || type === 'FIC') && ext !== '.pdf') {
+      resExclus.push({ nom: f.name, raison: 'Inspection Commune en ' + ext + ' (seul le PDF est garde)' }); continue;
+    }
+
+    // 23/11 (demande d'Alain : "2026-40 CHAUSSON AURAY.pdf" et "MC2
+    // INGENIERIE - AURAY - Devis Signe.pdf" -- "ils devrait etre dans les
+    // exclus") : un devis/decompte d'honoraires n'est pas une piece du
+    // dossier CSPS, il n'a pas a attendre une decision manuelle dans "a
+    // verifier" -- exclu automatiquement, repere par son contenu
+    // (sembleDevisHonoraires, meme regle que celle qui ecarte deja une fausse
+    // detection PGC) ou, a defaut de texte exploitable (PDF signe/scanne
+    // sans couche texte), par son nom de fichier ("devis" isole).
+    if (!type && (sembleDevisHonoraires(texte) || motCleIsole(nomNorm, 'devis'))) {
+      resExclus.push({ nom: f.name, raison: 'devis / document administratif' }); continue;
+    }
+
+    if (type) resOk.push({ file: f, type: type, hash: hash });
+    else resAVerifier.push({ file: f, hash: hash });
+  }
+
+  _caResultats = { ok: resOk, aVerifier: resAVerifier, exclus: resExclus, affaire: affaire };
+  caAfficherResultats();
+}
+
+var CA_TYPES_CHOIX = [
+  ['CONTRAT', 'Contrat / Convention de coordination'],
+  ['PV-PC', 'PV de passation de consignes'],
+  ['DIUO', 'DIUO'],
+  ['ICR', 'Inspection commune (recue/signee -- PDF uniquement)'],
+  ['DIAG', 'Rapport / diagnostic'],
+  ['PLAN', 'Planning'],
+  ['PLANS', 'Plans (masse, PIC, coupes...)'],
+  ['CONTRAINTES', 'Contraintes du site'],
+  ['PPSPS', 'PPSPS entreprise'],
+  ['ANALYSE_PPSPS', 'Analyse de PPSPS'],
+  ['PGC', 'PGC'],
+  ['CRMOA', 'CR de reunion'],
+  ['CBT', 'CBT'],
+];
+
+function caAfficherResultats() {
+  var r = _caResultats;
+  var html = '<div style="text-align:left;font-size:13px;">';
+  html += '<p><strong>' + r.ok.length + '</strong> fichier(s) reconnu(s) automatiquement, '
+    + '<strong>' + r.exclus.length + '</strong> exclu(s), '
+    + '<strong>' + r.aVerifier.length + '</strong> a verifier ci-dessous.</p>';
+  if (r.exclus.length) {
+    html += '<details style="margin-bottom:10px;"><summary style="cursor:pointer;color:var(--text-light);">Voir les exclus</summary><ul style="margin:6px 0 0 18px;padding:0;font-size:12px;color:var(--text-light);">'
+      + r.exclus.map(function(e){ return '<li>' + escHtml(e.nom) + ' -- ' + escHtml(e.raison) + '</li>'; }).join('')
+      + '</ul></details>';
+  }
+  if (r.aVerifier.length) {
+    html += '<div style="max-height:280px;overflow:auto;border:1px solid #ddd;border-radius:6px;padding:8px;margin-bottom:10px;">';
+    for (var i = 0; i < r.aVerifier.length; i++) {
+      html += '<div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #eee;">'
+        + '<div style="margin-bottom:4px;">' + escHtml(r.aVerifier[i].file.name) + '</div>'
+        + '<select id="ca-choix-' + i + '" style="width:100%;padding:4px;">'
+        + '<option value="">-- Ignorer ce fichier --</option>'
+        + CA_TYPES_CHOIX.map(function(t){ return '<option value="' + t[0] + '">' + t[1] + '</option>'; }).join('')
+        + '</select></div>';
+    }
+    html += '</div>';
+  }
+  html += '<button class="btn btn-primary btn-sm" onclick="caValider()">Incorporer dans l\'affaire</button>';
+  html += '</div>';
+  var statutEl = document.getElementById('ca-statut'); if (statutEl) statutEl.textContent = '';
+  var resEl = document.getElementById('ca-resultats'); if (resEl) resEl.innerHTML = html;
+}
+
+async function caValider() {
+  var r = _caResultats;
+  if (!r) return;
+  var nOk = 0, nManuel = 0, nDoublon = 0;
+  for (var i = 0; i < r.ok.length; i++) {
+    var statut = await deposerPieceDossier(r.affaire, r.ok[i].file, r.ok[i].type, true);
+    if (statut === 'ok') { nOk++; marquerHashDernierRJC(r.affaire, r.ok[i].hash); }
+    else if (statut === 'doublon') nDoublon++;
+  }
+  for (var j = 0; j < r.aVerifier.length; j++) {
+    var sel = document.getElementById('ca-choix-' + j);
+    var type = sel ? sel.value : '';
+    if (!type) continue;
+    var ext = (/\.[a-z0-9]+$/i.exec(r.aVerifier[j].file.name || '') || [''])[0].toLowerCase();
+    if ((type === 'ICR' || type === 'FIC') && ext !== '.pdf') {
+      showToast(r.aVerifier[j].file.name + ' : ignore (Inspection Commune en ' + ext + ', seul le PDF est garde)', 'error');
+      continue;
+    }
+    var statut2 = await deposerPieceDossier(r.affaire, r.aVerifier[j].file, type, true);
+    if (statut2 === 'ok') { nManuel++; marquerHashDernierRJC(r.affaire, r.aVerifier[j].hash); }
+    else if (statut2 === 'doublon') nDoublon++;
+  }
+  persistAffaires();
+  try { renderAffaireList(); } catch (e) {}
+  closeModal();
+  showToast('Classement : ' + nOk + ' incorpore(s) automatiquement, ' + nManuel + ' apres votre choix'
+    + (nDoublon ? ', ' + nDoublon + ' deja present(s)' : ''), 'success');
+}
+
+// deposerPieceDossier ne reçoit pas le hash deja calcule (il le recalcule
+// lui-meme) -- on le reporte simplement sur la derniere entree RJC creee,
+// pour que les prochains classements de cette affaire sachent reconnaitre
+// ce fichier sans re-ouvrir la modale.
+function marquerHashDernierRJC(affaire, hash) {
+  if (!hash || !affaire.rjc || !affaire.rjc.length) return;
+  var e = affaire.rjc[affaire.rjc.length - 1];
+  if (e && !e.fichierHash) e.fichierHash = hash;
+}
+
+// ============================================================================
+// Bouton "Sauvegarde D:\" -- copie les pieces de toutes les affaires dans un
+// dossier de sauvegarde choisi une fois (D:\...), triees par sous-dossier
+// nominatif (IC, PPSPS, DIAGNOSTICS, etc.), exactement dans la meme
+// structure que le script classer_sauvegarde_affaires.py (meme nommage de
+// dossiers, meme fichier _hashes.json par affaire) -- les deux outils
+// peuvent etre utilises indifferemment sans jamais creer de doublon.
+// Repose sur l'API File System Access (Chrome PC/Android uniquement).
+// ============================================================================
+
+// Table de correspondance docRef -> sous-dossier : copie exacte de
+// LIBELLES_DOCREF dans source/outils/classer_sauvegarde_affaires.py --
+// a maintenir identique dans les deux fichiers.
+var SD_LIBELLES_DOCREF = {
+  'CBT': '01_CBT', 'CISSCT-CONV': '02_CISSCT_Convocation', 'CISSCT-CR': '02_CISSCT_CR',
+  'CISSCT-RI': '02_CISSCT_Reglement_Interieur', 'CONTRAINTES': '03_Contraintes_site',
+  'CONTRAT': '04_Contrat_coordination', 'CRMOA': '05_CR_reunion_MOA', 'DGI': '06_Signalement_DGI',
+  'DIAG': '07_Rapports_diagnostics', 'DIF': '08_Fiche_Diffusion_PGC', 'DIUO': '09_DIUO',
+  'DP': '10_Declaration_Prealable', 'FIC': '11_FIC', 'HARMOP': '12_Harmonisation_PPSPS',
+  'IC': '13_Courrier_Transmission_IC', 'ICR': '14_Inspection_commune_realisee',
+  'OBS': '15_Observation_Notification_RJC', 'PGC': '16_PGC', 'PGCR': '16_PGC_Redaction',
+  'PLAN': '17_Plannings', 'PLANS': '18_Plans', 'PPP': '19_Grille_Analyse_PPSPS',
+  'PPSPS': '20_PPSPS_entreprises', 'PV-DIUO': '21_PV_Transmission_DIUO',
+  'PV-PC': '22_PV_Passation_Consignes', 'RCO': '23_CR_Reunion_Coordination',
+  'RFM': '24_Rapport_Fin_Mission', 'RJC': '25_Registre_Journal_Coordination',
+  'VIS': '26_CR_Visite_Chantier'
+};
+function sdSousDossierPourDocRef(ref) {
+  if (ref && SD_LIBELLES_DOCREF[ref]) return SD_LIBELLES_DOCREF[ref];
+  return ref ? ('99_' + ref) : 'Autres';
+}
+// Memes exclusions que le script Python (demande d'Alain du 23/11/2026) :
+// un FIC n'est jamais garde en .docx, et aucun fichier d'essai/test n'est copie.
+var SD_MOTS_EXCLUS = /essai|test|exemple|lorem|dummy|bidon|fictif/i;
+
+function sdSanitizeNom(nom) {
+  var n = String(nom || '').trim() || 'Sans nom';
+  n = n.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ');
+  n = n.slice(0, 120).trim().replace(/[ .]+$/, '');
+  return n || 'Sans nom';
+}
+function sdNomFichierDepuisCle(chemin, fichierNom) {
+  var base = String(chemin || '').split('/').pop() || '';
+  var m = /^\d+-(.+)$/.exec(base);
+  var nom = (m ? m[1] : base) || fichierNom || 'fichier';
+  return nom.replace(/[\\/:*?"<>|]/g, '_') || 'fichier';
+}
+function sdSplitExt(nom) {
+  var i = nom.lastIndexOf('.');
+  if (i <= 0) return [nom, ''];
+  return [nom.slice(0, i), nom.slice(i)];
+}
+async function sdNomExiste(dirHandle, nom) {
+  try { await dirHandle.getFileHandle(nom); return true; } catch (e) { return false; }
+}
+async function sdNomDisponible(dirHandle, nom) {
+  if (!(await sdNomExiste(dirHandle, nom))) return nom;
+  var p = sdSplitExt(nom), base = p[0], ext = p[1], i = 2;
+  while (await sdNomExiste(dirHandle, base + '_' + i + ext)) i++;
+  return base + '_' + i + ext;
+}
+async function sdHashBuffer(buf) {
+  var digest = await crypto.subtle.digest('SHA-256', buf);
+  return Array.prototype.map.call(new Uint8Array(digest), function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+}
+async function sdEcrireFichierTexte(dirHandle, nom, texte) {
+  var fh = await dirHandle.getFileHandle(nom, { create: true });
+  var w = await fh.createWritable();
+  await w.write(texte);
+  await w.close();
+}
+async function sdEcrireFichierBinaire(dirHandle, nom, buf) {
+  var fh = await dirHandle.getFileHandle(nom, { create: true });
+  var w = await fh.createWritable();
+  await w.write(buf);
+  await w.close();
+}
+async function sdChargerHashes(dossierAffaire) {
+  try {
+    var fh = await dossierAffaire.getFileHandle('_hashes.json');
+    var f = await fh.getFile();
+    var obj = JSON.parse(await f.text());
+    return obj && typeof obj === 'object' ? obj : {};
+  } catch (e) { return {}; }
+}
+async function sdSauverHashes(dossierAffaire, obj) {
+  await sdEcrireFichierTexte(dossierAffaire, '_hashes.json', JSON.stringify(obj, null, 2));
+}
+
+// Dossier racine de sauvegarde (D:\...) : handle garde en memoire pour la
+// session, et persiste dans la meme base IndexedDB "csps17-config" que le
+// dossier local d'import (cle differente : "racineSauvegardeD", pas de
+// collision avec "racineDossierLocal").
+var _sdConfigDbPromise = null;
+function sdBaseCfg() {
+  if (_sdConfigDbPromise) return _sdConfigDbPromise;
+  _sdConfigDbPromise = new Promise(function (ok, ko) {
+    var r = indexedDB.open('csps17-config', 1);
+    r.onupgradeneeded = function () { try { r.result.createObjectStore('kv'); } catch (e) {} };
+    r.onsuccess = function () { ok(r.result); };
+    r.onerror = function () { ko(r.error); };
+  });
+  return _sdConfigDbPromise;
+}
+function sdCfgOp(mode, fn) {
+  return sdBaseCfg().then(function (d) {
+    return new Promise(function (ok, ko) {
+      var t = d.transaction('kv', mode), s = t.objectStore('kv'), res;
+      var q = fn(s); if (q) q.onsuccess = function () { res = q.result; };
+      t.oncomplete = function () { ok(res); }; t.onerror = function () { ko(t.error); };
+    });
+  });
+}
+async function sdObtenirPermission(handle) {
+  var opts = { mode: 'readwrite' };
+  try {
+    if ((await handle.queryPermission(opts)) === 'granted') return true;
+    if ((await handle.requestPermission(opts)) === 'granted') return true;
+  } catch (e) {}
+  return false;
+}
+var _sdRacineHandle = null;
+async function sdRecupererRacine() {
+  if (_sdRacineHandle) return _sdRacineHandle;
+  try {
+    var h = await sdCfgOp('readonly', function (s) { return s.get('racineSauvegardeD'); });
+    if (h) _sdRacineHandle = h;
+    return h || null;
+  } catch (e) { return null; }
+}
+async function sdChoisirRacine() {
+  if (!window.showDirectoryPicker) {
+    showToast('Fonction indisponible sur ce navigateur (Chrome PC ou Android uniquement)', 'error');
+    return null;
+  }
+  try {
+    var h = await window.showDirectoryPicker({ id: 'csps17-sauvegarde-d', mode: 'readwrite' });
+    _sdRacineHandle = h;
+    await sdCfgOp('readwrite', function (s) { return s.put(h, 'racineSauvegardeD'); });
+    return h;
+  } catch (e) { if (e && e.name !== 'AbortError') showToast('Impossible d\'ouvrir le dossier : ' + e.message, 'error'); return null; }
+}
+async function changerDossierSauvegardeD() {
+  var h = await sdChoisirRacine();
+  if (h) { showToast('Dossier de sauvegarde relie : ' + h.name, 'success'); await ouvrirSauvegardeD(); }
+}
+
+// Copie dans le dossier de sauvegarde toutes les pieces de l'affaire qui
+// n'y sont pas deja (meme logique que classer_sauvegarde_affaires.py :
+// nom de dossier "<num> - <chantier>", sous-dossier "fichiers/<NN_type>",
+// dedoublonnage par hash SHA-256 dans _hashes.json).
+async function sdTraiterAffaire(racine, affaire) {
+  var num = (affaire.num || '').trim();
+  var nomChantier = ((affaire.chantier && affaire.chantier.nom) || '').trim();
+  var base = (num || nomChantier) ? ((num + ' - ' + nomChantier).replace(/^\s*-\s*/, '').trim()) : (affaire.id || 'affaire');
+  var nomDossier = sdSanitizeNom(base);
+
+  var dossierAffaire = await racine.getDirectoryHandle(nomDossier, { create: true });
+  var dossierFichiers = await dossierAffaire.getDirectoryHandle('fichiers', { create: true });
+  try { await sdEcrireFichierTexte(dossierAffaire, 'affaire.json', JSON.stringify(affaire, null, 2)); } catch (e) {}
+
+  var hashes = await sdChargerHashes(dossierAffaire);
+  var rjc = affaire.rjc || [];
+  var nb = 0, doublons = 0, exclus = 0, erreurs = 0;
+
+  for (var i = 0; i < rjc.length; i++) {
+    var e = rjc[i];
+    var chemin = e.fichierPath;
+    if (!chemin) continue;
+    var nomFichier = e.fichierNom || '';
+
+    if (e.docRef === 'FIC' && !/\.pdf$/i.test(nomFichier)) { exclus++; continue; }
+    if (SD_MOTS_EXCLUS.test(nomFichier)) { exclus++; continue; }
+
+    try {
+      var donnee = await FichiersLocaux.lire(chemin);
+      if (!donnee) continue; // fichier non present sur cet appareil (synchro multi-postes)
+      var buf = await window.dataUrlVersBlob(donnee).arrayBuffer();
+      if (!buf.byteLength) continue;
+      var h = await sdHashBuffer(buf);
+      if (hashes[h]) { doublons++; continue; }
+      var sousDossier = sdSousDossierPourDocRef(e.docRef);
+      var dossierCible = await dossierFichiers.getDirectoryHandle(sousDossier, { create: true });
+      var nomCible = await sdNomDisponible(dossierCible, sdNomFichierDepuisCle(chemin, nomFichier));
+      await sdEcrireFichierBinaire(dossierCible, nomCible, buf);
+      hashes[h] = sousDossier + '/' + nomCible;
+      nb++;
+    } catch (e2) { erreurs++; }
+  }
+  await sdSauverHashes(dossierAffaire, hashes);
+  return { nom: nomDossier, nb: nb, doublons: doublons, exclus: exclus, erreurs: erreurs };
+}
+
+async function ouvrirSauvegardeD() {
+  if (!window.showDirectoryPicker) {
+    showToast('Fonction indisponible sur ce navigateur (Chrome PC ou Android uniquement)', 'error');
+    return;
+  }
+  var racine = await sdRecupererRacine();
+  if (racine && !(await sdObtenirPermission(racine))) racine = null;
+  if (!racine) {
+    racine = await sdChoisirRacine();
+    if (!racine) return;
+  }
+  showToast('Sauvegarde en cours sur "' + racine.name + '"...', 'info');
+  var resultats = [], erreurGlobale = null;
+  try {
+    for (var i = 0; i < (affaires || []).length; i++) {
+      resultats.push(await sdTraiterAffaire(racine, affaires[i]));
+    }
+  } catch (e) { erreurGlobale = e && e.message; }
+  sdAfficherResultats(racine, resultats, erreurGlobale);
+}
+
+function sdAfficherResultats(racine, resultats, erreurGlobale) {
+  var totalNb = 0, totalDoublons = 0, totalExclus = 0, totalErreurs = 0;
+  var lignes = resultats.map(function (r) {
+    totalNb += r.nb; totalDoublons += r.doublons; totalExclus += r.exclus; totalErreurs += r.erreurs;
+    return '<tr><td>' + escHtml(r.nom) + '</td><td style="text-align:center">' + r.nb + '</td>'
+      + '<td style="text-align:center">' + r.doublons + '</td><td style="text-align:center">' + r.exclus + '</td>'
+      + '<td style="text-align:center' + (r.erreurs ? ';color:#c00' : '') + '">' + r.erreurs + '</td></tr>';
+  }).join('');
+  var html = '<div style="text-align:left;font-size:13px;">'
+    + '<p>Dossier de sauvegarde : <b>' + escHtml(racine.name) + '</b> '
+    + '<a href="#" onclick="changerDossierSauvegardeD();return false;">(changer)</a></p>'
+    + (erreurGlobale ? '<p style="color:#c00">Erreur : ' + escHtml(erreurGlobale) + '</p>' : '')
+    + '<table style="width:100%;border-collapse:collapse;font-size:13px">'
+    + '<tr><th style="text-align:left">Affaire</th><th>Nouveaux</th><th>Doublons</th><th>Exclus</th><th>Erreurs</th></tr>'
+    + lignes
+    + '<tr style="font-weight:bold;border-top:1px solid #ccc"><td>Total</td><td style="text-align:center">' + totalNb + '</td>'
+    + '<td style="text-align:center">' + totalDoublons + '</td><td style="text-align:center">' + totalExclus + '</td>'
+    + '<td style="text-align:center">' + totalErreurs + '</td></tr>'
+    + '</table>'
+    + '<p style="font-size:12px;color:var(--text-light);margin-top:10px">Les fichiers deja presents (meme contenu) ne sont jamais recopies. '
+    + 'Les FIC autres que PDF et les fichiers "essai/test" sont exclus.</p></div>';
+  openDocModal('\uD83D\uDCBE Sauvegarde D:\\', html, null, null);
+  showToast('Sauvegarde terminee : ' + totalNb + ' nouveau(x) fichier(s)', 'success');
 }
 
 async function ocrViaServeur(pdf) {
