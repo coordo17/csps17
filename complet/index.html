@@ -8647,7 +8647,11 @@ function genererPGCNatif(ref){
     var faits = affaireFaits(affaire);
     var sectionsVides = true;
 
-    // 2.1 Diagnostics amiante / plomb
+    // 2.1 Diagnostics amiante / plomb -- [Portage PGC, pt.4 liste du 26/11]
+    // sous-section desormais toujours rendue (meme logique que pt.2/pt.3) :
+    // constat factuel neutre si aucune fiche remplie, puis deux paragraphes
+    // reglementaires fixes (texte generique indep. du chantier, porte quasi
+    // mot pour mot d'Harmo), jamais une affirmation specifique inventee.
     var am = faits.amiante || {}, pb = faits.plomb || {};
     var lignesDiag = [];
     if (am.source) {
@@ -8657,18 +8661,23 @@ function genererPGCNatif(ref){
         + (am.bureau ? ' — ' + am.bureau : '')
         + (am.ss4_obligatoire ? ' — Sous-section 4 (SS4) obligatoire' : '')
         + (am.fin_desamiantage ? ' — fin de désamiantage prévue le ' + am.fin_desamiantage : ''));
+    } else {
+      lignesDiag.push('Amiante : aucun rapport de repérage avant travaux n\'a été transmis à ce jour.');
     }
     if (pb.source) {
       lignesDiag.push('Plomb : ' + (pb.presence ? 'détecté' : 'non détecté')
         + (pb.localisation ? ' — ' + pb.localisation : '')
         + (pb.date_rapport ? ' — rapport du ' + pb.date_rapport : '')
         + (pb.bureau ? ' — ' + pb.bureau : ''));
+    } else {
+      lignesDiag.push('Plomb : aucun rapport de diagnostic n\'a été transmis à ce jour.');
     }
-    if (lignesDiag.length) {
-      if (sectionsVides) { body += wH('2. Organisation générale, diagnostics et contraintes'); sectionsVides = false; }
-      body += wP('Diagnostics', {b:true,sz:20,spacing:60});
-      lignesDiag.forEach(function(l){ body += wLi(l); });
-    }
+    if (sectionsVides) { body += wH('2. Organisation générale, diagnostics et contraintes'); sectionsVides = false; }
+    body += wP('Diagnostics', {b:true,sz:20,spacing:60});
+    lignesDiag.forEach(function(l){ body += wLi(l); });
+    body += wP('S\'agissant d\'une opération portant sur un bâtiment existant, le maître d\'ouvrage fait réaliser un repérage amiante avant tout commencement des travaux dès lors que l\'opération est susceptible d\'exposer les travailleurs à l\'amiante, notamment pour un bâtiment construit avant le 1er janvier 1997.', {sz:18, spacing:40, color:'475569'});
+    body += wP('Le risque d\'exposition au plomb relève de l\'évaluation des risques de l\'opération réalisée par le maître d\'ouvrage.', {sz:18, spacing:40, color:'475569'});
+    body += wP('Les rapports obtenus sont transmis au coordonnateur SPS et aux entreprises concernées avant toute intervention susceptible d\'exposer leurs travailleurs.', {sz:18, spacing:80, color:'475569'});
 
     // 2.2 Reseaux (DT/DICT) et contraintes du site
     var rz = faits.reseaux || {}, ctr = faits.contraintes || {};
