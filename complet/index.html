@@ -5125,6 +5125,17 @@ async function caValider() {
   closeModal();
   showToast('Classement : ' + nOk + ' incorpore(s) automatiquement, ' + nManuel + ' apres votre choix'
     + (nDoublon ? ', ' + nDoublon + ' deja present(s)' : ''), 'success');
+  // 26/11 (demande d'Alain : "CSPS17 doit tout preremplir" des que les
+  // documents sont importes) : on enchaine directement sur la Relecture du
+  // chantier, au lieu de laisser Alain se souvenir du bouton separe. On ne
+  // force JAMAIS une fiche de faits sans validation (toujours "Remplir" /
+  // "Tout relire" a cliquer un par un ou en un clic groupe pour le CBT/
+  // Plans) -- seul l'ECRAN qui liste ce qui reste a confirmer s'ouvre tout
+  // seul desormais, rien n'est ecrit sans que Alain ne le valide.
+  if (r.affaire && affaires.find(function(a){ return a.id === r.affaire.id; })) {
+    currentAffaireId = r.affaire.id;
+  }
+  setTimeout(function(){ try { relireChantier(); } catch (e) {} }, 300);
 }
 
 // deposerPieceDossier ne reçoit pas le hash deja calcule (il le recalcule
