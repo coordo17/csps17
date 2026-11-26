@@ -7949,7 +7949,7 @@ function corpsSection3PGCNatif(data, faits) {
   var b = '';
   b += wH('3. Mesures de coordination (R.4532-44, 3°)');
 
-  if (!entreprises.some(function(e){ return e.dateInterv; })) {
+  if (!entreprises.some(function(e){ return e.dateInterv; }) && !(faits.coactivites && faits.coactivites.length)) {
     b += wP('Le planning prévisionnel n\'étant pas encore établi, les mesures liées au phasage et aux interfaces entre entreprises (ordre d\'intervention, coactivité, enchaînements de tâches entre lots) seront complétées dès sa communication, notamment en réunion de préparation de chantier.', {sz:18, spacing:80, color:'92400e'});
   }
 
