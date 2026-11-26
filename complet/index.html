@@ -991,7 +991,7 @@
         <div class="form-card">
           <div class="form-card-header">&#128230; Mise en commun des moyens (PGC &sect;3 b)</div>
           <div class="form-card-body">
-            <div class="organismes-note">Pour chaque moyen, indiquez le statut retenu pour ce chantier (decision prise en reunion de preparation, ou a votre connaissance). Laissez sur "Non renseigne" si la decision n'est pas encore prise : le moyen n'apparaitra alors pas dans le PGC genere, plutot que d'inventer une reponse.</div>
+            <div class="organismes-note">Pour chaque moyen, indiquez le statut retenu pour ce chantier (decision prise en reunion de preparation, ou a votre connaissance). Laissez sur "Non renseigne" si la decision n'est pas encore prise : le moyen apparaitra dans le PGC avec une formule neutre ("aucune mutualisation mentionnee a ce jour"), jamais une reponse inventee.</div>
             <table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-top:6px;">
               <thead><tr style="text-align:left;color:var(--text-light);">
                 <th style="padding:4px 6px;width:22%;">Moyen</th>
@@ -7914,16 +7914,20 @@ function _tableauMiseEnCommunNatif(mec) {
   mec = mec || {};
   var labels = {};
   MEC_MOYENS.forEach(function(m){ labels[m[0]] = m[1]; });
-  var moyens = MEC_MOYENS.filter(function(m){ return mec[m[0]] && mec[m[0]].statut; });
-  if (!moyens.length) return '';
   var b = wP('Mise en commun des moyens (R.4532-44, 3°)', {b:true, sz:19, spacing:40});
   function modalite(it) {
+    // [Portage PGC, pt.4 liste du 26/11 -- demande d'Alain : le tableau doit
+    // toujours se remplir, comme chez Harmo, meme sans saisie manuelle. Le
+    // repli ci-dessous est un constat neutre ("rien de mentionne a ce jour"),
+    // jamais une affirmation specifique au chantier -- coherent avec
+    // "jamais inventer sans validation".
+    if (!it || !it.statut) return 'Aucune mutualisation mentionnée pour ce moyen à ce jour ; si un besoin apparaît en cours de chantier, les modalités seront définies avec le coordonnateur SPS.';
     if (it.statut === 'commun') return 'Mis en commun — mise en œuvre : ' + (it.mettant || '—') + ' ; bénéficiaire(s) : ' + (it.beneficiant || '—');
     if (it.statut === 'sansobjet') return 'Sans objet pour ce chantier.';
     if (it.statut === 'adefinir') return 'À définir en phase de préparation de chantier, en concertation avec le coordonnateur SPS.';
     return 'Chaque entreprise met en œuvre et entretient son propre matériel — aucune mutualisation prévue à ce jour.';
   }
-  var lignes = moyens.map(function(m){ return [labels[m[0]], modalite(mec[m[0]])]; });
+  var lignes = MEC_MOYENS.map(function(m){ return [labels[m[0]], modalite(mec[m[0]])]; });
   b += wTable(['Moyen', 'Modalité retenue'], lignes, [3200, 5800]);
   return b;
 }
