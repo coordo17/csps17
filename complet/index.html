@@ -347,6 +347,12 @@
   .doc-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-left: 6px; vertical-align: middle; }
   .doc-dot.ok { background: #16a34a; }
   .doc-dot.warn { background: #f59e0b; }
+  .doc-perime-badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    background: #fff7ed; color: #9a3412; border: 1px solid #fdba74;
+    font-size: 10px; font-weight: 700; border-radius: 10px;
+    padding: 1px 7px; margin-top: 3px;
+  }
   .doc-card.disabled { opacity: 0.45; }
   .doc-card-top { display: flex; align-items: flex-start; gap: 8px; }
   .doc-icon { font-size: 22px; }
@@ -5949,8 +5955,41 @@ function analyserCompletude(ref, data, affaire) {
       if (!data.chantier.duree) manque.push('Duree previsible');
       if (!window._risquesPGC && !(affaire && affaire.risques_pgc)) manque.push('Risques identifies (import PGC ou coches) — le tableau des risques sortira avec le socle par defaut');
       break;
+    case 'HARMOP':
+      if (!affaire || !affaire.ppspsAnalyses || !affaire.ppspsAnalyses.length) manque.push('Aucune analyse PPSPS (Grille Analyse PPSPS) — analysez au moins une entreprise avant de generer');
+      break;
   }
   return manque;
+}
+
+// Dependances piece -> document genere nativement (26/11, demande d'Alain) :
+// une fois un document genere, on ne le regenere jamais tout seul -- on
+// signale juste qu'une piece source plus recente existe, et c'est Alain qui
+// decide de relancer "Generer" ou non.
+var DOC_DEPEND_PIECES = {
+  'PGCR':  ['DIAG', 'CONTRAINTES', 'PLANS', 'CBT', 'PLAN'],
+  'PGC3R': ['DIAG', 'CONTRAINTES', 'PLANS', 'CBT', 'PLAN'],
+};
+function docEstPerime(doc, affaire) {
+  if (!affaire) return false;
+  var dernier = dernierFichierDoc(affaire, doc.ref);
+  if (!dernier) return false;
+  var dateGen = dernier.date || '';
+  var pieces = DOC_DEPEND_PIECES[doc.ref];
+  if (pieces) {
+    for (var i = 0; i < pieces.length; i++) {
+      var entries = rjcEntriesForDoc(affaire, pieces[i]);
+      for (var j = 0; j < entries.length; j++) {
+        if ((entries[j].date || '') > dateGen) return true;
+      }
+    }
+  }
+  if (doc.ref === 'HARMOP' && affaire.ppspsAnalyses) {
+    for (var k = 0; k < affaire.ppspsAnalyses.length; k++) {
+      if ((affaire.ppspsAnalyses[k].date || '') > dateGen) return true;
+    }
+  }
+  return false;
 }
 
 // Modale generique (reutilise #modal-overlay). Sans onConfirm : bouton masque.
@@ -6260,6 +6299,10 @@ function renderDocsGrid() {
     var badge = nb > 0 ? '<span class="doc-badge" onclick="showHistoriqueDoc(\'' + doc.ref + '\')" title="' + badgeTitle + '">' + nb + '</span>' : '';
     var dot = '<span class="doc-dot ' + (manque.length ? 'warn' : 'ok') + '" title="'
       + (manque.length ? ('Manque : ' + manque.join(', ').replace(/"/g, '&quot;')) : 'Donnees completes pour ce document') + '"></span>';
+    var perime = docEstPerime(doc, affaire);
+    var badgePerime = perime
+      ? '<div class="doc-perime-badge" title="Une piece deposee depuis la derniere generation peut changer ce document — relancez Generer quand vous le souhaitez">&#8635; A regenerer</div>'
+      : '';
     var btnTelecharger;
     if (dernierF) btnTelecharger = '<button class="btn btn-outline btn-sm" onclick="telechargerDernierDoc(\'' + doc.ref + '\')" title="Derniere version : ' + formatDateFR(dernierF.date) + '">&#11015; Telecharger</button>';
     else if (doc.ref === 'RJC') btnTelecharger = '<button class="btn btn-outline btn-sm" disabled title="Le registre se genere toujours a jour — utilisez Generer">&#11015; Telecharger</button>';
@@ -6297,7 +6340,7 @@ function renderDocsGrid() {
     return '<div class="doc-card">' + badge
       + '<div class="doc-card-top"><div class="doc-icon">' + doc.icon + '</div>'
       + '<div class="doc-info"><div class="doc-title">' + doc.title + dot + '</div>'
-      + '<div class="doc-ref">CSPS17/' + doc.ref + '</div></div></div>'
+      + '<div class="doc-ref">CSPS17/' + doc.ref + '</div>' + badgePerime + '</div></div>'
       + '<div class="doc-actions">'
       + actionsGeneration
       + btnHarmo
