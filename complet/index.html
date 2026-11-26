@@ -4731,11 +4731,36 @@ function repererPassagesMultiples(texte, motsCles, maxResultats) {
 // "PHASE") avec sa date de debut et sa duree, pour calculer les
 // chevauchements de dates entre lots -- la co-activite reelle, datee,
 // que les CBT (generiques sur ce chantier, cf. 13/11) ne contiennent pas.
+// [Portage Harmo, 26/11] Calcul exact des semaines -> dates calendaires,
+// en JS pur (jamais le systeme/une IA pour l'arithmetique). Meme convention
+// qu'Harmo (deja eprouvee sur des CR de reunion reels) : semaine 1 = 1er au
+// 7 janvier (pas la norme ISO 8601), et un numero de semaine trop en dessous
+// de la semaine d'ancrage (marge de 8 semaines) est force a l'annee suivante,
+// pour que le planning ne boucle jamais sur 53 semaines.
+function semaineVersDate(numSemaine, annee) {
+  var debut = new Date(annee, 0, 1 + (numSemaine - 1) * 7);
+  var fin = new Date(annee, 0, 1 + (numSemaine - 1) * 7 + 6);
+  return { debut: debut, fin: fin };
+}
+function semaineDeAnnee(date) {
+  var debutAnnee = new Date(date.getFullYear(), 0, 1);
+  var jours = Math.round((date - debutAnnee) / (1000 * 60 * 60 * 24)) + 1;
+  return Math.ceil(jours / 7);
+}
+function anneePourSemaine(numSemaine, semaineRef, anneeRef) {
+  var seuil = semaineRef - 8;
+  if (seuil < 1) seuil = 1;
+  return (numSemaine >= seuil) ? anneeRef : anneeRef + 1;
+}
 function parserPlanningPhasage(texte) {
   var lignes = String(texte || '').split(/\r?\n/);
   var reRowStart = /^(\s*)(\d+)\s+(\S.*)$/;
   var reJours = /(\d+(?:[.,]\d+)?)\s*jours?/i;
   var reDate = /(Lun|Mar|Mer|Jeu|Ven|Sam|Dim)\.?\s*(\d{2})\/(\d{2})\/(\d{2})/i;
+  // Repli (26/11) : certains plannings/CR expriment une phase en numero de
+  // semaine ("S26", "S26/27") plutot qu'en date calendaire explicite --
+  // reDate echoue alors et la tache etait jusqu'ici silencieusement perdue.
+  var reSemaine = /S\s*(\d{1,2})(?:\s*(?:\/|à|a|-)\s*(\d{1,2}))?/i;
   var lignesLogiques = [], cur = null;
   lignes.forEach(function (ligne) {
     var m = reRowStart.exec(ligne);
@@ -4766,8 +4791,27 @@ function parserPlanningPhasage(texte) {
     var reste = full.slice(jm.index + jm[0].length);
     var dm = reDate.exec(reste);
     var debut = dm ? new Date(2000 + parseInt(dm[4], 10), parseInt(dm[3], 10) - 1, parseInt(dm[2], 10)) : null;
-    taches.push({ col: r.col, label: label, dureeJ: parseFloat(jm[1].replace(',', '.')), debut: debut });
+    var sm = !dm ? reSemaine.exec(reste) : null;
+    taches.push({ col: r.col, label: label, dureeJ: parseFloat(jm[1].replace(',', '.')), debut: debut, semaine: sm ? parseInt(sm[1], 10) : null });
   });
+  // Repli semaine -> date calendaire (26/11) : ne s'applique QUE si une
+  // autre tache du MEME document donne deja une date calendaire explicite
+  // (reDate), qui sert alors d'ancrage annee+semaine -- jamais d'annee
+  // inventee quand le document est intégralement en numeros de semaine
+  // sans aucun repere de date (cas non rencontre a ce jour, laisse de cote
+  // plutot que de deviner).
+  var ancreAnnee = null, ancreSemaine = null;
+  for (var ai = 0; ai < taches.length; ai++) {
+    if (taches[ai].debut) { ancreAnnee = taches[ai].debut.getFullYear(); ancreSemaine = semaineDeAnnee(taches[ai].debut); break; }
+  }
+  if (ancreAnnee !== null) {
+    taches.forEach(function (t) {
+      if (!t.debut && t.semaine) {
+        var annee = anneePourSemaine(t.semaine, ancreSemaine, ancreAnnee);
+        t.debut = semaineVersDate(t.semaine, annee).debut;
+      }
+    });
+  }
   var colonnes = [], compteParCol = {};
   taches.forEach(function (t) {
     if (colonnes.indexOf(t.col) === -1) colonnes.push(t.col);
