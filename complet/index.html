@@ -1147,6 +1147,7 @@
         <div style="margin-bottom:14px;">
           <button type="button" class="btn btn-outline btn-sm" onclick="ouvrirFaitsInspection()">Inspection commune préalable</button>
           <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsContraintes()">Réseaux / contraintes du site</button>
+          <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirMesuresCoordination()">Mesures de coordination (travaux spécifiques)</button>
           <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsPlanning()">Planning / co-activités</button>
           <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsCR()">CR de réunion</button>
           <button type="button" class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="ouvrirFaitsCBT()">Déchets / Base vie / Exploitation (CBT)</button>
@@ -3998,6 +3999,48 @@ function enregistrerFaitsContraintes(affaire, fichierNom) {
   showToast('Reseaux / contraintes enregistres', 'success');
 }
 
+// [Portage PGC, pt.6 liste du 26/11] Mesures de coordination par type de
+// travaux specifique : liste les constats CBT reperes automatiquement
+// (affaire.faits.cbtInterfaces, cf. extraireFaitsInterfacesCBT), chacun
+// avec une citation verbatim + sa source. Alain coche ceux a retenir et
+// REDIGE LUI-MEME la mesure de coordination -- jamais une mesure
+// pre-remplie ou devinee a sa place.
+function ouvrirMesuresCoordination() {
+  var affaire = currentAffaireObj();
+  if (!affaire) { showToast('Ouvrez une affaire avant de saisir ces faits', 'error'); return; }
+  var f = affaireFaits(affaire);
+  if (!f.cbtInterfaces) f.cbtInterfaces = [];
+  var html = '<p style="margin-bottom:10px;font-size:13px;color:var(--text-light);">'
+    + 'Constats reperes automatiquement dans les CBT deposes (mots-cles, aucune IA) : interfaces entre lots (qui cree une sujetion, qui en beneficie). Cochez ceux a inclure dans le PGC et redigez vous-meme la mesure de coordination retenue.</p>';
+  if (!f.cbtInterfaces.length) {
+    html += '<p style="font-size:13px;color:var(--text-light);">Aucun constat repere pour l\'instant dans les CBT deposes pour cette affaire.</p>';
+  } else {
+    f.cbtInterfaces.forEach(function (it, i) {
+      html += '<div style="border:1px solid var(--border);border-radius:6px;padding:10px;margin-bottom:10px;">'
+        + '<div style="font-weight:700;color:var(--blue-dark);margin-bottom:4px;">' + icEscAttr(it.theme) + '</div>'
+        + '<div style="font-size:12.5px;color:var(--text-light);font-style:italic;margin-bottom:6px;">« ' + icEscAttr(it.texte) + ' » — source : ' + icEscAttr(it.source) + '</div>'
+        + '<label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:14px;margin-bottom:6px;">'
+        + '<input type="checkbox" id="mc-inclus-' + i + '"' + (it.inclus ? ' checked' : '') + '> Inclure dans le PGC</label>'
+        + '<textarea id="mc-mesure-' + i + '" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Mesure de coordination retenue (redigee par vous)">' + icEscAttr(it.mesure) + '</textarea>'
+        + '</div>';
+    });
+  }
+  openDocModal('Mesures de coordination par type de travaux spécifique', html, 'Enregistrer', function () {
+    enregistrerMesuresCoordination(affaire);
+  });
+}
+function enregistrerMesuresCoordination(affaire) {
+  var f = affaireFaits(affaire);
+  (f.cbtInterfaces || []).forEach(function (it, i) {
+    var cb = document.getElementById('mc-inclus-' + i);
+    var ta = document.getElementById('mc-mesure-' + i);
+    if (cb) it.inclus = cb.checked;
+    if (ta) it.mesure = ta.value.trim();
+  });
+  persistAffaires();
+  showToast('Mesures de coordination enregistrees', 'success');
+}
+
 // ============================================================================
 // Faits CBT (05/11, demande d'Alain : "ça me parait essentiel d'avoir le
 // plus d'elements du chantier pour preremplir tout les formulaires"). Les
@@ -4200,6 +4243,30 @@ function extraireFaitsCBTParLot(texte) {
   });
   return res;
 }
+// [Portage PGC, pt.6 liste du 26/11, confirme par Alain : "je ne remplis
+// rien, tout est fait automatiquement par harmo" + rappel "harmo ne se sert
+// pas d'IA pour lire les CBT"] Memes mots-cles/fenetre de texte que
+// CBT_THEMES_LOT, mais ICI cherches dans N'IMPORTE QUEL CBT (interfaces
+// entre lots : qui cree une sujetion, qui en beneficie) -- jamais associes
+// a un seul metier par nom de fichier, car l'interface concerne plusieurs
+// lots a la fois. Resultat stocke dans affaire.faits.cbtInterfaces (liste
+// a plat), propose a validation par Alain (bouton dedie), jamais ecrit
+// directement dans le PGC.
+var CBT_THEMES_INTERFACE = [
+  { theme: 'Voie ou accès réservé à un lot', mots: ['chemin carrossable', 'voie réservée', 'voie reservee', 'emprise réservée', 'emprise reservee', 'bande réservée', 'bande reservee'] },
+  { theme: 'Enchaînement / réception avant dallage', mots: ['avant le dallage', 'avant dallage', 'finition du compactage', 'réception de la plate-forme', 'reception de la plate-forme', 'réception de la plateforme', 'reception de la plateforme'] },
+  { theme: 'Réservations avant coulage', mots: ['réservation', 'reservation', 'avant coulage', 'avant le coulage'] },
+  { theme: 'Niveau altimétrique de référence', mots: ['niveau ngf', 'repère de nivellement', 'repere de nivellement', 'altimétrique', 'altimetrique'] },
+  { theme: 'Circuit de terre / mise à la terre en fond de fouille', mots: ['circuit de terre', 'mise à la terre en fond de fouille', 'mise a la terre en fond de fouille', 'ceinturage de terre'] },
+];
+function extraireFaitsInterfacesCBT(texte) {
+  var res = [];
+  CBT_THEMES_INTERFACE.forEach(function (t) {
+    var extrait = repererClauseCBT(texte, t.mots);
+    if (extrait) res.push({ theme: t.theme, texte: extrait });
+  });
+  return res;
+}
 // Lit un CBT depose et range les points reperes par lot (devine depuis le
 // nom du fichier, ex. "CBT Plomberie.pdf" -> plomberie_cvc, meme detecteur
 // que pour le lot saisi en fiche IC) -- silencieux, pas de popup, meme en
@@ -4211,11 +4278,19 @@ async function extraireEtStockerPointsCBTParLot(file) {
   var texte;
   try { texte = await extraireTexteFichier(file); } catch (err) { return; }
   if (!texte || texte.replace(/\s/g, '').length < 30) return;
-  var metiers = icMetiersDuLot(file.name);
-  if (!metiers.length) return;
-  var points = extraireFaitsCBTParLot(texte);
-  if (!points.length) return;
+  // Interfaces entre lots (pt.6) : recherchees avant le test "metiers
+  // connus" ci-dessous, car une interface n'est pas rattachee a un seul
+  // metier par nom de fichier.
   var f = affaireFaits(affaire);
+  if (!f.cbtInterfaces) f.cbtInterfaces = [];
+  extraireFaitsInterfacesCBT(texte).forEach(function (p) {
+    if (f.cbtInterfaces.some(function (x) { return x.texte === p.texte; })) return;
+    f.cbtInterfaces.push({ theme: p.theme, texte: p.texte, source: file.name, inclus: false, mesure: '' });
+  });
+  var metiers = icMetiersDuLot(file.name);
+  if (!metiers.length) { persistAffaires(); return; }
+  var points = extraireFaitsCBTParLot(texte);
+  if (!points.length) { persistAffaires(); return; }
   metiers.forEach(function (k) {
     if (!f.cbtPoints[k]) f.cbtPoints[k] = [];
     points.forEach(function (p) {
@@ -5959,6 +6034,7 @@ function faitsVierges() {
     // Jamais injectes directement : proposes en fiche IC (section D) pour
     // relecture/validation par Alain, au meme titre que IC_POINTS_PGC_LOT.
     cbtPoints: {},
+    cbtInterfaces: [],
     // Co-activites reperees dans le planning de phasage depose (13/11) --
     // calcul deterministe des chevauchements de dates entre lots (cf.
     // parserPlanningPhasage), jamais invente. Memes garde-fous que cbtPoints :
@@ -6041,6 +6117,7 @@ function affaireFaits(affaire) {
   if (!affaire.faits.alertesPlanning) affaire.faits.alertesPlanning = [];
   if (!affaire.faits.plans) affaire.faits.plans = faitsVierges().plans;
   if (!affaire.faits.cbtPoints) affaire.faits.cbtPoints = {};
+  if (!affaire.faits.cbtInterfaces) affaire.faits.cbtInterfaces = [];
   if (!affaire.faits.planningLots) affaire.faits.planningLots = [];
   if (!affaire.faits.planningCoactivites) affaire.faits.planningCoactivites = [];
   return affaire.faits;
@@ -7942,6 +8019,18 @@ function _tableauMiseEnCommunNatif(mec) {
   b += wTable(['Moyen', 'Modalité retenue'], lignes, [3200, 5800]);
   return b;
 }
+// [Portage PGC, pt.6 liste du 26/11] Mesures de coordination par type de
+// travaux specifique : uniquement les constats coches ET dotes d'une
+// mesure redigee par Alain (ouvrirMesuresCoordination) -- jamais un
+// constat CBT affiche tel quel sans la mesure qu'il a choisie.
+function _tableauMesuresCoordinationNatif(cbtInterfaces) {
+  var lignes = (cbtInterfaces || []).filter(function(it){ return it && it.inclus && it.mesure; });
+  if (!lignes.length) return '';
+  var b = wP('Mesures de coordination par type de travaux spécifique (R.4532-44, 3°)', {b:true, sz:19, spacing:40});
+  var rows = lignes.map(function(it){ return [it.theme, it.mesure]; });
+  b += wTable(['Situation', 'Mesure de coordination retenue'], rows, [3200, 5800]);
+  return b;
+}
 
 // [Portage PGC Etape 3 - 12/11, demande d'Alain : "meme mise en page" que
 // Harmo] Section 3 complete du PGC : categories a-g de l'article
@@ -8024,6 +8113,7 @@ function corpsSection3PGCNatif(data, faits) {
     phraseGrueB
   ]);
   b += _tableauMiseEnCommunNatif(mec);
+  b += _tableauMesuresCoordinationNatif(faits.cbtInterfaces);
 
   // c) Stockage et entreposage des matériaux dangereux
   b = _blocCategorieRisqueNatif(b, 'c', 'Stockage et entreposage des matériaux dangereux (R.4532-44-3°-c)', [
