@@ -521,6 +521,12 @@
     display: none;
   }
   .modal-overlay.open { display: flex; }
+  /* 26/11 (demande d'Alain : Ctrl+A dans une modale -- ex. l'Historique --
+     prenait TOUTE la page, y compris l'entete, le menu et la liste des
+     affaires derriere la modale). Pendant qu'une modale est ouverte, tout
+     ce qui n'est pas la modale (ni le toast) devient non selectionnable :
+     un Ctrl+A ne peut plus ramener que ce qu'elle contient. */
+  body.modal-select-lock > *:not(#modal-overlay):not(#toast) { user-select: none; }
   .modal {
     background: white;
     border-radius: var(--radius);
@@ -6027,6 +6033,7 @@ function openDocModal(title, bodyHtml, confirmLabel, onConfirm) {
   // Remonte le scroll interne en haut a chaque ouverture
   var body = document.getElementById('modal-body'); if (body) body.scrollTop = 0;
   document.getElementById('modal-overlay').classList.add('open');
+  document.body.classList.add('modal-select-lock');
 }
 
 // Generer avec check de completude prealable
@@ -9757,7 +9764,7 @@ async function analyserPPSPSImportDeterministe(file) {
   }
 }
 
-function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
+function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); document.body.classList.remove('modal-select-lock'); }
 
 // ── SAUVEGARDES (export / import de toutes les affaires) ────────────────────
 async function exporterSauvegarde(){
