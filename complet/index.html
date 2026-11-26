@@ -4670,6 +4670,59 @@ function planningLabelCorrespond(label, texteSaisi) {
   var m2 = icNormTxt(texteSaisi).split(' ').filter(function (m) { return m.length >= 2 && IC_MOTS_OUTILS.indexOf(m) === -1; });
   return m1.some(function (m) { return m2.indexOf(m) !== -1; });
 }
+// 26/11 (bug releve par Alain : le planning du lot interieur d'Auray ne
+// proposait jamais de co-activites) -- extraireTexteFichier() concatene
+// tous les fragments de texte d'une page avec un simple espace et ne pose
+// un saut de ligne qu'une fois par PAGE (pas par ligne visuelle). Le
+// Gantt se retrouve alors en UNE SEULE ligne geante par page : la regex
+// de parserPlanningPhasage (qui attend un numero de ligne en debut de
+// ligne, format proche d'un export "pdftotext -layout") ne peut jamais
+// matcher quoi que ce soit, et ca silencieusement ne trouve aucun lot.
+// On reconstruit ici les lignes visuelles du PDF a partir des positions
+// X/Y de chaque fragment de texte (pdf.js expose item.transform), avec un
+// espacement entre mots proportionnel a l'ecart reel en points -- ce qui
+// recree l'equivalent d'un export en mode "layout" et permet au parseur
+// de lots de fonctionner correctement.
+async function extraireTextePositionPourPlanning(file) {
+  if (!/\.pdf$/i.test(file.name || '')) return '';
+  try {
+    var ab = await file.arrayBuffer();
+    var pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+    var texte = '';
+    for (var p = 1; p <= pdf.numPages; p++) {
+      var page = await pdf.getPage(p);
+      var tc = await page.getTextContent();
+      var items = tc.items.filter(function (it) { return it.str && it.str.trim(); });
+      if (!items.length) continue;
+      var totalW = 0, totalC = 0;
+      items.forEach(function (it) { totalW += (it.width || 0); totalC += (it.str || '').length; });
+      var charW = (totalC > 0 && totalW > 0) ? (totalW / totalC) : 5;
+      var lignes = [];
+      items.forEach(function (it) {
+        var y = Math.round(it.transform[5]);
+        var x = it.transform[4];
+        var ligne = null;
+        for (var li = 0; li < lignes.length; li++) { if (Math.abs(lignes[li].y - y) <= 2) { ligne = lignes[li]; break; } }
+        if (!ligne) { ligne = { y: y, items: [] }; lignes.push(ligne); }
+        ligne.items.push({ x: x, str: it.str });
+      });
+      lignes.sort(function (a, b) { return b.y - a.y; });
+      lignes.forEach(function (l) {
+        l.items.sort(function (a, b) { return a.x - b.x; });
+        var out = '', curCol = 0;
+        l.items.forEach(function (it, idx) {
+          var col = Math.max(curCol + (idx === 0 ? 0 : 1), Math.round(it.x / charW));
+          if (col > out.length) out += ' '.repeat(col - out.length);
+          out += it.str;
+          curCol = out.length;
+        });
+        texte += out.replace(/\s+$/, '') + '\n';
+      });
+      texte += '\n';
+    }
+    return texte;
+  } catch (e) { return ''; }
+}
 async function extraireEtStockerPlanningPhasage(file) {
   var affaire = currentAffaireObj();
   if (!affaire) return;
@@ -4677,6 +4730,16 @@ async function extraireEtStockerPlanningPhasage(file) {
   try { texte = await extraireTexteFichier(file); } catch (err) { return; }
   if (!texte || texte.replace(/\s/g, '').length < 30) return;
   var lots = parserPlanningPhasage(texte);
+  if (lots.length < 2) {
+    // Repli : le planning est un Gantt (texte present) mais le format a
+    // plat ne contient pas de sauts de ligne exploitables -- on retente
+    // avec une reconstruction par position (voir extraireTextePositionPourPlanning).
+    var textePos = await extraireTextePositionPourPlanning(file);
+    if (textePos) {
+      var lotsPos = parserPlanningPhasage(textePos);
+      if (lotsPos.length >= 2) lots = lotsPos;
+    }
+  }
   if (lots.length < 2) return; // pas un planning Gantt exploitable (ou format non reconnu)
   var coactivites = detecterCoactivitesPlanning(lots);
   var f = affaireFaits(affaire);
