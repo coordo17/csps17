@@ -6098,8 +6098,8 @@ function showHistoriqueDoc(ref) {
   }
   var entries = entriesToutes.filter(function(e){ return entreeCorrespondFiltre(e, _filtreHistorique); });
   var nSel = Object.keys(_selectionHistorique).length;
-  var html = '<input type="text" id="historique-filtre" value="' + icEscAttr(_filtreHistorique) + '" placeholder="Filtrer (nom de fichier, mot-cle...)" oninput="filtrerHistorique(\'' + ref + '\', this.value)" style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;margin-bottom:8px;">'
-    + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:12px;">'
+  var html = '<input type="text" id="historique-filtre" value="' + icEscAttr(_filtreHistorique) + '" placeholder="Filtrer (nom de fichier, mot-cle...)" oninput="filtrerHistorique(\'' + ref + '\', this.value)" style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;margin-bottom:8px;user-select:none;">'
+    + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:12px;user-select:none;">'
     + '<a href="#" onclick="toggleTousHistorique(\'' + ref + '\', true); return false;" style="color:var(--blue-mid);">Tout cocher' + (_filtreHistorique ? ' (visibles)' : '') + '</a>'
     + '<a href="#" onclick="toggleTousHistorique(\'' + ref + '\', false); return false;" style="color:var(--blue-mid);">Tout decocher' + (_filtreHistorique ? ' (visibles)' : '') + '</a>'
     + '<button type="button" id="btn-suppr-selection"' + (nSel ? '' : ' disabled') + ' onclick="supprimerSelectionHistorique(\'' + ref + '\')" style="margin-left:auto;font-size:12px;padding:4px 10px;border:1px solid var(--border);background:#fff;border-radius:5px;cursor:pointer;color:#b91c1c;">&#128465; Supprimer la selection (' + nSel + ')</button>'
@@ -6116,14 +6116,14 @@ function showHistoriqueDoc(ref) {
       var estPiece = !!CIBLES_RECLASSEMENT.find(function(p){ return p.ref === ref; });
       var coche = _selectionHistorique[e.id] ? ' checked' : '';
       return '<div style="display:flex;align-items:baseline;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;">'
-        + '<input type="checkbox"' + coche + ' onchange="toggleSelectionHistorique(\'' + e.id + '\', this.checked)" style="margin:0;">'
+        + '<input type="checkbox"' + coche + ' onchange="toggleSelectionHistorique(\'' + e.id + '\', this.checked)" style="margin:0;user-select:none;">'
         + '<span style="color:var(--text-light);white-space:nowrap;">' + formatDateFR(e.date)
-        + ' <a href="#" onclick="modifierDateRJC(\'' + e.id + '\'); showHistoriqueDoc(\'' + ref + '\'); return false;" style="font-size:10px;color:var(--blue-mid);">modifier</a></span>'
+        + ' <a href="#" onclick="modifierDateRJC(\'' + e.id + '\'); showHistoriqueDoc(\'' + ref + '\'); return false;" style="font-size:10px;color:var(--blue-mid);user-select:none;">modifier</a></span>'
         + '<span style="flex:1;min-width:0;overflow-wrap:anywhere;">' + lien + '</span>'
-        + ((e.fichierPath || e.fichierData) ? '<a href="#" onclick="apercuFichierRJC(\'' + e.id + '\'); return false;" title="Apercu de ce fichier (sans telecharger)" style="font-size:13px;text-decoration:none;">&#128065;</a>' : '')
-        + ((e.fichierPath || e.fichierData) ? '<a href="#" onclick="envoyerDocMoi(\'' + e.id + '\'); return false;" title="M\'envoyer ce fichier par email (pour transfert)" style="font-size:13px;text-decoration:none;">&#9993;</a>' : '')
-        + (estPiece ? '<a href="#" onclick="reclasserPieceHistorique(\'' + e.id + '\', \'' + ref + '\'); return false;" title="Deplacer vers une autre categorie de piece" style="font-size:13px;text-decoration:none;">&#128194;</a>' : '')
-        + '<a href="#" onclick="supprimerPieceHistorique(\'' + e.id + '\', \'' + ref + '\'); return false;" title="Supprimer cette ligne (et son fichier)" style="font-size:13px;text-decoration:none;">&#128465;</a>'
+        + ((e.fichierPath || e.fichierData) ? '<a href="#" onclick="apercuFichierRJC(\'' + e.id + '\'); return false;" title="Apercu de ce fichier (sans telecharger)" style="font-size:13px;text-decoration:none;user-select:none;">&#128065;</a>' : '')
+        + ((e.fichierPath || e.fichierData) ? '<a href="#" onclick="envoyerDocMoi(\'' + e.id + '\'); return false;" title="M\'envoyer ce fichier par email (pour transfert)" style="font-size:13px;text-decoration:none;user-select:none;">&#9993;</a>' : '')
+        + (estPiece ? '<a href="#" onclick="reclasserPieceHistorique(\'' + e.id + '\', \'' + ref + '\'); return false;" title="Deplacer vers une autre categorie de piece" style="font-size:13px;text-decoration:none;user-select:none;">&#128194;</a>' : '')
+        + '<a href="#" onclick="supprimerPieceHistorique(\'' + e.id + '\', \'' + ref + '\'); return false;" title="Supprimer cette ligne (et son fichier)" style="font-size:13px;text-decoration:none;user-select:none;">&#128465;</a>'
         + '</div>';
     }).join('')
     + '</div>'
