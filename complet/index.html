@@ -3666,6 +3666,16 @@ function relireChantier() {
       manques.push({ label: nonLusCBT.length + ' documents CBT/PGC pas encore relus', fichier: 'tout relire en un clic', fn: function () { relireTousDocumentsCBT(); } });
     }
   })();
+  // Interfaces entre lots dans les CBT/PGC (pt.6 liste du 26/11) : suivi
+  // separe de documentsLus ci-dessus, car ce catalogue de mots-cles est
+  // arrive apres coup -- sinon les CBT deja "lus" avant le 26/11 ne
+  // seraient jamais rescannes avec ce nouveau filtre.
+  (function () {
+    var nonScannesInterfaces = rjc.filter(function (e) { return (e.docRef === 'CBT' || e.docRef === 'PGC') && (!faits.cbt.interfacesLues || faits.cbt.interfacesLues.indexOf(e.id) === -1); });
+    if (nonScannesInterfaces.length) {
+      manques.push({ label: nonScannesInterfaces.length + ' document(s) CBT/PGC pas encore scanné(s) pour les interfaces entre lots', fichier: 'tout scanner en un clic', fn: function () { relireInterfacesCBT(); } });
+    }
+  })();
   // Plans/PIC (05/11) : meme logique que le CBT.
   (function () {
     var nonLusPlans = rjc.filter(function (e) { return e.docRef === 'PLANS' && (!faits.plans.documentsLus || faits.plans.documentsLus.indexOf(e.id) === -1); });
@@ -4272,7 +4282,7 @@ function extraireFaitsInterfacesCBT(texte) {
 // que pour le lot saisi en fiche IC) -- silencieux, pas de popup, meme en
 // depot groupe (bulk) des 14 CBT d'un chantier. Relus plus tard par Alain
 // au moment de l'IC (bouton "Proposer les points du lot").
-async function extraireEtStockerPointsCBTParLot(file) {
+async function extraireEtStockerPointsCBTParLot(file, entryId) {
   var affaire = currentAffaireObj();
   if (!affaire) return;
   var texte;
@@ -4287,6 +4297,7 @@ async function extraireEtStockerPointsCBTParLot(file) {
     if (f.cbtInterfaces.some(function (x) { return x.texte === p.texte; })) return;
     f.cbtInterfaces.push({ theme: p.theme, texte: p.texte, source: file.name, inclus: false, mesure: '' });
   });
+  if (entryId && f.cbt && f.cbt.interfacesLues && f.cbt.interfacesLues.indexOf(entryId) === -1) f.cbt.interfacesLues.push(entryId);
   var metiers = icMetiersDuLot(file.name);
   if (!metiers.length) { persistAffaires(); return; }
   var points = extraireFaitsCBTParLot(texte);
@@ -4567,6 +4578,49 @@ async function relireTousDocumentsCBT() {
   }
   var libelle = nomsLus.length ? (nomsLus.length + ' document(s) relu(s) : ' + nomsLus.join(', ')) : (aLire.length + ' document(s)');
   ouvrirFaitsCBT(libelle, propositions, ids);
+}
+// [Portage PGC, pt.6 liste du 26/11] Scan "interfaces entre lots" (cf.
+// CBT_THEMES_INTERFACE) sur TOUS les CBT/PGC deposes, y compris ceux deja
+// relus pour les autres rubriques (dechets/base-vie/...) -- suivi separe
+// (faits.cbt.interfacesLues) car ce catalogue de mots-cles est arrive apres
+// coup : les CBT deja "lus" avant le 26/11 n'avaient jamais ete passes dans
+// ce filtre-la. Silencieux comme le reste de la lecture CBT (pas d'IA),
+// puis ouvre directement la fiche de validation (ouvrirMesuresCoordination)
+// pour qu'Alain voie tout de suite ce qui a ete trouve.
+async function relireInterfacesCBT() {
+  var affaire = currentAffaireObj();
+  if (!affaire) return;
+  var faits = affaireFaits(affaire);
+  if (!faits.cbt.interfacesLues) faits.cbt.interfacesLues = [];
+  if (!faits.cbtInterfaces) faits.cbtInterfaces = [];
+  var lus = faits.cbt.interfacesLues;
+  var rjc = affaire.rjc || [];
+  var aLire = rjc.filter(function (e) { return (e.docRef === 'CBT' || e.docRef === 'PGC') && lus.indexOf(e.id) === -1; });
+  if (!aLire.length) { showToast('Tous les CBT/PGC sont deja scannes pour les interfaces entre lots', 'info'); return; }
+  showToast('Scan de ' + aLire.length + ' document(s) CBT/PGC pour les interfaces entre lots...', 'info');
+  var avant = faits.cbtInterfaces.length;
+  for (var i = 0; i < aLire.length; i++) {
+    var entry = aLire[i];
+    if (!entry.fichierPath) { continue; }
+    try {
+      var donnee = await FichiersLocaux.lire(entry.fichierPath);
+      if (!donnee) continue;
+      var blob = dataUrlVersBlob(donnee);
+      var file = new File([blob], entry.fichierNom || 'document.pdf', { type: entry.fichierType || blob.type });
+      var texte = await extraireTexteFichier(file);
+      if (texte && texte.replace(/\s/g, '').length >= 30) {
+        extraireFaitsInterfacesCBT(texte).forEach(function (p) {
+          if (faits.cbtInterfaces.some(function (x) { return x.texte === p.texte; })) return;
+          faits.cbtInterfaces.push({ theme: p.theme, texte: p.texte, source: entry.fichierNom || file.name, inclus: false, mesure: '' });
+        });
+      }
+      lus.push(entry.id);
+    } catch (err) { /* document illisible : ignore, reste dans la liste des non-scannes */ }
+  }
+  persistAffaires();
+  var nouveaux = faits.cbtInterfaces.length - avant;
+  showToast(nouveaux ? (nouveaux + ' nouveau(x) constat(s) trouve(s)') : 'Scan termine, aucun nouveau constat', nouveaux ? 'success' : 'info');
+  ouvrirMesuresCoordination();
 }
 async function relireTousDocumentsPlans() {
   var affaire = currentAffaireObj();
@@ -5079,7 +5133,7 @@ async function deposerPieceDossier(affaire, file, type, bulk) {
     // y compris en depot groupe (bulk) des CBT -- pas de popup qui
     // interromprait un depot de plusieurs fichiers. Relus plus tard par
     // Alain au moment de l'IC (section D, bouton "Proposer les points du lot").
-    if (type === 'CBT') extraireEtStockerPointsCBTParLot(file);
+    if (type === 'CBT') extraireEtStockerPointsCBTParLot(file, created && created.id);
     // Co-activites datees reperees dans le planning de phasage (13/11) :
     // meme principe, silencieux (bulk ou pas), relu plus tard en fiche IC.
     if (type === 'PLAN') extraireEtStockerPlanningPhasage(file);
@@ -6025,7 +6079,7 @@ function faitsVierges() {
     // (jamais injectees sans verification -- meme logique que l'import
     // deterministe du PPSPS). exploitation/energie/stockages ajoutes le
     // 13/11 pour alimenter la Section I (meme garde-fou).
-    cbt: { dechets: '', base_vie: '', exploitation: '', energie: '', stockages: '', cloture: '', source: '', documentsLus: [] },
+    cbt: { dechets: '', base_vie: '', exploitation: '', energie: '', stockages: '', cloture: '', source: '', documentsLus: [], interfacesLues: [] },
     // Plans/PIC (05/11) : acces et cloture, reperes dans le plan de masse
     // / PIC depose (cf. ouvrirFaitsPlans) -- meme principe que le CBT.
     plans: { acces: '', cloture: '', source: '', documentsLus: [] },
@@ -6113,6 +6167,7 @@ function affaireFaits(affaire) {
   if (affaire.faits.cbt.stockages === undefined) affaire.faits.cbt.stockages = '';
   if (affaire.faits.cbt.cloture === undefined) affaire.faits.cbt.cloture = '';
   if (!affaire.faits.cbt.documentsLus) affaire.faits.cbt.documentsLus = [];
+  if (!affaire.faits.cbt.interfacesLues) affaire.faits.cbt.interfacesLues = [];
   if (!affaire.faits.plans.documentsLus) affaire.faits.plans.documentsLus = [];
   if (!affaire.faits.alertesPlanning) affaire.faits.alertesPlanning = [];
   if (!affaire.faits.plans) affaire.faits.plans = faitsVierges().plans;
