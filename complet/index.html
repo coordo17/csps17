@@ -8294,6 +8294,65 @@ function corpsSection3PGCNatif(data, faits) {
     b += wTable(['Métier (lot)', 'Situation / risque', 'Mesure de prévention'], lignesMetiers, [2200, 2800, 4000]);
   }
 
+  b += corpsMeteoNatif(data);
+
+  return b;
+}
+// [Portage Harmo, pt.8 liste du 26/11] Mesures de prevention liees aux
+// conditions climatiques -- meme mecanisme qu'Harmo : "Froid et
+// intemperies" toujours affiche (texte reglementaire fixe, jamais une
+// affirmation specifique au chantier) ; "Chaleur intense" conditionne aux
+// dates debut/fin deja saisies (chapitre complet R.4463 si le chantier
+// touche juillet-septembre, phrase courte au conditionnel s'il touche
+// seulement mai-mi-juillet, rien sinon). Par prudence, si les dates sont
+// absentes ou inexploitables, le chapitre complet reste inclus (comme
+// Harmo) -- jamais d'omission par defaut d'une obligation legale.
+function corpsMeteoNatif(data) {
+  var c = (data && data.chantier) || {};
+  var b = '';
+  b += wH2('Mesures de prévention liées aux conditions climatiques (chaleur, froid, intempéries)');
+  b += wP('Le coordonnateur SPS intègre au PGC les mesures de prévention relatives aux conditions climatiques susceptibles d\'affecter la santé et la sécurité des travailleurs pendant la durée du chantier.', {sz:18, spacing:80, color:'64748b'});
+
+  var dDeb = c.debut ? new Date(c.debut) : null;
+  var dFin = c.fin ? new Date(c.fin) : null;
+  var toucheCaniculePleine = true, toucheCaniculePrecoce = false;
+  if (dDeb && dFin && !isNaN(dDeb.getTime()) && !isNaN(dFin.getTime()) && dFin >= dDeb) {
+    toucheCaniculePleine = false;
+    for (var an = dDeb.getFullYear(); an <= dFin.getFullYear(); an++) {
+      var pleineDeb = new Date(an, 6, 15), pleineFin = new Date(an, 8, 30); // 15 juillet -> 30 septembre
+      var precoceDeb = new Date(an, 4, 1), precoceFin = new Date(an, 6, 14); // 1er mai -> 14 juillet
+      if (dDeb <= pleineFin && dFin >= pleineDeb) toucheCaniculePleine = true;
+      if (dDeb <= precoceFin && dFin >= precoceDeb) toucheCaniculePrecoce = true;
+    }
+  }
+
+  if (toucheCaniculePleine) {
+    b += wH2('Épisodes de chaleur intense (R.4463-1 à R.4463-8)');
+    b += wP('Le Code du travail (articles R.4463-1 à R.4463-8, créés par le décret n°2025-482 du 27 mai 2025, applicable depuis le 1er juillet 2025) impose la prévention des risques liés aux épisodes de chaleur intense. L\'article R.4463-8 prévoit expressément que le plan général de coordination et les plans particuliers de sécurité et de protection de la santé tiennent compte, le cas échéant, de ces risques.', {sz:18, spacing:80, color:'475569'});
+    [
+      'Adaptation de l\'organisation et des horaires de travail afin de limiter la durée et l\'intensité de l\'exposition, et prévoir des périodes de repos.',
+      'Mise en œuvre de moyens techniques pour réduire le rayonnement solaire sur les surfaces exposées ou prévenir l\'accumulation de chaleur dans les locaux ou aux postes de travail.',
+      'Mise à disposition d\'eau potable et fraîche en quantité suffisante, constamment assurée pendant l\'épisode de chaleur intense, maintenue au frais tout au long de la journée, à proximité des postes de travail, y compris extérieurs (article R.4225-2 du Code du travail) ; lorsque l\'eau courante ne peut être mise en place, au moins trois litres par jour et par travailleur (article R.4534-143).',
+      'Choix d\'équipements de travail et d\'équipements de protection individuelle adaptés, permettant de maintenir une température corporelle stable et de limiter les effets des fortes températures et du rayonnement solaire.',
+      'Information et formation des travailleurs sur la conduite à tenir en cas de forte chaleur et sur l\'utilisation correcte des équipements.',
+      'Prise en compte des travailleurs particulièrement vulnérables (âge, état de santé), en lien avec le service de prévention et de santé au travail.',
+      'Définition des modalités de signalement de tout indice physiologique préoccupant, de malaise ou de détresse, et des moyens destinés à porter secours dans les meilleurs délais, en particulier aux travailleurs isolés ou éloignés.'
+    ].forEach(function(x){ b += wLi(x); });
+  } else if (toucheCaniculePrecoce) {
+    b += wH2('Épisode de chaleur intense');
+    b += wP('Les vagues de chaleur sont de plus en plus précoces (dès le mois de mai) : si un épisode de chaleur intense devait survenir pendant le chantier, les mesures de prévention prévues par les articles R.4463-1 à R.4463-8 du Code du travail seraient mises en œuvre, précisées le cas échéant par avenant au présent PGC.', {sz:18, spacing:80, color:'475569'});
+  }
+
+  b += wH2('Froid et intempéries (R.4534-138, R.4534-142-1, R.4223-13, R.4223-15)');
+  b += wP('Les entreprises intervenant sur le chantier disposent soit d\'un local permettant leur accueil dans des conditions de nature à préserver leur santé et leur sécurité en cas de conditions climatiques susceptibles d\'y porter atteinte, soit d\'aménagements de chantier garantissant des conditions équivalentes (article R.4534-142-1).', {sz:18, spacing:80, color:'475569'});
+  b += wP('Les locaux fermés affectés au travail sur le chantier sont maintenus, en toute saison, à une température adaptée à l\'activité des travailleurs et à leur environnement (article R.4223-13, applicable aux locaux de travail fermés des chantiers soumis à coordination SPS par renvoi de l\'article R.4534-138, qui vise également l\'article R.4223-15 relatif à la protection contre le froid et les intempéries).', {sz:18, spacing:80, color:'475569'});
+  b += wP('L\'organisation du travail est adaptée en cas d\'intempéries afin de préserver la santé et la sécurité des travailleurs. Les travaux concernés sont reportés dès que les conditions suivantes sont atteintes — l\'appréciation relevant de l\'entreprise concernée, au regard de son évaluation des risques et, le cas échéant, des notices de ses équipements, avec information du coordonnateur SPS dans tous les cas :', {sz:18, spacing:80, color:'475569'});
+  [
+    'Gel, verglas : risque de chute par glissade sur les circulations, platelages et accès en hauteur — salage ou sablage des zones de circulation ; report des travaux de terrassement, de couverture ou d\'accès en hauteur tant que la zone concernée n\'est pas sécurisée.',
+    'Vent fort : risque de chute d\'objets, d\'instabilité des échafaudages, des éléments de bardage ou de couverture en cours de pose, ou des engins de levage — report des travaux de couverture, de bardage, de terrassement ou d\'échafaudage/façade au-delà du seuil fixé par la notice du matériel utilisé.',
+    'Forte pluie : risque de glissade et d\'affaissement ou de déstabilisation des sols en cours de terrassement — report des travaux de terrassement, de couverture ou d\'échafaudage/façade.'
+  ].forEach(function(x){ b += wLi(x); });
+
   return b;
 }
 
