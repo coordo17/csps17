@@ -783,6 +783,7 @@
             </div>
             <div class="form-row">
               <div class="field"><label>Date previsionnelle debut travaux</label><input type="date" id="chantier-debut"></div>
+              <div class="field"><label>Date previsionnelle fin travaux</label><input type="date" id="chantier-fin"></div>
               <div class="field"><label>Duree previsionnelle</label><input type="text" id="chantier-duree" placeholder="Ex : 10 mois"></div>
               <div class="field"><label>Montant estime (EUR HT)</label><input type="text" id="chantier-montant" placeholder="NC"></div>
             </div>
@@ -1792,6 +1793,48 @@ function captureEntre(texte, labelDebut, labelsFin, maxLen) {
   return rest.slice(0, endIdx).replace(/\s+/g, ' ').replace(/[\s\-–,]+$/, '').trim();
 }
 
+// [26/11, demande d'Alain : "meme si nous n'avons pas les jours nous
+// pouvons remplir les mois et annees"] -- certaines conventions ne donnent
+// le debut des travaux qu'en mois/annee ("Novembre 2026", "11/2026",
+// "nov-26"...), jamais un jour precis. Jusqu'ici ce cas restait non
+// exploite (juste un toast demandant une saisie manuelle). On autorise
+// desormais le jour 1er du mois comme convention explicite et assumee
+// (jamais un jour invente au hasard, toujours signale par le toast), pour
+// pre-remplir les champs date -- l'utilisateur corrige ensuite s'il
+// connait le jour exact.
+var MOIS_FR_ABREGES = ['janv','fevr','mars','avr','mai','juin','juil','aout','sept','oct','nov','dec'];
+function parseMoisAnneeTexte(txt) {
+  if (!txt) return null;
+  var t = String(txt).toLowerCase().trim();
+  var m = t.match(/^(\d{4})[\/\-](\d{1,2})$/);
+  if (m) { var mo = parseInt(m[2], 10); return (mo >= 1 && mo <= 12) ? { annee: parseInt(m[1], 10), mois: mo } : null; }
+  m = t.match(/^(\d{1,2})[\/\-](\d{2,4})$/);
+  if (m) {
+    var mo2 = parseInt(m[1], 10);
+    if (mo2 < 1 || mo2 > 12) return null;
+    var an = parseInt(m[2], 10); if (an < 100) an += 2000;
+    return { annee: an, mois: mo2 };
+  }
+  for (var i = 0; i < MOIS_FR_ABREGES.length; i++) {
+    var re = new RegExp('\\b' + MOIS_FR_ABREGES[i] + '[a-z]*\\.?\\s*[\\-\\s]?\\s*(\\d{2,4})\\b', 'i');
+    var mm = t.match(re);
+    if (mm) { var an2 = parseInt(mm[1], 10); if (an2 < 100) an2 += 2000; return { annee: an2, mois: i + 1 }; }
+  }
+  return null;
+}
+function parseDureeMois(txt) {
+  if (!txt) return null;
+  var m = String(txt).match(/(\d+)\s*mois/i);
+  return m ? parseInt(m[1], 10) : null;
+}
+function ajouterMoisISO(iso, nMois) {
+  var p = String(iso || '').split('-');
+  if (p.length !== 3) return '';
+  var d = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1 + nMois, parseInt(p[2], 10));
+  var mm = String(d.getMonth() + 1).padStart(2, '0');
+  var dd = String(d.getDate()).padStart(2, '0');
+  return d.getFullYear() + '-' + mm + '-' + dd;
+}
 function extraireConventionSPS(texte) {
   var t = texte.replace(/\s+/g, ' ');
   var out = {};
@@ -1926,7 +1969,18 @@ async function importerConventionDepuisFichier(file) {
       selectCat(infos.categorie); n++;
     }
     if (infos.chantier_debut_txt) {
-      showToast('Date de début repérée en texte libre ("' + infos.chantier_debut_txt + '") — à saisir manuellement dans le champ date.', '');
+      var elDebut = document.getElementById('chantier-debut');
+      var moisAnnee = parseMoisAnneeTexte(infos.chantier_debut_txt);
+      if (moisAnnee && elDebut && !elDebut.value) {
+        var isoDebut = moisAnnee.annee + '-' + String(moisAnnee.mois).padStart(2, '0') + '-01';
+        elDebut.value = isoDebut; n++;
+        var nMois = parseDureeMois(infos.chantier_duree);
+        var elFin = document.getElementById('chantier-fin');
+        if (nMois && elFin && !elFin.value) { elFin.value = ajouterMoisISO(isoDebut, nMois); n++; }
+        showToast('Début des travaux repéré en mois/année ("' + infos.chantier_debut_txt + '") — jour fixé au 1er par convention, à corriger si vous connaissez la date exacte.', '');
+      } else {
+        showToast('Date de début repérée en texte libre ("' + infos.chantier_debut_txt + '") — à saisir manuellement dans le champ date.', '');
+      }
     }
     showToast(n ? n + ' champ(s) repéré(s) dans ' + file.name + ' — à vérifier avant d\'enregistrer.' : 'Aucune information exploitable repérée dans ' + file.name + '.', n ? 'success' : 'error');
   } catch (err) {
@@ -2040,6 +2094,7 @@ function collectFormData() {
       adresse: document.getElementById('chantier-adresse').value,
       nature: document.getElementById('chantier-nature').value,
       debut: document.getElementById('chantier-debut').value,
+      fin: document.getElementById('chantier-fin') ? document.getElementById('chantier-fin').value : '',
       duree: document.getElementById('chantier-duree').value,
       montant: document.getElementById('chantier-montant').value,
       marche: document.getElementById('chantier-marche').value,
@@ -8897,6 +8952,7 @@ function genererPGCNatif(ref){
     if(data.cspsr && data.cspsr.nom) body += wFL('Coordonnateur SPS — Réalisation', data.cspsr.nom);
     body += wFL('Catégorie de l\'opération', data.cat ? ('Catégorie '+data.cat) : 'à définir');
     if(c.debut) body += wFL('Début prévisionnel des travaux', formatDateFR(c.debut));
+    if(c.fin) body += wFL('Fin prévisionnelle des travaux', formatDateFR(c.fin));
     if(c.duree) body += wFL('Durée prévisionnelle', c.duree);
     if(c.hj) body += wFL('Effectif prévisionnel (hommes-jours)', c.hj);
 
