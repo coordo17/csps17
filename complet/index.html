@@ -3630,7 +3630,7 @@ function relireChantier() {
   var contr = dernierDoc('CONTRAINTES');
   if (contr && !faits.reseaux.source && !faits.contraintes.source) manques.push({ label: 'R\u00e9seaux / contraintes du site', fichier: contr.fichierNom || contr.objet, fn: ouvrirFaitsContraintes });
   var plan = dernierDoc('PLAN');
-  if (plan && !faits.coactivites.length) manques.push({ label: 'Planning / co-activit\u00e9s', fichier: plan.fichierNom || plan.objet, fn: ouvrirFaitsPlanning });
+  if (plan && !faits.coactivites.length) manques.push({ label: 'Planning / co-activit\u00e9s', fichier: plan.fichierNom || plan.objet, fn: function () { relireDocumentPlanningAuto(plan); } });
   // Inspection commune : une fiche de faits par entreprise, donc on verifie
   // CHAQUE ICR depose (pas seulement le dernier) -- un chantier a plusieurs
   // entreprises inspectees separement.
@@ -4382,6 +4382,43 @@ async function relireDocumentCBTAuto(entry) {
   }
   ouvrirFaitsCBT(entry.fichierNom, propositions, entry.id);
 }
+// 26/11 (demande d'Alain, en reexaminant le parseur planning d'Harmo :
+// "nous avons reussi a lire un planning Gantt en deterministe") : CSPS17
+// sait deja le faire depuis le 13/11 (parserPlanningPhasage /
+// detecterCoactivitesPlanning, porte du parseur d'Harmo -- "plus grand vide
+// entre colonnes" pour retrouver phase > lot > tache, sans IA) et
+// repererPassagesMultiples pour les alertes mots-cles -- mais "Relire le
+// chantier" rouvrait la fiche Planning avec juste le NOM du fichier
+// (fn: ouvrirFaitsPlanning), jamais son contenu relu, contrairement au CBT
+// et aux Plans qui ont deja leur propre relireDocumentXxxAuto. Les deux
+// zones restaient donc toujours vides. Meme mecanique ici : on relit le
+// fichier deja stocke (FichiersLocaux), on recalcule les propositions, et
+// on les merge dans les faits deja accumules (planningCoactivites) --
+// jamais ecrit sans qu'Alain relise et clique Enregistrer.
+async function relireDocumentPlanningAuto(entry) {
+  var affaire = currentAffaireObj();
+  if (!entry || !entry.fichierPath) { ouvrirFaitsPlanning(entry && entry.fichierNom); return; }
+  var alertes = [], coactivitesProposees = [];
+  try {
+    var donnee = await FichiersLocaux.lire(entry.fichierPath);
+    if (!donnee) throw new Error('fichier absent');
+    var blob = dataUrlVersBlob(donnee);
+    var file = new File([blob], entry.fichierNom || 'document.pdf', { type: entry.fichierType || blob.type });
+    var texte = await extraireTexteFichier(file);
+    if (texte && texte.replace(/\s/g, '').length >= 30) {
+      alertes = repererPassagesMultiples(texte, PLANNING_ALERTE_MOTS, 8);
+    }
+    if (affaire) {
+      await extraireEtStockerPlanningPhasage(file);
+      coactivitesProposees = (affaireFaits(affaire).planningCoactivites || [])
+        .filter(function (c) { return c.source === file.name; })
+        .map(function (c) { return c.a + ' / ' + c.b + ' — chevauchement du ' + formatDateFR(String(c.debut).slice(0, 10)) + ' au ' + formatDateFR(String(c.fin).slice(0, 10)); });
+    }
+  } catch (err) {
+    showToast('Lecture impossible (' + (entry.fichierNom || 'document') + ') : fiche ouverte vide', 'error');
+  }
+  ouvrirFaitsPlanning(entry.fichierNom, alertes, coactivitesProposees);
+}
 async function relireDocumentPlansAuto(entry) {
   if (!entry || !entry.fichierPath) { showToast('Fichier introuvable sur cet appareil (sync partielle ?)', 'error'); return; }
   var propositions = {};
@@ -4671,18 +4708,21 @@ async function ouvrirFaitsPlanningDepuisFichier(file) {
   } catch (err) { /* document illisible : fiche ouverte vide, saisie manuelle possible */ }
   ouvrirFaitsPlanning(file.name, propositions);
 }
-function ouvrirFaitsPlanning(fichierNom, propositions) {
+function ouvrirFaitsPlanning(fichierNom, propositions, propositionsCoactivites) {
   var affaire = currentAffaireObj();
   if (!affaire) { showToast('Ouvrez une affaire avant de saisir ces faits', 'error'); return; }
   var f = affaireFaits(affaire);
   var texte = (f.coactivites || []).map(function (c) { return c.description; }).filter(Boolean).join('\n');
   var alertesExistantes = (f.alertesPlanning || []).join('\n');
   var prop = propositions || [];
+  var propCoact = propositionsCoactivites || [];
   var alertesVal = alertesExistantes || prop.join('\n');
+  var coactVal = texte || propCoact.join('\n');
   var html = '<p style="margin-bottom:10px;font-size:13px;color:var(--text-light);">'
     + (fichierNom ? 'Document depose : <strong>' + icEscAttr(fichierNom) + '</strong>. ' : '')
     + 'Une co-activite par ligne (entreprises, periode, nature). Alimente le PGC (phasage / co-activite). Laissez vide si non concerne.</p>'
-    + '<textarea id="faits-plan-coact" rows="6" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Lot gros-oeuvre / Lot charpente — semaines 12-14 — travaux simultanes en zone B">' + icEscAttr(texte) + '</textarea>'
+    + (propCoact.length && !texte ? '<p style="font-size:12px;color:var(--text-light);margin-bottom:6px;"><strong>Chevauchements de dates repérés automatiquement dans le planning (à vérifier, rien n\'est jugé à votre place) :</strong> relisez et corrigez avant d\'enregistrer.</p>' : '')
+    + '<textarea id="faits-plan-coact" rows="6" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Lot gros-oeuvre / Lot charpente — semaines 12-14 — travaux simultanes en zone B">' + icEscAttr(coactVal) + '</textarea>'
     + '<div style="font-weight:700;color:#B91C1C;margin:14px 0 6px;">&#9888; Alertes critiques du planning (une par ligne)</div>'
     + (prop.length && !alertesExistantes ? '<p style="font-size:12px;color:var(--text-light);margin-bottom:6px;"><strong>Passages repérés automatiquement (à vérifier, rien n\'est jugé à votre place) :</strong> relisez et corrigez avant d\'enregistrer.</p>' : '')
     + '<textarea id="faits-plan-alertes" rows="5" style="width:100%;padding:8px;border:1px solid #CC0000;border-radius:6px;font-family:inherit;" placeholder="Ex: Travaux de toiture et terrassement en meme temps en zone B -- chute d\'objet possible">' + icEscAttr(alertesVal) + '</textarea>';
