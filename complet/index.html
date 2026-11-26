@@ -4401,6 +4401,13 @@ function enregistrerFaitsCBT(affaire, fichierNom, entryId) {
 // ============================================================================
 var PLANS_ACCES_MOTS = ['acces chantier', 'acces au chantier', 'acces engins', 'acces poids lourds', 'entree chantier', 'acces principal', 'voie d\'acces'];
 var PLANS_CLOTURE_MOTS = ['cloture', 'clôture', 'palissade', 'grillage', 'heras', 'portail'];
+// [Portage PGC, pt.7 liste du 26/11] Legendes utiles d'un plan d'installation
+// de chantier (PIC) -- catalogue volontairement restreint (contrairement a
+// Harmo sur ce chantier, dont la version melangeait les legendes du PIC
+// avec un rapport de depollution annexe au meme fichier, resultat tres
+// bruite) : on ne vise que des legendes de PIC genuinement utiles, jamais
+// une liste exhaustive de mots-cles.
+var PLANS_OBSERVATIONS_MOTS = ['stockage au sol', 'vitesse limitee', 'vitesse limitée', 'cheminement pieton', 'cheminement piéton', 'zone de livraison', 'aire de livraison', 'zone de dechargement', 'zone de déchargement', 'sens de circulation', 'aire de retournement'];
 async function ouvrirFaitsPlansDepuisFichier(file, entryId) {
   var affaire = currentAffaireObj();
   if (!affaire) { showToast('Ouvrez une affaire avant de deposer un plan', 'error'); return; }
@@ -4410,6 +4417,7 @@ async function ouvrirFaitsPlansDepuisFichier(file, entryId) {
     if (texte && texte.replace(/\s/g, '').length >= 30) {
       propositions.acces = repererClauseCBT(texte, PLANS_ACCES_MOTS);
       propositions.cloture = repererClauseCBT(texte, PLANS_CLOTURE_MOTS);
+      propositions.observations = repererPassagesMultiples(texte, PLANS_OBSERVATIONS_MOTS, 6);
     }
   } catch (err) { /* document illisible : fiche ouverte vide */ }
   ouvrirFaitsPlans(file.name, propositions, entryId);
@@ -4421,7 +4429,9 @@ function ouvrirFaitsPlans(fichierNom, propositions, entryId) {
   var prop = propositions || {};
   var accesVal = fusionnerPropositionCBT(f.acces, prop.acces);
   var clotureVal = fusionnerPropositionCBT(f.cloture, prop.cloture);
-  var uneProposPlans = (accesVal !== (f.acces||'')) || (clotureVal !== (f.cloture||''));
+  var observationsExistantes = (f.observations || []).join('\n');
+  var observationsVal = observationsExistantes || (prop.observations || []).join('\n');
+  var uneProposPlans = (accesVal !== (f.acces||'')) || (clotureVal !== (f.cloture||'')) || (observationsVal && !observationsExistantes);
   var html = '<p style="margin-bottom:10px;font-size:13px;color:var(--text-light);">'
     + (fichierNom ? 'Document depose : <strong>' + icEscAttr(fichierNom) + '</strong>. ' : '')
     + 'Info de chantier (plan de masse / PIC) -- alimente la grille de la fiche IC (§4A) et les observations du CSPS (§12). '
@@ -4429,8 +4439,10 @@ function ouvrirFaitsPlans(fichierNom, propositions, entryId) {
     + 'Laissez vide si non concerne.</p>'
     + '<div class="field" style="margin-bottom:10px;"><label>Accès chantier (engins, poids lourds, voie d\'accès)</label>'
     + '<textarea id="faits-plans-acces" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Accès unique par la voie communale, coté nord, largeur 4m.">' + icEscAttr(accesVal) + '</textarea></div>'
-    + '<div class="field"><label>Clôture / périmètre du chantier</label>'
-    + '<textarea id="faits-plans-cloture" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Clôture HERAS sur tout le périmètre, portail cadenassé.">' + icEscAttr(clotureVal) + '</textarea></div>';
+    + '<div class="field" style="margin-bottom:10px;"><label>Clôture / périmètre du chantier</label>'
+    + '<textarea id="faits-plans-cloture" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Clôture HERAS sur tout le périmètre, portail cadenassé.">' + icEscAttr(clotureVal) + '</textarea></div>'
+    + '<div class="field"><label>Observations relevées sur les plans (une par ligne)</label>'
+    + '<textarea id="faits-plans-observations" rows="4" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Stockage au sol prévu zone nord-est.">' + icEscAttr(observationsVal) + '</textarea></div>';
   openDocModal('Faits Plans/PIC (accès / clôture)' + (f.source ? ' — source : ' + icEscAttr(f.source) : ''), html, 'Enregistrer', function () {
     enregistrerFaitsPlans(affaire, fichierNom, entryId);
   });
@@ -4443,6 +4455,7 @@ function enregistrerFaitsPlans(affaire, fichierNom, entryId) {
   f.plans = {
     acces: document.getElementById('faits-plans-acces').value.trim(),
     cloture: document.getElementById('faits-plans-cloture').value.trim(),
+    observations: document.getElementById('faits-plans-observations').value.split('\n').map(function (l) { return l.trim(); }).filter(Boolean),
     source: (fichierNom ? fichierNom + ' — ' : '') + 'saisi le ' + new Date().toLocaleDateString('fr-FR'),
     documentsLus: documentsLus
   };
@@ -4528,6 +4541,7 @@ async function relireDocumentPlansAuto(entry) {
     if (texte && texte.replace(/\s/g, '').length >= 30) {
       propositions.acces = repererClauseCBT(texte, PLANS_ACCES_MOTS);
       propositions.cloture = repererClauseCBT(texte, PLANS_CLOTURE_MOTS);
+      propositions.observations = repererPassagesMultiples(texte, PLANS_OBSERVATIONS_MOTS, 6);
     }
   } catch (err) {
     showToast('Lecture impossible (' + (entry.fichierNom || 'document') + ') : fiche ouverte vide', 'error');
@@ -4634,7 +4648,7 @@ async function relireTousDocumentsPlans() {
   var propositions = {};
   var ids = [];
   var nomsLus = [];
-  var sourceAcces = null, sourceCloture = null;
+  var sourceAcces = null, sourceCloture = null, sourceObservations = null;
   for (var i = 0; i < aLire.length; i++) {
     var entry = aLire[i];
     ids.push(entry.id);
@@ -4660,6 +4674,14 @@ async function relireTousDocumentsPlans() {
         if (!sourceCloture) {
           var propCloture = repererClauseCBT(texte, PLANS_CLOTURE_MOTS);
           if (propCloture) { propositions.cloture = propCloture; sourceCloture = entry.fichierNom; }
+        }
+        // Observations (pt.7, 26/11) : meme restriction qu'acces/cloture --
+        // on ne garde que le PREMIER plan qui en propose, pour les memes
+        // raisons (texte de plan PDF dans un ordre quasi aleatoire, fusionner
+        // plusieurs plans empile du bruit).
+        if (!sourceObservations) {
+          var propObs = repererPassagesMultiples(texte, PLANS_OBSERVATIONS_MOTS, 6);
+          if (propObs.length) { propositions.observations = propObs; sourceObservations = entry.fichierNom; }
         }
         nomsLus.push(entry.fichierNom);
       }
@@ -6082,7 +6104,7 @@ function faitsVierges() {
     cbt: { dechets: '', base_vie: '', exploitation: '', energie: '', stockages: '', cloture: '', source: '', documentsLus: [], interfacesLues: [] },
     // Plans/PIC (05/11) : acces et cloture, reperes dans le plan de masse
     // / PIC depose (cf. ouvrirFaitsPlans) -- meme principe que le CBT.
-    plans: { acces: '', cloture: '', source: '', documentsLus: [] },
+    plans: { acces: '', cloture: '', observations: [], source: '', documentsLus: [] },
     // Points de coordination par lot reperes dans les CBT deposes (13/11) --
     // cle = metier (IC_METIER_MOTS), valeur = liste de {theme, texte, source}.
     // Jamais injectes directement : proposes en fiche IC (section D) pour
@@ -6169,6 +6191,7 @@ function affaireFaits(affaire) {
   if (!affaire.faits.cbt.documentsLus) affaire.faits.cbt.documentsLus = [];
   if (!affaire.faits.cbt.interfacesLues) affaire.faits.cbt.interfacesLues = [];
   if (!affaire.faits.plans.documentsLus) affaire.faits.plans.documentsLus = [];
+  if (!affaire.faits.plans.observations) affaire.faits.plans.observations = [];
   if (!affaire.faits.alertesPlanning) affaire.faits.alertesPlanning = [];
   if (!affaire.faits.plans) affaire.faits.plans = faitsVierges().plans;
   if (!affaire.faits.cbtPoints) affaire.faits.cbtPoints = {};
@@ -8895,6 +8918,16 @@ function genererPGCNatif(ref){
       body += wP('Accès et clôture du chantier', {b:true,sz:20,spacing:60});
       if (pl.acces) body += wLi('Accès chantier : ' + pl.acces);
       if (clotureTexteDoc) body += wLi('Clôture / périmètre : ' + clotureTexteDoc);
+    }
+
+    // Observations relevees sur les plans (pt.7, 26/11) : quelques legendes
+    // de PIC curatees et utiles (cf. PLANS_OBSERVATIONS_MOTS), jamais une
+    // liste exhaustive -- voir la note dans le catalogue sur la version
+    // Harmo de ce chantier, trop bruitee.
+    if (pl.observations && pl.observations.length) {
+      if (sectionsVides) { body += wH('2. Organisation générale, diagnostics et contraintes'); sectionsVides = false; }
+      body += wP('Observations relevées sur les plans', {b:true,sz:20,spacing:60});
+      pl.observations.forEach(function(o){ if (o) body += wLi(o); });
     }
 
     // 2.5 Phasage et co-activite (planning, cf. ouvrirFaitsPlanning) --
