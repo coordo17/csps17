@@ -3966,7 +3966,11 @@ function ouvrirFaitsContraintes(fichierNom) {
     + '<div style="font-weight:700;color:var(--blue-dark);margin:14px 0 6px;">Contraintes du site</div>'
     + '<textarea id="faits-ctr-synthese" rows="3" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Servitudes, voisinage, acces, exploitation, reseaux aeriens...">' + icEscAttr(c.synthese) + '</textarea>'
     + '<div class="field" style="margin-top:10px;"><label>Arrete de voirie (reference ou nom du document, si obtenu)</label>'
-    + '<input type="text" id="faits-ctr-voirie" value="' + icEscAttr(c.arrete_voirie) + '" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;" placeholder="Ex: Arrete n°2026-114 du 12/09/2026"></div>';
+    + '<input type="text" id="faits-ctr-voirie" value="' + icEscAttr(c.arrete_voirie) + '" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;" placeholder="Ex: Arrete n°2026-114 du 12/09/2026"></div>'
+    + '<div style="font-weight:700;color:var(--blue-dark);margin:14px 0 6px;">Description du site (cochez ce qui s\'applique -- rien n\'est coche par defaut)</div>'
+    + '<div class="field" style="margin-bottom:6px;"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:14px;"><input type="checkbox" id="faits-ctr-riverains"' + (c.riverains ? ' checked' : '') + '> Présence de riverains (habitations, commerces ou ERP) à proximité immédiate</label></div>'
+    + '<div class="field" style="margin-bottom:6px;"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:14px;"><input type="checkbox" id="faits-ctr-nuisances"' + (c.nuisances ? ' checked' : '') + '> Nuisances attendues pour le voisinage (bruit, poussières, vibrations)</label></div>'
+    + '<div class="field" style="margin-bottom:6px;"><label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:14px;"><input type="checkbox" id="faits-ctr-circulation"' + (c.circulation ? ' checked' : '') + '> Proximité d\'axes de circulation publique (piétons et/ou véhicules)</label></div>';
   openDocModal('Réseaux / contraintes du site', html, 'Enregistrer', function () {
     enregistrerFaitsContraintes(affaire, fichierNom);
   });
@@ -3982,7 +3986,14 @@ function enregistrerFaitsContraintes(affaire, fichierNom) {
     observation: document.getElementById('faits-rz-obs').value.trim(),
     source: src
   };
-  f.contraintes = { synthese: document.getElementById('faits-ctr-synthese').value.trim(), arrete_voirie: document.getElementById('faits-ctr-voirie').value.trim(), source: src };
+  f.contraintes = {
+    synthese: document.getElementById('faits-ctr-synthese').value.trim(),
+    arrete_voirie: document.getElementById('faits-ctr-voirie').value.trim(),
+    riverains: document.getElementById('faits-ctr-riverains').checked,
+    nuisances: document.getElementById('faits-ctr-nuisances').checked,
+    circulation: document.getElementById('faits-ctr-circulation').checked,
+    source: src
+  };
   persistAffaires();
   showToast('Reseaux / contraintes enregistres', 'success');
 }
@@ -5921,7 +5932,7 @@ function faitsVierges() {
     plomb: { presence: false, localisation: '', date_rapport: '', bureau: '', source: '' },
     reseaux: { dt_recue: false, dict_envoyee: false, dict_recue: false, date: '', observation: '', source: '' },
     inspectionPrealable: [],
-    contraintes: { synthese: '', arrete_voirie: '', source: '' },
+    contraintes: { synthese: '', arrete_voirie: '', riverains: false, nuisances: false, circulation: false, source: '' },
     coactivites: [],
     // Alertes critiques du planning (05/11, demande d'Alain : remettre en
     // deterministe ce que l'analyse IA du planning produisait --
@@ -8695,6 +8706,20 @@ function genererPGCNatif(ref){
       if (sectionsVides) { body += wH('2. Organisation générale, diagnostics et contraintes'); sectionsVides = false; }
       body += wP('Réseaux et contraintes du site', {b:true,sz:20,spacing:60});
       lignesRz.forEach(function(l){ body += wLi(l); });
+    }
+
+    // Description du site -- [Portage PGC, pt.5 liste du 26/11] constats
+    // generiques coches un par un par Alain dans la fiche Contraintes
+    // (jamais devines) ; texte repris quasi mot pour mot d'Harmo pour
+    // chaque constat coche.
+    var descSite = [];
+    if (ctr.riverains) descSite.push('Présence de riverains (habitations, commerces ou ERP) à proximité immédiate du chantier ; les nuisances devront être limitées et les accès aux tiers préservés.');
+    if (ctr.nuisances) descSite.push('Le chantier est susceptible de générer des nuisances (bruit, poussières, vibrations) ; les entreprises concernées précisent, dans leur PPSPS, les horaires et moyens de réduction retenus.');
+    if (ctr.circulation) descSite.push('Le chantier est situé à proximité d\'axes de circulation publique (piétons et/ou véhicules) ; la sécurisation des abords devra être assurée en permanence.');
+    if (descSite.length) {
+      if (sectionsVides) { body += wH('2. Organisation générale, diagnostics et contraintes'); sectionsVides = false; }
+      body += wP('Description du site', {b:true,sz:20,spacing:60});
+      descSite.forEach(function(l){ body += wLi(l); });
     }
 
     // 2.2bis VRD prealable et autorisations de voirie -- texte reglementaire
