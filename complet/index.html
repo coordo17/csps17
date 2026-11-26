@@ -3735,14 +3735,29 @@ function faitsInspectionTrouverEntree(affaire, fichierNom) {
   }
   return -1;
 }
+// 26/11 (demande d'Alain, "CSPS17 doit tout preremplir") : quand le document
+// depose est une FIC generee par CSPS17 lui-meme -- nom du type
+// "CSPS17_FIC_CSPS-<entreprise>_<AAAAMMJJ>-<HHMM>[...].ext", convention de
+// nommage fixee par CSPS17 au moment du telechargement (cf. plus haut dans
+// ce fichier, construction de a.download) -- le nom de l'entreprise est deja
+// connu : on le relit dans le nom de fichier. Ce n'est PAS une extraction du
+// contenu du document (donc pas d'IA, pas de devinette) : juste relire sa
+// propre convention de nommage. Alain reste libre de corriger et doit
+// toujours cliquer "Enregistrer" -- rien n'est ecrit tant qu'il ne valide pas.
+function extraireEntrepriseNomFIC(fichierNom) {
+  var m = /^csps17_fic[_-](?:csps-)?(.+?)_\d{8}-\d{4}/i.exec(String(fichierNom || '').trim());
+  return m ? m[1].trim() : '';
+}
 function ouvrirFaitsInspection(fichierNom) {
   var affaire = currentAffaireObj();
   if (!affaire) { showToast('Ouvrez une affaire avant de saisir ces faits', 'error'); return; }
   var idx = faitsInspectionTrouverEntree(affaire, fichierNom);
-  var f = idx >= 0 ? affaireFaits(affaire).inspectionPrealable[idx] : { entreprise: '', article: '', delai_ppsps_jours: '', source: '' };
+  var entrepriseProposee = idx < 0 ? extraireEntrepriseNomFIC(fichierNom) : '';
+  var f = idx >= 0 ? affaireFaits(affaire).inspectionPrealable[idx] : { entreprise: entrepriseProposee, article: '', delai_ppsps_jours: '', source: '' };
   var html = '<p style="margin-bottom:10px;font-size:13px;color:var(--text-light);">'
     + (fichierNom ? 'Document depose : <strong>' + icEscAttr(fichierNom) + '</strong>. ' : '')
     + 'Une fiche par entreprise inspectee. Alimente les observations du CSPS (§11) sur la fiche IC de cette entreprise. Laissez vide si non concerne.</p>'
+    + (entrepriseProposee ? '<p style="margin-bottom:10px;font-size:12px;color:var(--orange-dark);background:#fff7ed;border:1px solid #fdba74;border-radius:6px;padding:6px 10px;">Entreprise pre-remplie depuis le nom du fichier -- verifiez avant d\'enregistrer.</p>' : '')
     + '<div class="field" style="margin-bottom:10px;"><label>Entreprise concernee</label>'
     + '<select id="faits-insp-ent-sel" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;" onchange="document.getElementById(\'faits-insp-ent\').value = this.value;">'
     + faitsOptionsEntreprises(affaire, f.entreprise)
