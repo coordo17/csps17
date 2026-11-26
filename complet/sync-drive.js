@@ -962,8 +962,21 @@
   // est maintenant protegee par un filet global -- un clic sur "Dossier
   // local" doit TOUJOURS afficher quelque chose (meme une erreur), jamais
   // rester muet.
+  // 26/11 (bug CRITIQUE releve par Alain : en travaillant sur l'affaire
+  // Auray, "Dossier local" importait des fichiers de "PONT L'ABBE DE
+  // BRETAGNE" -- la fonction bouclait sur TOUTES les affaires d'un coup et
+  // les associait a des sous-dossiers par un rapprochement de noms
+  // approximatif (dossierAffaire/nomsProches), sans aucune confirmation.
+  // Un mauvais rapprochement melangeait les documents de deux chantiers
+  // differents -- risque reel de document du mauvais chantier dans un PGC.
+  // On ne traite desormais QUE l'affaire actuellement ouverte, exactement
+  // comme reparerFichiersManquants() le fait deja : plus aucun risque de
+  // contamination entre chantiers (au prix de relancer la synchro affaire
+  // par affaire plutot qu'en une fois).
   window.synchroniserDossierLocal = async function() {
     try {
+      var affaire = currentAffaireObj();
+      if (!affaire) { showToast('Ouvrez une affaire avant de synchroniser son dossier local', 'error'); return; }
       if (!window.showDirectoryPicker) {
         showToast('Fonction indisponible sur ce navigateur (Chrome PC ou Android uniquement)', 'error');
         return;
@@ -976,29 +989,29 @@
       if (!ok) { showToast('Acces au dossier local refuse ou a reconfirmer', 'error'); return; }
       majStatutDossierLocal('Dossier local : verification en cours...');
       var bilanImport = 0, bilanExport = 0, sansDossier = 0, enErreur = [];
-      for (var i = 0; i < affaires.length; i++) {
-        var affaire = affaires[i];
-        try {
-          var dir = await dossierAffaire(racine, affaire, true);
-          if (!dir) { sansDossier++; continue; }
+      try {
+        var dir = await dossierAffaire(racine, affaire, true);
+        if (!dir) {
+          sansDossier = 1;
+        } else {
           bilanImport += await importerDepuisDossierLocal(affaire, dir);
           var fichiers = await listerFichiers(dir, 4);
           var nomsExistants = {}; fichiers.forEach(function(f){ nomsExistants[f.name] = true; });
           bilanExport += await exporterVersDossierLocal(affaire, dir, nomsExistants);
-        } catch (eAff) {
-          // Suite au bug du MOA vide (deja corrige) : une affaire en echec
-          // ne doit plus passer inapercue -- on la nomme dans le toast
-          // final plutot que de l'avaler silencieusement.
-          enErreur.push(((affaire.chantier && affaire.chantier.nom) || affaire.id) + ' (' + (eAff && eAff.message || eAff) + ')');
         }
+      } catch (eAff) {
+        // Suite au bug du MOA vide (deja corrige) : une affaire en echec
+        // ne doit plus passer inapercue -- on la nomme dans le toast
+        // final plutot que de l'avaler silencieusement.
+        enErreur.push(((affaire.chantier && affaire.chantier.nom) || affaire.id) + ' (' + (eAff && eAff.message || eAff) + ')');
       }
       persistAffaires();
       try { renderDocsGrid(); } catch (eR) {}
       try { renderAffaireList(); } catch (eR2) {}
       majStatutDossierLocal('Dossier local : ' + racine.name);
-      showToast('Dossier local : ' + bilanImport + ' fichier(s) importe(s), ' + bilanExport + ' copie(s) deposee(s)'
-        + (sansDossier ? ', ' + sansDossier + ' affaire(s) sans dossier correspondant' : '')
-        + (enErreur.length ? ', echec sur : ' + enErreur.join(' ; ') : ''), enErreur.length ? 'error' : 'success');
+      showToast('Dossier local (' + ((affaire.chantier && affaire.chantier.nom) || affaire.id) + ') : ' + bilanImport + ' fichier(s) importe(s), ' + bilanExport + ' copie(s) deposee(s)'
+        + (sansDossier ? ', aucun dossier correspondant trouve pour cette affaire' : '')
+        + (enErreur.length ? ', echec : ' + enErreur.join(' ; ') : ''), enErreur.length ? 'error' : 'success');
     } catch (eGlobal) {
       try { majStatutDossierLocal(''); } catch (e2) {}
       showToast('Dossier local : erreur inattendue -- ' + (eGlobal && (eGlobal.name ? eGlobal.name + ' : ' : '') + eGlobal.message || eGlobal), 'error');
