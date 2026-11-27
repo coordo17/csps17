@@ -9991,7 +9991,14 @@ function reperePourMotsCles(texte, motsCles) {
       var apresCar = p + mc.length < texte.length ? texte[p + mc.length] : '';
       var estLettre = function(c){ return !!c && /[a-zà-ÿ0-9]/i.test(c); };
       if (estLettre(avantCar) || estLettre(apresCar)) { posDepart = p + mc.length; continue; }
-      var apresCheck = texte.slice(p + mc.length, Math.min(texte.length, p + mc.length + 50));
+      // 27/11 (bug trouve par Alain, audit "analyse PPSPS") : la fenetre de
+      // controle ne doit pas etre "mangee" par les grands espaces de mise en
+      // page tableau du PDF (ex. "Date de debut : 15/11/26" suivi de
+      // plusieurs dizaines d'espaces avant "Nb de collaborateurs mini") --
+      // on compacte les espaces avant de prelever la fenetre de 50
+      // caracteres, sur une portee plus large (300 car. bruts) pour ne pas
+      // perdre le vrai texte utile repousse par la mise en forme.
+      var apresCheck = texte.slice(p + mc.length, Math.min(texte.length, p + mc.length + 300)).replace(/\s+/g, ' ').slice(0, 50);
       var ressembleSommaire = !/[a-zàâäéèêëïîôöùûüç]{3,}/.test(apresCheck);
       // 27/11 (bug trouve par Alain sur le CBT Electricite de Pont l'Abbe,
       // recidive malgre le correctif du 10/11 sur le meme chantier) : le
