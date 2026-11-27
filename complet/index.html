@@ -5017,6 +5017,39 @@ function planningLabelCorrespond(label, texteSaisi) {
   var m2 = icNormTxt(texteSaisi).split(' ').filter(function (m) { return m.length >= 2 && IC_MOTS_OUTILS.indexOf(m) === -1; });
   return m1.some(function (m) { return m2.indexOf(m) !== -1; });
 }
+// 27/11 (Phase 2 -- ecarts Harmo vs CSPS17, Tier B) : fait correspondre
+// chaque cote (a/b, libelles de lot du planning) d'une co-activite deja
+// calculee par detecterCoactivitesPlanning() avec l'entreprise (entNom/
+// entLot) d'une fiche d'analyse PPSPS deja deposee -- reutilise
+// planningLabelCorrespond() (deja en prod pour la fiche IC), aucune
+// nouvelle heuristique de correspondance. Ne retient que les co-activites
+// entre DEUX entreprises ayant chacune depose un PPSPS ; une co-activite
+// avec un lot sans PPSPS depose est silencieusement ignoree ici (reste
+// visible par ailleurs via le planning lui-meme, pas perdue, juste hors
+// perimetre de cette note). Deduplique sur (paire d'entreprises, dates).
+function coactivitesPlanningPourPPSPS(analyses, coactivites) {
+  function matchEntreprise(label) {
+    return (analyses || []).filter(function (a) {
+      return planningLabelCorrespond(label, a.entNom || '') || planningLabelCorrespond(label, a.entLot || '');
+    });
+  }
+  var res = [], vus = {};
+  (coactivites || []).forEach(function (c) {
+    var entsA = matchEntreprise(c.a), entsB = matchEntreprise(c.b);
+    if (!entsA.length || !entsB.length) return;
+    entsA.forEach(function (eA) {
+      entsB.forEach(function (eB) {
+        if (eA === eB) return;
+        var nomA = eA.entNom || '?', nomB = eB.entNom || '?';
+        var key = [nomA, nomB].sort().join('|') + '|' + c.debut + '|' + c.fin;
+        if (vus[key]) return;
+        vus[key] = true;
+        res.push({ entA: nomA, entB: nomB, debut: c.debut, fin: c.fin, source: c.source });
+      });
+    });
+  });
+  return res;
+}
 // 26/11 (bug releve par Alain : le planning du lot interieur d'Auray ne
 // proposait jamais de co-activites) -- extraireTexteFichier() concatene
 // tous les fragments de texte d'une page avec un simple espace et ne pose
@@ -9034,6 +9067,24 @@ function genererHarmonisationNative(){
         return [a.entNom||'—', a.entLot||'—', formatDateFR(a.date), avisLabels[a.avis]||'—', nbNonConforme ? String(nbNonConforme) : '0'];
       }), [2400,2000,1400,2200,1800]);
 
+    // 27/11 (Phase 2 -- ecarts Harmo vs CSPS17, Tier B) : co-activites REELLES
+    // (dates qui se chevauchent) entre entreprises ayant chacune depose un
+    // PPSPS, calculees depuis le(s) planning(s) de phasage deja importes pour
+    // cette affaire (fiche IC / PGC -- meme donnee, premiere reutilisation
+    // cote harmonisation PPSPS). Jamais de planning importe = section omise
+    // (pas de phrase de repli inventee), coherent avec le principe deja en
+    // place ailleurs dans l'appli.
+    var coactivitesReelles = coactivitesPlanningPourPPSPS(analyses, (affaireFaits(affaire).planningCoactivites || []));
+    var numSection = 3;
+    if(coactivitesReelles.length){
+      body += wH(numSection+'. Co-activités calculées depuis le planning');
+      body += wP('Chevauchements de dates réels entre entreprises ayant déposé un PPSPS, calculés depuis le(s) planning(s) de phasage importé(s) pour cette affaire — à vérifier/coordonner, non une mesure décidée à la place du CSPS.',{sz:18,spacing:80,color:'64748b'});
+      coactivitesReelles.forEach(function(co){
+        body += wLi(co.entA+' ↔ '+co.entB+' — chevauchement du '+formatDateFR(String(co.debut).slice(0,10))+' au '+formatDateFR(String(co.fin).slice(0,10))+(co.source?' (planning : '+co.source+')':''));
+      });
+      numSection++;
+    }
+
     var alertesTransverses = [];
     analyses.forEach(function(a){
       (a.items||[]).forEach(function(it){
@@ -9043,14 +9094,16 @@ function genererHarmonisationNative(){
       });
     });
     if(alertesTransverses.length){
-      body += wH('3. Points transverses à vérifier entre entreprises');
+      body += wH(numSection+'. Points transverses à vérifier entre entreprises');
       body += wP('Points de coordination (circulation, approvisionnements, cohérence avec le PGC) restés Incomplet ou Absent chez au moins une entreprise — à vérifier pour cohérence avec les PPSPS des autres entreprises du chantier.',{sz:18,spacing:80,color:'64748b'});
       alertesTransverses.forEach(function(al){
         body += wLi(al.ent+' — '+al.label+' ('+al.statut+')'+(al.obs?' : '+al.obs:''));
       });
+      numSection++;
     }
 
-    body += wH('4. Détail des points relevés par entreprise');
+    body += wH(numSection+'. Détail des points relevés par entreprise');
+    numSection++;
     var actionsTxt = [];
     analyses.forEach(function(a){
       var nonConformes = (a.items||[]).filter(function(it){ return it.statut === 'I' || it.statut === 'A'; });
@@ -9075,7 +9128,7 @@ function genererHarmonisationNative(){
     });
 
     if(actionsTxt.length){
-      body += wH('5. Actions demandées aux entreprises');
+      body += wH(numSection+'. Actions demandées aux entreprises');
       actionsTxt.forEach(function(ac){ body += wLi(ac.ent+' — '+ac.demande); });
     }
 
