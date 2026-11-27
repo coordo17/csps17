@@ -10327,7 +10327,7 @@ function appliquerImportPPSPSDeterministe(texte) {
   var dateDebutISO = dateFRversISO(dateDebutTxt);
   if (dateDebutISO) { var elD = document.getElementById('ppsps-debut-travaux'); if (elD && !elD.value) { elD.value = dateDebutISO; nbChamps++; } }
 
-  var version = rechercherChampPPSPS(texte, [/(?:version|indice)\s*[:\-]?\s*([A-Za-z0-9]{1,6})\b/i]);
+  var version = rechercherChampPPSPS(texte, [/(?:version|indice)\s*[:\-]\s*([A-Za-z0-9]{1,6})\b/i]);
   if (version) { var elV = document.getElementById('ppsps-version'); if (elV && !elV.value) { elV.value = version; nbChamps++; } }
 
   for (var n = 1; n <= PPSPS_ITEM_MOTSCLES.length; n++) {
