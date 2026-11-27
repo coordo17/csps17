@@ -4184,8 +4184,14 @@ function repererClauseCBT(texte, motsCles) {
       // pres le sommaire dans le document, une fenetre trop large peut
       // "voir" cette vraie phrase depuis l'occurrence du sommaire et la
       // laisser passer a tort (verifie sur un cas simule 10/11).
-      var apresCheck = texte.slice(p + mc.length, Math.min(texte.length, p + mc.length + 50));
+      var apresCheck = texte.slice(p + mc.length, Math.min(texte.length, p + mc.length + 300)).replace(/\s+/g, ' ').slice(0, 50);
       var ressembleSommaire = !/[a-zàâäéèêëïîôöùûüç]{3,}/.test(apresCheck);
+      // 27/11 (correctif miroir de celui applique a reperePourMotsCles, meme
+      // bug : le padding d'espacement de mise en page PDF entre deux colonnes
+      // peut repousser le vrai texte hors de la fenetre de 50 car. brute et
+      // faire passer un vrai mot-cle pour un sommaire a tort -- on elargit la
+      // fenetre brute a 300 car. et on compresse les espaces avant de
+      // tronquer a 50 car. utiles, sans toucher au reste de la logique.)
       // 27/11 (bug trouve par Alain sur le CBT Electricite de Pont l'Abbe,
       // recidive malgre le correctif du 10/11 sur le meme chantier) : le
       // test "pas de minuscule proche" peut etre mis en defaut par un
