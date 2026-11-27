@@ -5258,6 +5258,14 @@ async function extraireEtStockerPlanningPhasage(file, rjcEntry) {
   // automatiquement ici.
   if (!f.planningLots) f.planningLots = [];
   if (!f.planningCoactivites) f.planningCoactivites = [];
+  // 27/11 (bug trouve en resolvant le cas Pont l'Abbe) : retire d'abord ce
+  // que ce MEME fichier avait deja fourni (ex. relecture apres un fix du
+  // parseur) avant de reinjecter sa nouvelle extraction -- une relecture
+  // remplace, elle n'accumule pas sur elle-meme. L'accumulation entre
+  // FICHIERS DIFFERENTS (cas Auray, Gantt principal + lot interieur)
+  // n'est pas touchee par ce filtre (il ne retire que source === file.name).
+  f.planningLots = f.planningLots.filter(function (x) { return x.source !== file.name; });
+  f.planningCoactivites = f.planningCoactivites.filter(function (x) { return x.source !== file.name; });
   lots.forEach(function (l) {
     var existe = f.planningLots.some(function (x) { return x.label === l.label && x.debut === l.debut.toISOString(); });
     if (!existe) f.planningLots.push({ label: l.label, debut: l.debut.toISOString(), fin: l.fin.toISOString(), source: file.name, rjcId: rjcId });
@@ -6500,6 +6508,7 @@ function showHistoriqueDoc(ref) {
         + ((e.fichierPath || e.fichierData) ? '<a href="#" onclick="apercuFichierRJC(\'' + e.id + '\'); return false;" title="Apercu de ce fichier (sans telecharger)" style="font-size:13px;text-decoration:none;user-select:none;">&#128065;</a>' : '')
         + ((e.fichierPath || e.fichierData) ? '<a href="#" onclick="envoyerDocMoi(\'' + e.id + '\'); return false;" title="M\'envoyer ce fichier par email (pour transfert)" style="font-size:13px;text-decoration:none;user-select:none;">&#9993;</a>' : '')
         + (estPiece ? '<a href="#" onclick="reclasserPieceHistorique(\'' + e.id + '\', \'' + ref + '\'); return false;" title="Deplacer vers une autre categorie de piece" style="font-size:13px;text-decoration:none;user-select:none;">&#128194;</a>' : '')
+        + (ref === 'PLAN' ? ('<a href="#" onclick="relireCePlanningDepuisHistorique(\'' + e.id + '\'); return false;" title="Relire ce fichier avec le parseur actuel (recalcule ses lots/co-activites, sans dependre de \'Relire le chantier\')" style="font-size:11px;color:var(--blue-mid);text-decoration:underline;white-space:nowrap;">Relire</a>') : '')
         + (ref === 'PLAN' ? ('<a href="#" onclick="toggleExclurePlanning(\'' + e.id + '\'); return false;" title="' + (e.exclurePlanning ? 'Reinclure ce planning dans les calculs de co-activite' : 'Exclure ce planning des calculs (remplace par une version plus recente)') + '" style="font-size:11px;color:' + (e.exclurePlanning ? '#166534' : '#b91c1c') + ';text-decoration:underline;white-space:nowrap;">' + (e.exclurePlanning ? 'Reinclure' : 'Exclure') + '</a>') : '')
         + '<a href="#" onclick="supprimerPieceHistorique(\'' + e.id + '\', \'' + ref + '\'); return false;" title="Supprimer cette ligne (et son fichier)" style="font-size:13px;text-decoration:none;user-select:none;">&#128465;</a>'
         + '</div>';
@@ -6512,6 +6521,13 @@ function showHistoriqueDoc(ref) {
 // Rappelee a chaque frappe dans le champ de filtre : re-rend la liste puis
 // rend le focus/curseur au champ (perdu sinon, la modale etant entierement
 // reconstruite a chaque rendu -- cf. showHistoriqueDoc/openDocModal).
+function relireCePlanningDepuisHistorique(entryId) {
+  var affaire = currentAffaireObj();
+  if (!affaire) return;
+  var entry = (affaire.rjc || []).find(function (e) { return e.id === entryId; });
+  if (!entry) return;
+  relireDocumentPlanningAuto(entry);
+}
 function toggleExclurePlanning(entryId) {
   var affaire = currentAffaireObj();
   if (!affaire) return;
