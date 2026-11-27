@@ -4660,7 +4660,7 @@ async function relireDocumentPlanningAuto(entry) {
       alertes = repererPassagesMultiples(texte, PLANNING_ALERTE_MOTS, 8);
     }
     if (affaire) {
-      await extraireEtStockerPlanningPhasage(file);
+      await extraireEtStockerPlanningPhasage(file, entry);
       coactivitesProposees = (affaireFaits(affaire).planningCoactivites || [])
         .filter(function (c) { return c.source === file.name; })
         .map(function (c) { return c.a + ' / ' + c.b + ' — chevauchement du ' + formatDateFR(String(c.debut).slice(0, 10)) + ' au ' + formatDateFR(String(c.fin).slice(0, 10)); });
@@ -5103,7 +5103,35 @@ async function extraireTextePositionPourPlanning(file) {
     return texte;
   } catch (e) { return ''; }
 }
-async function extraireEtStockerPlanningPhasage(file) {
+// 27/11 (demande d'Alain, suite au constat "il utilise 3 planning, nous
+// avions deja defini qu'il devait prendre le plus recent") : date de
+// CREATION du document PDF (metadonnees), distincte de la date de DEPOT
+// dans CSPS17 -- utile pour juger quel planning depose est vraiment le
+// plus recent quand plusieurs versions existent. Verifie sur les 3
+// plannings reels de Pont l'Abbe (pdfinfo) : le nom de fichier seul est
+// trompeur ("PONT L'ABBE - Planning PDF.pdf", sans date dans le nom, est
+// en realite le plus ANCIEN des 3, cree le 10/06, avant les 2 autres
+// datees 07.07 et "MAJ du 13.10" dans leur nom). Jamais invente : si
+// l'information n'est pas dans le PDF, on renvoie null et l'affichage dit
+// "date du document inconnue", sans deviner depuis le nom de fichier ou
+// la date de depot.
+function parserDateCreationPDF(raw) {
+  var m = /^D:(\d{4})(\d{2})(\d{2})/.exec(String(raw || ''));
+  if (!m) return null;
+  var mois = parseInt(m[2], 10), jour = parseInt(m[3], 10);
+  if (mois < 1 || mois > 12 || jour < 1 || jour > 31) return null;
+  return m[1] + '-' + m[2] + '-' + m[3];
+}
+async function extraireDateCreationPDF(file) {
+  if (!/\.pdf$/i.test(file.name || '')) return null;
+  try {
+    var ab = await file.arrayBuffer();
+    var pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+    var meta = await pdf.getMetadata();
+    return parserDateCreationPDF(meta && meta.info && meta.info.CreationDate);
+  } catch (e) { return null; }
+}
+async function extraireEtStockerPlanningPhasage(file, rjcEntry) {
   var affaire = currentAffaireObj();
   if (!affaire) return;
   var texte;
@@ -5123,23 +5151,33 @@ async function extraireEtStockerPlanningPhasage(file) {
   if (lots.length < 2) return; // pas un planning Gantt exploitable (ou format non reconnu)
   var coactivites = detecterCoactivitesPlanning(lots);
   var f = affaireFaits(affaire);
+  // 27/11 : date de creation du document (cf. ci-dessus), reportee sur la
+  // ligne d'historique (pour affichage) et sur chaque lot/co-activite
+  // (rjcId, pour pouvoir les exclure plus tard via planningFaitsActifs si
+  // ce planning est remplace par une version plus recente).
+  var dateDoc = await extraireDateCreationPDF(file);
+  if (rjcEntry) rjcEntry.dateDocPlanning = dateDoc;
+  var rjcId = rjcEntry ? rjcEntry.id : null;
   // Accumulation (pas d'ecrasement) : un chantier peut avoir plusieurs
   // plannings (ex. Gantt principal + planning du lot interieur separe,
   // cas reel d'Auray) -- chaque depot ajoute ses lots/co-activites sans
-  // effacer ceux deja reperes dans un planning depose avant.
+  // effacer ceux deja reperes dans un planning depose avant. L'exclusion
+  // d'une version perimee (cas Pont l'Abbe, 3 versions du meme planning)
+  // se fait manuellement par Alain (toggleExclurePlanning), jamais
+  // automatiquement ici.
   if (!f.planningLots) f.planningLots = [];
   if (!f.planningCoactivites) f.planningCoactivites = [];
   lots.forEach(function (l) {
     var existe = f.planningLots.some(function (x) { return x.label === l.label && x.debut === l.debut.toISOString(); });
-    if (!existe) f.planningLots.push({ label: l.label, debut: l.debut.toISOString(), fin: l.fin.toISOString(), source: file.name });
+    if (!existe) f.planningLots.push({ label: l.label, debut: l.debut.toISOString(), fin: l.fin.toISOString(), source: file.name, rjcId: rjcId });
   });
   coactivites.forEach(function (c) {
     var existe = f.planningCoactivites.some(function (x) { return x.a === c.a && x.b === c.b && x.debut === c.debut.toISOString(); });
-    if (!existe) f.planningCoactivites.push({ a: c.a, b: c.b, debut: c.debut.toISOString(), fin: c.fin.toISOString(), source: file.name });
+    if (!existe) f.planningCoactivites.push({ a: c.a, b: c.b, debut: c.debut.toISOString(), fin: c.fin.toISOString(), source: file.name, rjcId: rjcId });
   });
   persistAffaires();
 }
-async function ouvrirFaitsPlanningDepuisFichier(file) {
+async function ouvrirFaitsPlanningDepuisFichier(file, created) {
   var affaire = currentAffaireObj();
   if (!affaire) { showToast('Ouvrez une affaire avant de deposer un planning', 'error'); return; }
   var propositions = [];
@@ -5149,9 +5187,15 @@ async function ouvrirFaitsPlanningDepuisFichier(file) {
       propositions = repererPassagesMultiples(texte, PLANNING_ALERTE_MOTS, 8);
     }
   } catch (err) { /* document illisible : fiche ouverte vide, saisie manuelle possible */ }
-  ouvrirFaitsPlanning(file.name, propositions);
+  // 27/11 (demande d'Alain) : propose tout de suite d'exclure les anciens
+  // plannings de ce chantier si celui-ci les remplace, plutot que
+  // d'obliger a rouvrir l'historique plus tard. Jamais decide a sa place :
+  // rien n'est coche par defaut, Alain choisit en connaissance de cause
+  // (date de depot + date du document quand elle est connue).
+  var anciens = (affaire.rjc || []).filter(function (e) { return e.docRef === 'PLAN' && (!created || e.id !== created.id); });
+  ouvrirFaitsPlanning(file.name, propositions, undefined, anciens);
 }
-function ouvrirFaitsPlanning(fichierNom, propositions, propositionsCoactivites) {
+function ouvrirFaitsPlanning(fichierNom, propositions, propositionsCoactivites, anciensPlannings) {
   var affaire = currentAffaireObj();
   if (!affaire) { showToast('Ouvrez une affaire avant de saisir ces faits', 'error'); return; }
   var f = affaireFaits(affaire);
@@ -5161,6 +5205,18 @@ function ouvrirFaitsPlanning(fichierNom, propositions, propositionsCoactivites) 
   var propCoact = propositionsCoactivites || [];
   var alertesVal = alertesExistantes || prop.join('\n');
   var coactVal = texte || propCoact.join('\n');
+  var anciens = anciensPlannings || [];
+  var htmlAnciens = anciens.length ? (
+    '<div style="font-weight:700;margin:14px 0 6px;">Anciens plannings déposés pour ce chantier</div>'
+    + '<p style="font-size:12px;color:var(--text-light);margin-bottom:6px;">Cochez ceux que ce nouveau dépôt remplace (ils seront exclus du calcul des co-activités — l\'historique et le fichier sont conservés, rien n\'est supprimé). Ne cochez rien si ce planning est complémentaire (ex. planning d\'un lot à part, comme à Auray) plutôt qu\'une nouvelle version.</p>'
+    + anciens.map(function (e) {
+        var coche = e.exclurePlanning ? ' checked' : '';
+        return '<label style="display:flex;align-items:baseline;gap:8px;padding:4px 0;font-size:13px;">'
+          + '<input type="checkbox" id="faits-plan-exclure-' + e.id + '"' + coche + ' style="margin:0;">'
+          + '<span>' + icEscAttr(e.fichierNom || e.objet || '') + ' — déposé le ' + formatDateFR(e.date) + (e.dateDocPlanning ? ', document du ' + formatDateFR(e.dateDocPlanning) : ', date du document inconnue') + '</span>'
+          + '</label>';
+      }).join('')
+  ) : '';
   var html = '<p style="margin-bottom:10px;font-size:13px;color:var(--text-light);">'
     + (fichierNom ? 'Document depose : <strong>' + icEscAttr(fichierNom) + '</strong>. ' : '')
     + 'Une co-activite par ligne (entreprises, periode, nature). Alimente le PGC (phasage / co-activite). Laissez vide si non concerne.</p>'
@@ -5168,17 +5224,22 @@ function ouvrirFaitsPlanning(fichierNom, propositions, propositionsCoactivites) 
     + '<textarea id="faits-plan-coact" rows="6" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;" placeholder="Ex: Lot gros-oeuvre / Lot charpente — semaines 12-14 — travaux simultanes en zone B">' + icEscAttr(coactVal) + '</textarea>'
     + '<div style="font-weight:700;color:#B91C1C;margin:14px 0 6px;">&#9888; Alertes critiques du planning (une par ligne)</div>'
     + (prop.length && !alertesExistantes ? '<p style="font-size:12px;color:var(--text-light);margin-bottom:6px;"><strong>Passages repérés automatiquement (à vérifier, rien n\'est jugé à votre place) :</strong> relisez et corrigez avant d\'enregistrer.</p>' : '')
-    + '<textarea id="faits-plan-alertes" rows="5" style="width:100%;padding:8px;border:1px solid #CC0000;border-radius:6px;font-family:inherit;" placeholder="Ex: Travaux de toiture et terrassement en meme temps en zone B -- chute d\'objet possible">' + icEscAttr(alertesVal) + '</textarea>';
+    + '<textarea id="faits-plan-alertes" rows="5" style="width:100%;padding:8px;border:1px solid #CC0000;border-radius:6px;font-family:inherit;" placeholder="Ex: Travaux de toiture et terrassement en meme temps en zone B -- chute d\'objet possible">' + icEscAttr(alertesVal) + '</textarea>'
+    + htmlAnciens;
   openDocModal('Planning / co-activités', html, 'Enregistrer', function () {
-    enregistrerFaitsPlanning(affaire, fichierNom);
+    enregistrerFaitsPlanning(affaire, fichierNom, anciens);
   });
 }
-function enregistrerFaitsPlanning(affaire, fichierNom) {
+function enregistrerFaitsPlanning(affaire, fichierNom, anciensPlannings) {
   var f = affaireFaits(affaire);
   var src = (fichierNom ? fichierNom + ' — ' : '') + 'saisi le ' + new Date().toLocaleDateString('fr-FR');
   var lignes = document.getElementById('faits-plan-coact').value.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
   f.coactivites = lignes.map(function (l) { return { entreprises: '', periode: '', description: l, source: src }; });
   f.alertesPlanning = document.getElementById('faits-plan-alertes').value.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+  (anciensPlannings || []).forEach(function (e) {
+    var cb = document.getElementById('faits-plan-exclure-' + e.id);
+    if (cb) e.exclurePlanning = cb.checked;
+  });
   persistAffaires();
   showToast('Planning / co-activites enregistres', 'success');
 }
@@ -5345,7 +5406,7 @@ async function deposerPieceDossier(affaire, file, type, bulk) {
         else ouvrirFaitsAmiante(file.name);
       }
       else if (type === 'CONTRAINTES') ouvrirFaitsContraintes(file.name);
-      else if (type === 'PLAN') ouvrirFaitsPlanningDepuisFichier(file);
+      else if (type === 'PLAN') ouvrirFaitsPlanningDepuisFichier(file, created);
       else if (type === 'ICR') ouvrirFaitsInspection(file.name);
       else if (type === 'CRMOA') ouvrirFaitsCR(file.name);
       // CBT (05/11) : seul type dont le contenu est lu (pdf.js, deterministe,
@@ -5376,7 +5437,7 @@ async function deposerPieceDossier(affaire, file, type, bulk) {
     if (type === 'CBT') extraireEtStockerPointsCBTParLot(file, created && created.id);
     // Co-activites datees reperees dans le planning de phasage (13/11) :
     // meme principe, silencieux (bulk ou pas), relu plus tard en fiche IC.
-    if (type === 'PLAN') extraireEtStockerPlanningPhasage(file);
+    if (type === 'PLAN') extraireEtStockerPlanningPhasage(file, created);
     return 'ok';
   } catch (err) {
     showToast('Erreur depot : ' + err.message, 'error');
@@ -6112,6 +6173,27 @@ function affaireFaits(affaire) {
   if (!affaire.faits.planningCoactivites) affaire.faits.planningCoactivites = [];
   return affaire.faits;
 }
+// 27/11 (demande d'Alain) : un chantier peut accumuler plusieurs versions
+// successives du MEME planning (ex. Pont l'Abbe : documents crees le
+// 10/06, 08/07, puis "MAJ" le 13/10) -- a distinguer du cas Auray ou 2
+// plannings complementaires (Gantt principal + lot interieur separe)
+// doivent au contraire rester additionnes. CSPS17 ne peut pas deviner
+// lequel remplace lequel (le nom de fichier seul est trompeur -- verifie
+// sur les plannings reels de Pont l'Abbe) : c'est donc Alain qui exclut
+// manuellement une version perimee depuis l'historique des plannings
+// (toggleExclurePlanning) ou directement au depot d'un nouveau
+// (ouvrirFaitsPlanningDepuisFichier). Cette fonction filtre les lots/
+// co-activites en consequence, partout ou ils sont lus.
+function planningFaitsActifs(affaire) {
+  var f = affaireFaits(affaire);
+  var exclus = {};
+  (affaire.rjc || []).forEach(function (e) { if (e.docRef === 'PLAN' && e.exclurePlanning) exclus[e.id] = true; });
+  function actif(x) { return !x.rjcId || !exclus[x.rjcId]; }
+  return {
+    lots: (f.planningLots || []).filter(actif),
+    coactivites: (f.planningCoactivites || []).filter(actif)
+  };
+}
 
 // (injecterAnalyseRapport retiree le 31/10 : 0 appelant, remplacee par affaireFaits)
 
@@ -6322,10 +6404,12 @@ function showHistoriqueDoc(ref) {
         + '<input type="checkbox"' + coche + ' onchange="toggleSelectionHistorique(\'' + e.id + '\', this.checked)" style="margin:0;user-select:none;">'
         + '<span style="color:var(--text-light);white-space:nowrap;">' + formatDateFR(e.date)
         + ' <a href="#" onclick="modifierDateRJC(\'' + e.id + '\'); showHistoriqueDoc(\'' + ref + '\'); return false;" style="font-size:10px;color:var(--blue-mid);user-select:none;">modifier</a></span>'
+        + (ref === 'PLAN' ? ('<span style="color:' + (e.exclurePlanning ? '#b91c1c' : 'var(--text-light)') + ';font-size:11px;white-space:nowrap;">' + (e.dateDocPlanning ? 'doc. du ' + formatDateFR(e.dateDocPlanning) : 'date doc. inconnue') + (e.exclurePlanning ? ' — exclu' : '') + '</span>') : '')
         + '<span style="flex:1;min-width:0;overflow-wrap:anywhere;">' + lien + '</span>'
         + ((e.fichierPath || e.fichierData) ? '<a href="#" onclick="apercuFichierRJC(\'' + e.id + '\'); return false;" title="Apercu de ce fichier (sans telecharger)" style="font-size:13px;text-decoration:none;user-select:none;">&#128065;</a>' : '')
         + ((e.fichierPath || e.fichierData) ? '<a href="#" onclick="envoyerDocMoi(\'' + e.id + '\'); return false;" title="M\'envoyer ce fichier par email (pour transfert)" style="font-size:13px;text-decoration:none;user-select:none;">&#9993;</a>' : '')
         + (estPiece ? '<a href="#" onclick="reclasserPieceHistorique(\'' + e.id + '\', \'' + ref + '\'); return false;" title="Deplacer vers une autre categorie de piece" style="font-size:13px;text-decoration:none;user-select:none;">&#128194;</a>' : '')
+        + (ref === 'PLAN' ? ('<a href="#" onclick="toggleExclurePlanning(\'' + e.id + '\'); return false;" title="' + (e.exclurePlanning ? 'Reinclure ce planning dans les calculs de co-activite' : 'Exclure ce planning des calculs (remplace par une version plus recente)') + '" style="font-size:11px;color:' + (e.exclurePlanning ? '#166534' : '#b91c1c') + ';text-decoration:underline;white-space:nowrap;">' + (e.exclurePlanning ? 'Reinclure' : 'Exclure') + '</a>') : '')
         + '<a href="#" onclick="supprimerPieceHistorique(\'' + e.id + '\', \'' + ref + '\'); return false;" title="Supprimer cette ligne (et son fichier)" style="font-size:13px;text-decoration:none;user-select:none;">&#128465;</a>'
         + '</div>';
     }).join('')
@@ -6337,6 +6421,16 @@ function showHistoriqueDoc(ref) {
 // Rappelee a chaque frappe dans le champ de filtre : re-rend la liste puis
 // rend le focus/curseur au champ (perdu sinon, la modale etant entierement
 // reconstruite a chaque rendu -- cf. showHistoriqueDoc/openDocModal).
+function toggleExclurePlanning(entryId) {
+  var affaire = currentAffaireObj();
+  if (!affaire) return;
+  var entry = (affaire.rjc || []).find(function (e) { return e.id === entryId; });
+  if (!entry) return;
+  entry.exclurePlanning = !entry.exclurePlanning;
+  persistAffaires();
+  showToast(entry.exclurePlanning ? 'Planning exclu des calculs de co-activite' : 'Planning reinclus dans les calculs', 'success');
+  showHistoriqueDoc('PLAN');
+}
 function filtrerHistorique(ref, val) {
   _filtreHistorique = val;
   showHistoriqueDoc(ref);
@@ -9074,7 +9168,7 @@ function genererHarmonisationNative(){
     // cote harmonisation PPSPS). Jamais de planning importe = section omise
     // (pas de phrase de repli inventee), coherent avec le principe deja en
     // place ailleurs dans l'appli.
-    var coactivitesReelles = coactivitesPlanningPourPPSPS(analyses, (affaireFaits(affaire).planningCoactivites || []));
+    var coactivitesReelles = coactivitesPlanningPourPPSPS(analyses, (planningFaitsActifs(affaire).coactivites || []));
     var numSection = 3;
     if(coactivitesReelles.length){
       body += wH(numSection+'. Co-activités calculées depuis le planning');
@@ -11741,7 +11835,7 @@ function icLotProposer(depuisBouton) {
   // saisi), car le planning nomme parfois les groupes par entreprise plutôt
   // que par corps d'état.
   var nomEnt = getVal('fic-ent-nom');
-  var coactivitesLot = affaireLot ? (affaireFaits(affaireLot).planningCoactivites || []) : [];
+  var coactivitesLot = affaireLot ? (planningFaitsActifs(affaireLot).coactivites || []) : [];
   var nPlanning = 0;
   coactivitesLot.forEach(function (c) {
     var aCorrespond = planningLabelCorrespond(c.a, lot) || planningLabelCorrespond(c.a, nomEnt);
