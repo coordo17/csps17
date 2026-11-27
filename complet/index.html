@@ -4222,7 +4222,25 @@ function repererClauseCBT(texte, motsCles) {
       break;
     }
     if (pos === -1) continue;
-    var debut = Math.max(0, pos - 40);
+    // 27/11 (demande d'Alain, CBT VRD de Pont l'Abbe) : quand l'occurrence
+    // retenue est le mot-cle DANS le titre de section lui-meme (ex : "III
+    // -- NETTOYAGE DU CHANTIER" suivi aussitot de la vraie clause), la
+    // fenetre de 40 car. avant le mot-cle ne ramene que du bruit (fin de
+    // la phrase precedente + le numero de titre) sans aucun interet pour
+    // la clause. On detecte ce cas (le mot reellement trouve est en
+    // MAJUSCULES et immediatement precede d'un repere de titre numerote) et
+    // on saute directement au texte qui suit, sans contexte avant.
+    var motReel = texte.slice(pos, pos + mc.length);
+    var estTitreLuiMeme = motReel === motReel.toUpperCase() && /[A-ZÀ-Ý]/.test(motReel)
+      && /(?:^|\s)(?:[IVXLC]{1,4}|[0-9]{1,2})\s*[\-–.°)]\s*$/.test(texte.slice(Math.max(0, pos - 40), pos));
+    var debut, relPos;
+    if (estTitreLuiMeme) {
+      debut = pos + mc.length;
+      relPos = 0;
+    } else {
+      debut = Math.max(0, pos - 40);
+      relPos = pos - debut;
+    }
     // 09/11 (bug trouve par Alain, 1ere FIC produite CSPS-2026-0001) : une
     // fenetre fixe de 320 caracteres apres le mot-cle deborde souvent sur
     // la section suivante du document (numero de page isole, titre en
@@ -4234,7 +4252,6 @@ function repererClauseCBT(texte, motsCles) {
     // s'arrete la plutot que d'aller jusqu'au bout de la fenetre.
     var finGarde = Math.min(texte.length, pos + 600);
     var brut = texte.slice(debut, finGarde);
-    var relPos = pos - debut;
     var apresMotCle = brut.slice(relPos);
     // 27/11 (bug trouve par Alain sur le CBT VRD de Pont l'Abbe) : le
     // garde-fou du 09/11 s'arretait au premier point de phrase rencontre,
