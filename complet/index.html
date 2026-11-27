@@ -9957,7 +9957,13 @@ async function generateDoc(ref, previewMode) {
       finalZip = injecterIntervenantsRJC(finalZip, data);
     }
     // Injecter les photos dans le docx (avant nettoyage)
-    if (typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire._photos && terrainAffaire._photos.length > 0) {
+    // 27/11 (bug trouve par Alain sur la FIC Pont l'Abbe) : terrainAffaire._photos
+    // est un champ partage sur l'affaire entiere (rempli lors de la generation
+    // d'un CR Visite ou d'un DGI), qui restait attache a l'affaire et se
+    // retrouvait injecte tel quel dans TOUT document genere ensuite (dont la FIC,
+    // qui n'a jamais de section photo prevue). On restreint desormais l'injection
+    // aux seuls types de documents qui utilisent reellement des photos (VIS, DGI).
+    if ((ref === 'VIS' || ref === 'DGI') && typeof terrainAffaire !== 'undefined' && terrainAffaire && terrainAffaire._photos && terrainAffaire._photos.length > 0) {
       finalZip = injecterPhotos(finalZip, terrainAffaire._photos, terrainAffaire._photosLegendes);
     }
     // Nettoyer les lignes vides (apres injection photos)
