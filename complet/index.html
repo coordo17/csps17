@@ -4236,9 +4236,32 @@ function repererClauseCBT(texte, motsCles) {
     var brut = texte.slice(debut, finGarde);
     var relPos = pos - debut;
     var apresMotCle = brut.slice(relPos);
-    var reArret = /[.;]\s+(?=[A-ZÀ-ÝÉ0-9])|\n\s*(?:[IVXLC]{1,4}|[0-9]{1,2})\s*[\-–.°)]\s*[A-ZÀ-ÝÉ]/;
-    var mArret = apresMotCle.match(reArret);
-    var finRel = mArret ? (mArret.index + (/^[.;]/.test(mArret[0]) ? 1 : 0)) : Math.min(apresMotCle.length, 320);
+    // 27/11 (bug trouve par Alain sur le CBT VRD de Pont l'Abbe) : le
+    // garde-fou du 09/11 s'arretait au premier point de phrase rencontre,
+    // meme quand la vraie clause tient sur PLUSIEURS phrases avant le
+    // prochain titre (ex : "...de l'avancement des travaux. Si besoin
+    // etait, le maitre d'oeuvre pourra faire intervenir une entreprise de
+    // son choix..." -- la 2e phrase, pourtant partie de la meme clause,
+    // etait coupee). On cherche d'abord un repere de titre (bien plus fiable
+    // comme fin de clause qu'une simple ponctuation) dans toute la fenetre
+    // de garde ; on ne retombe sur l'arret "fin de phrase" que si aucun
+    // titre n'est trouve dans cette fenetre.
+    // Le repere de titre n'est pas toujours precede d'un saut de ligne :
+    // un titre peut suivre la fin de phrase precedente sur la MEME page
+    // (items pdf.js joints par un simple espace, pas de \n sauf entre
+    // pages) -- on accepte aussi un ecart de 2+ espaces, et on exige au
+    // moins 2 lettres majuscules a la suite pour ne pas confondre avec
+    // une simple majuscule de debut de phrase normale.
+    var reTitre = /\s{2,}(?:[IVXLC]{1,4}|[0-9]{1,2})\s*[\-–.°)]\s*[A-ZÀ-ÝÉ]{2,}/;
+    var reFinPhrase = /[.;]\s+(?=[A-ZÀ-ÝÉ0-9])/;
+    var mTitre = apresMotCle.match(reTitre);
+    var finRel;
+    if (mTitre) {
+      finRel = mTitre.index;
+    } else {
+      var mPhrase = apresMotCle.match(reFinPhrase);
+      finRel = mPhrase ? mPhrase.index + 1 : Math.min(apresMotCle.length, 320);
+    }
     var finAbs = relPos + finRel;
     var extrait = brut.slice(0, finAbs).replace(/\s+/g, ' ').trim();
     extrait = collapserRepetitionsInternesCBT(extrait);
