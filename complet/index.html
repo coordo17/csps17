@@ -10287,6 +10287,16 @@ function reperePourMotsCles(texte, motsCles) {
     while (true) {
       var p = texteMin.indexOf(mc, posDepart);
       if (p === -1) break;
+      // 27/11 (bug trouve par Alain, audit "analyse PPSPS") : un mot-cle
+      // court ne doit matcher qu'un mot ENTIER, jamais une simple sous-chaine
+      // a l'interieur d'un mot plus grand -- ex. "dict" matchait dans
+      // "interdiction" (tres frequent dans tout PPSPS), "epi" matchait dans
+      // "marchepieds", produisant un repere trompeur sans rapport avec le
+      // point reellement vise.
+      var avantCar = p > 0 ? texte[p - 1] : '';
+      var apresCar = p + mc.length < texte.length ? texte[p + mc.length] : '';
+      var estLettre = function(c){ return !!c && /[a-zà-ÿ0-9]/i.test(c); };
+      if (estLettre(avantCar) || estLettre(apresCar)) { posDepart = p + mc.length; continue; }
       var apresCheck = texte.slice(p + mc.length, Math.min(texte.length, p + mc.length + 50));
       var ressembleSommaire = !/[a-zàâäéèêëïîôöùûüç]{3,}/.test(apresCheck);
       // 27/11 (bug trouve par Alain sur le CBT Electricite de Pont l'Abbe,
