@@ -4186,7 +4186,18 @@ function repererClauseCBT(texte, motsCles) {
       // laisser passer a tort (verifie sur un cas simule 10/11).
       var apresCheck = texte.slice(p + mc.length, Math.min(texte.length, p + mc.length + 50));
       var ressembleSommaire = !/[a-zàâäéèêëïîôöùûüç]{3,}/.test(apresCheck);
-      if (ressembleSommaire) { posDepart = p + mc.length; continue; }
+      // 27/11 (bug trouve par Alain sur le CBT Electricite de Pont l'Abbe,
+      // recidive malgre le correctif du 10/11 sur le meme chantier) : le
+      // test "pas de minuscule proche" peut etre mis en defaut par un
+      // artefact d'extraction PDF (espacement irregulier produisant une
+      // fausse sequence minuscule dans la fenetre de controle, ex. mots
+      // coupes/recolles). Un indice plus fiable qu'on est toujours dans un
+      // sommaire : un AUTRE titre numerote romain ("IV -- FOURNITURE...")
+      // apparait dans la meme fenetre -- un sommaire enchaine plusieurs
+      // titres a la suite, ce qu'un vrai paragraphe de clause ne fait
+      // jamais juste apres son propre titre.
+      var ressembleSommaireSuite = /[IVXLC]{1,4}\s*[\-\u2013\u2014]\s*[A-Z\u00c0-\u00dd\u00c9]/.test(apresCheck);
+      if (ressembleSommaire || ressembleSommaireSuite) { posDepart = p + mc.length; continue; }
       // 13/11 (bug trouve par Alain sur les plans du chantier Auray, mot-cle
       // "portail") : un plan de masse/PIC a souvent un cartouche (indices de
       // revision "JC E 08/04/2026 Modif du portail...") ou un extrait
@@ -10209,7 +10220,18 @@ function reperePourMotsCles(texte, motsCles) {
       if (p === -1) break;
       var apresCheck = texte.slice(p + mc.length, Math.min(texte.length, p + mc.length + 50));
       var ressembleSommaire = !/[a-zàâäéèêëïîôöùûüç]{3,}/.test(apresCheck);
-      if (ressembleSommaire) { posDepart = p + mc.length; continue; }
+      // 27/11 (bug trouve par Alain sur le CBT Electricite de Pont l'Abbe,
+      // recidive malgre le correctif du 10/11 sur le meme chantier) : le
+      // test "pas de minuscule proche" peut etre mis en defaut par un
+      // artefact d'extraction PDF (espacement irregulier produisant une
+      // fausse sequence minuscule dans la fenetre de controle, ex. mots
+      // coupes/recolles). Un indice plus fiable qu'on est toujours dans un
+      // sommaire : un AUTRE titre numerote romain ("IV -- FOURNITURE...")
+      // apparait dans la meme fenetre -- un sommaire enchaine plusieurs
+      // titres a la suite, ce qu'un vrai paragraphe de clause ne fait
+      // jamais juste apres son propre titre.
+      var ressembleSommaireSuite = /[IVXLC]{1,4}\s*[\-\u2013\u2014]\s*[A-Z\u00c0-\u00dd\u00c9]/.test(apresCheck);
+      if (ressembleSommaire || ressembleSommaireSuite) { posDepart = p + mc.length; continue; }
       pos = p;
       break;
     }
