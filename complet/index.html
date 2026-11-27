@@ -4311,7 +4311,18 @@ function fusionnerPropositionCBT(existant, proposition) {
   if (!proposition) return existant;
   if (!existant) return proposition;
   if (existant.indexOf(proposition) !== -1) return existant;
-  if (estQuasiDoublonCBT(normaliserPourComparaisonCBT(proposition), normaliserPourComparaisonCBT(existant))) return existant;
+  var existNorm = normaliserPourComparaisonCBT(existant);
+  var propNorm = normaliserPourComparaisonCBT(proposition);
+  // 27/11 (bug trouve par Alain sur le CBT VRD de Pont l'Abbe) : une
+  // relecture corrigee (ex : apres un correctif d'extraction) produit une
+  // proposition qui CONTIENT l'existant (meme debut, plus de texte a la
+  // suite -- la phrase manquante). estQuasiDoublonCBT la traitait comme un
+  // doublon et gardait l'ancien texte, tronque, au lieu du nouveau,
+  // complet. On priorise desormais la proposition quand elle contient
+  // l'existant en entier et qu'elle est strictement plus longue (version
+  // plus complete du meme passage), avant le test de quasi-doublon.
+  if (propNorm.indexOf(existNorm) !== -1 && proposition.length > existant.length) return proposition;
+  if (estQuasiDoublonCBT(propNorm, existNorm)) return existant;
   return existant + '\n' + proposition;
 }
 // Appelee au depot d'un CBT : lit le PDF (pdf.js, cote client, pas d'IA),
