@@ -4362,6 +4362,24 @@ var CBT_THEMES_LOT = [
   { theme: 'Sous-traitance', mots: ['sous-traitance', 'agrément du sous-traitant', 'agrement du sous-traitant', 'plan de sous-traitance'] },
   { theme: 'Mise sous tension / contrôle initial', mots: ['mise sous tension', 'contrôle initial', 'controle initial', 'vérification initiale', 'verification initiale', 'organisme agréé', 'organisme agree'] },
 ];
+// Correspondance theme CBT (CBT_THEMES_LOT) -> risque(s) du catalogue IC
+// (r1-r27) + sens (imp = subi par l'entreprise, ex = genere par
+// l'entreprise). Jugement metier valide par Alain le 27/11 (meme principe
+// que IC_RISQUES_EU_IMP/EX) : sert a PROPOSER une qualification de depart
+// en 6A/6B a partir de ce qui est deja ecrit dans le CBT du lot, jamais a
+// la decider a la place du CSPS -- cf. icProposerRisquesImpExp(), qui
+// coche comme une proposition revisable, jamais en ecrasant une case deja
+// renseignee pendant l'IC.
+var CBT_THEME_RISQUES = {
+  'Consignation réseaux / énergie':        [{ id: 'r6',  sens: 'imp' }],
+  'Mise sous tension / contrôle initial':  [{ id: 'r6',  sens: 'ex' }],
+  'Démolition / stabilité':                [{ id: 'r11', sens: 'ex' }, { id: 'r2', sens: 'ex' }],
+  'Évacuation gravats / déchets du lot':   [{ id: 'r20', sens: 'ex' }, { id: 'r22', sens: 'ex' }],
+  'Accès en toiture / moyens d’accès':     [{ id: 'r1',  sens: 'imp' }],
+  'Stockage / zone de dépôt':              [{ id: 'r16', sens: 'ex' }],
+  'Périmètre / zone interdite':            [{ id: 'r24', sens: 'imp' }],
+  // 'Sous-traitance' : pas de risque physique associe, volontairement absent.
+};
 function extraireFaitsCBTParLot(texte) {
   var res = [];
   CBT_THEMES_LOT.forEach(function (t) {
@@ -12886,6 +12904,7 @@ function genFormulaireFIC() {
   html2 += '<div style="margin-top:8px;font-size:12px;color:var(--text-secondary);display:flex;gap:12px;">';
   html2 += '<span>Coches : <b id="cnt-rq">0</b></span><span>R.IMP : <b id="cnt-imp">0</b></span><span>R.EX : <b id="cnt-ex">0</b></span></div>';
   html2 += '</div>';
+  html2 += '<button type="button" class="btn btn-outline btn-sm" style="margin-top:8px;" onclick="icProposerRisquesImpExp(true)">&#128260; Proposer importes/exportes (CBT du lot)</button>';
   html2 += fieldRow('Observations risques', 'fic-rq-obs', 'textarea', 'Precisions, mesures complementaires...', '');
   html2 += sectionEnd();
 
@@ -14872,6 +14891,53 @@ function icAppliquerRisquesEU() {
     var ex = document.getElementById('ex-' + id); if (ex && !ex.checked) { ex.checked = true; toggleExpObs(id); }
   });
   countRQ();
+}
+
+// 27/11 (demande d'Alain, CBT VRD de Pont l'Abbe : "nous pouvons preremplir
+// suivant le PGC et les CBT ce qui a deja ete aborde dans les documents,
+// resteras sur site les elements particuliers qui eux seront physiquement
+// observes") : propose une qualification de depart en 6A/6B a partir des
+// points de coordination deja extraits du CBT pour le lot courant
+// (cbtPoints, cf. icLotProposer), via la table CBT_THEME_RISQUES. Jamais
+// invente : uniquement les themes deja reperes dans un CBT reellement
+// depose pour ce lot. N'ecrase jamais une case deja cochee/decochee
+// pendant l'IC -- memes garde-fous que icAppliquerRisquesEU.
+function icProposerRisquesImpExp(depuisBouton) {
+  var affaireLot = currentAffaireObj();
+  var lot = getVal('fic-ent-lot');
+  if (!affaireLot || !lot) {
+    if (depuisBouton) showToast('Renseignez le lot de l\'entreprise avant de proposer', 'error');
+    return;
+  }
+  var cbtPointsLot = affaireFaits(affaireLot).cbtPoints || {};
+  var themesVus = {};
+  icMetiersDuLot(lot).forEach(function (k) {
+    (cbtPointsLot[k] || []).forEach(function (p) { themesVus[p.theme] = true; });
+  });
+  var n = 0, themesAppliques = [];
+  Object.keys(themesVus).forEach(function (theme) {
+    var regles = CBT_THEME_RISQUES[theme];
+    if (!regles) return;
+    var applique = false;
+    regles.forEach(function (r) {
+      var chk = document.getElementById('rq-' + r.id);
+      if (!chk) return;
+      if (!chk.checked) { chk.checked = true; toggleRQ(r.id); }
+      var cible = document.getElementById((r.sens === 'ex' ? 'ex-' : 'imp-') + r.id);
+      if (cible && !cible.checked) {
+        cible.checked = true;
+        if (r.sens === 'ex') toggleExpObs(r.id); else toggleImpObs(r.id);
+        applique = true; n++;
+      }
+    });
+    if (applique) themesAppliques.push(theme);
+  });
+  countRQ();
+  if (depuisBouton) {
+    showToast(n
+      ? n + ' risque(s) proposé(s) en 6A/6B depuis le CBT (' + themesAppliques.join(', ') + ') — décochez ce qui ne s\'applique pas'
+      : 'Aucun thème CBT du lot ne correspond au catalogue 6A/6B — à qualifier sur site', n ? 'success' : 'error');
+  }
 }
 
 function initSigCanvas(canvasId, key) {
