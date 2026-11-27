@@ -5217,18 +5217,30 @@ async function extraireEtStockerPlanningPhasage(file, rjcEntry) {
   var texte;
   try { texte = await extraireTexteFichier(file); } catch (err) { return; }
   if (!texte || texte.replace(/\s/g, '').length < 30) return;
+  // 27/11 (bug trouve en testant sur Pont l'Abbe avec Alain) : "au moins 2
+  // lots trouves" ne suffit pas a valider un repli -- le repli par
+  // tolerance Y (ci-dessous) peut tres bien trouver 20+ "lots" tout en
+  // ayant fusionne des taches differentes, chacun avec un numero de ligne
+  // residuel au debut du libelle (ex. "14 Coulage Massifs" au lieu du vrai
+  // "Pose Longrine"). Un libelle de lot ne commence normalement jamais par
+  // un numero isole suivi d'un espace -- ce test rejette un repli
+  // visiblement corrompu plutot que de l'accepter parce qu'il a trouve
+  // "assez" de lots, et force l'essai du repli suivant.
+  function lotsExploitables(ls) {
+    return ls.length >= 2 && ls.every(function (l) { return !/^\d{1,3}\s/.test(l.label); });
+  }
   var lots = parserPlanningPhasage(texte);
-  if (lots.length < 2) {
+  if (!lotsExploitables(lots)) {
     // Repli : le planning est un Gantt (texte present) mais le format a
     // plat ne contient pas de sauts de ligne exploitables -- on retente
     // avec une reconstruction par position (voir extraireTextePositionPourPlanning).
     var textePos = await extraireTextePositionPourPlanning(file);
     if (textePos) {
       var lotsPos = parserPlanningPhasage(textePos);
-      if (lotsPos.length >= 2) lots = lotsPos;
+      if (lotsExploitables(lotsPos)) lots = lotsPos;
     }
   }
-  if (lots.length < 2) {
+  if (!lotsExploitables(lots)) {
     // 27/11 : 3e repli pour les plannings a hierarchie plus complexe (3
     // niveaux PHASE > lot > tache, lignes tres rapprochees verticalement)
     // ou le regroupement par tolerance Y fusionne des taches differentes --
@@ -5236,10 +5248,10 @@ async function extraireEtStockerPlanningPhasage(file, rjcEntry) {
     var texteNum = await extraireTexteParNumeroLignePourPlanning(file);
     if (texteNum) {
       var lotsNum = parserPlanningPhasage(texteNum);
-      if (lotsNum.length >= 2) lots = lotsNum;
+      if (lotsExploitables(lotsNum)) lots = lotsNum;
     }
   }
-  if (lots.length < 2) return; // pas un planning Gantt exploitable (ou format non reconnu)
+  if (!lotsExploitables(lots)) return; // pas un planning Gantt exploitable (ou format non reconnu)
   var coactivites = detecterCoactivitesPlanning(lots);
   var f = affaireFaits(affaire);
   // 27/11 : date de creation du document (cf. ci-dessus), reportee sur la
