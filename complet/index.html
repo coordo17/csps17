@@ -4965,8 +4965,18 @@ function parserPlanningPhasage(texte) {
   // est la colonne d'apres (cas du planning principal d'Auray, avec PHASE
   // 1/2/3 au-dessus des lots). Sans habillage "PHASE" (cas du planning du
   // lot interieur, 2 niveaux seulement), la 1ere colonne EST le niveau lot.
+  // 27/11 (planning complexe de Pont l'Abbe, 3 niveaux PHASE > lot > tache,
+  // 4 PHASE sur ce chantier) : des que 3 colonnes distinctes ou plus
+  // existent, le 1er niveau est TOUJOURS un habillage de phase, jamais un
+  // lot -- le seuil de comptage ci-dessous (pense pour 2 niveaux
+  // seulement, cas Auray) n'est pas fiable des qu'il y a une vraie 3e
+  // colonne (le nombre de PHASE peut depasser 3 sur un autre chantier).
   var colLot = colonnes[0];
-  if (colonnes.length > 1 && compteParCol[colonnes[0]] <= 3) colLot = colonnes[1];
+  if (colonnes.length > 2) {
+    colLot = colonnes[1];
+  } else if (colonnes.length > 1 && compteParCol[colonnes[0]] <= 3) {
+    colLot = colonnes[1];
+  }
   var colTacheIdx = colonnes.indexOf(colLot) + 1;
   var colTache = colonnes.length > colTacheIdx ? colonnes[colTacheIdx] : null;
   var lots = [];
@@ -5122,6 +5132,76 @@ function parserDateCreationPDF(raw) {
   if (mois < 1 || mois > 12 || jour < 1 || jour > 31) return null;
   return m[1] + '-' + m[2] + '-' + m[3];
 }
+// 27/11 (planning complexe de Pont l'Abbe) : extraireTextePositionPourPlanning
+// regroupe les fragments de texte en "lignes visuelles" par une tolerance
+// Y fixe (2pt) -- correct sur un planning a l'espacement de ligne genereux
+// (cas Auray), mais sur ce document les numeros de ligne consecutifs sont
+// parfois espaces de seulement 1.5pt (verifie sur le PDF reel, colonne N°
+// a x quasi-constant) : la tolerance de 2pt fusionne alors deux TACHES
+// DIFFERENTES en une seule ligne de texte, le numero de la 2e tache
+// "fuyant" dans le libelle de la 1ere (ex. "14 Coulage Massifs" au lieu de
+// "Pose Longrine"). Repli supplementaire : regrouper par MARQUEUR DE
+// NUMERO DE LIGNE (colonne N°, position X quasi-constante, incrementation
+// monotone -- signal fiable, contrairement a la position Y) plutot que
+// par tolerance Y fixe ; chaque ligne logique recoit tout le texte jusqu'au
+// numero suivant, geranat ainsi aussi les libelles replies sur plusieurs
+// lignes PDF. Produit le meme format de sortie (espacement proportionnel
+// via charW) que extraireTextePositionPourPlanning, pour que
+// parserPlanningPhasage() continue de fonctionner sans modification.
+async function extraireTexteParNumeroLignePourPlanning(file) {
+  if (!/\.pdf$/i.test(file.name || '')) return '';
+  try {
+    var ab = await file.arrayBuffer();
+    var pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+    var texte = '';
+    for (var p = 1; p <= pdf.numPages; p++) {
+      var page = await pdf.getPage(p);
+      var tc = await page.getTextContent();
+      var items = tc.items.filter(function (it) { return it.str && it.str.trim(); });
+      if (!items.length) continue;
+      var totalW = 0, totalC = 0;
+      items.forEach(function (it) { totalW += (it.width || 0); totalC += (it.str || '').length; });
+      var charW = (totalC > 0 && totalW > 0) ? (totalW / totalC) : 5;
+      // Colonne N° : position X la plus frequente parmi les tokens
+      // purement numeriques courts (1 a 3 chiffres).
+      var numeriques = items.filter(function (it) { return /^\d{1,3}$/.test(it.str.trim()); });
+      if (numeriques.length < 3) continue; // pas de colonne N° detectable sur cette page
+      var compteX = {};
+      numeriques.forEach(function (it) {
+        var xr = Math.round(it.transform[4]);
+        compteX[xr] = (compteX[xr] || 0) + 1;
+      });
+      var colX = null, meilleur = 0;
+      Object.keys(compteX).forEach(function (xr) { if (compteX[xr] > meilleur) { meilleur = compteX[xr]; colX = parseInt(xr, 10); } });
+      var marqueurs = numeriques
+        .filter(function (it) { return Math.abs(Math.round(it.transform[4]) - colX) <= 3; })
+        .sort(function (a, b) { return b.transform[5] - a.transform[5]; });
+      var tousOrdonnes = items.slice().sort(function (a, b) {
+        var dy = b.transform[5] - a.transform[5];
+        if (Math.abs(dy) > 0.1) return dy;
+        return a.transform[4] - b.transform[4];
+      });
+      var buckets = marqueurs.map(function () { return []; });
+      var mi = 0;
+      tousOrdonnes.forEach(function (it) {
+        while (mi + 1 < marqueurs.length && it.transform[5] <= marqueurs[mi + 1].transform[5] + 0.05) mi++;
+        if (mi < marqueurs.length && it.transform[5] <= marqueurs[mi].transform[5] + 0.05) buckets[mi].push(it);
+      });
+      buckets.forEach(function (bucket) {
+        bucket.sort(function (a, b) { return a.transform[4] - b.transform[4]; });
+        var out = '', curCol = 0;
+        bucket.forEach(function (it, idx) {
+          var col = Math.max(curCol + (idx === 0 ? 0 : 1), Math.round(it.transform[4] / charW));
+          if (col > out.length) out += ' '.repeat(col - out.length);
+          out += it.str;
+          curCol = out.length;
+        });
+        texte += out.replace(/\s+$/, '') + '\n';
+      });
+    }
+    return texte;
+  } catch (e) { return ''; }
+}
 async function extraireDateCreationPDF(file) {
   if (!/\.pdf$/i.test(file.name || '')) return null;
   try {
@@ -5146,6 +5226,17 @@ async function extraireEtStockerPlanningPhasage(file, rjcEntry) {
     if (textePos) {
       var lotsPos = parserPlanningPhasage(textePos);
       if (lotsPos.length >= 2) lots = lotsPos;
+    }
+  }
+  if (lots.length < 2) {
+    // 27/11 : 3e repli pour les plannings a hierarchie plus complexe (3
+    // niveaux PHASE > lot > tache, lignes tres rapprochees verticalement)
+    // ou le regroupement par tolerance Y fusionne des taches differentes --
+    // cf. extraireTexteParNumeroLignePourPlanning.
+    var texteNum = await extraireTexteParNumeroLignePourPlanning(file);
+    if (texteNum) {
+      var lotsNum = parserPlanningPhasage(texteNum);
+      if (lotsNum.length >= 2) lots = lotsNum;
     }
   }
   if (lots.length < 2) return; // pas un planning Gantt exploitable (ou format non reconnu)
